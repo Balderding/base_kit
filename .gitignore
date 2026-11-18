@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+out/
+work/
+deliver/
+# models: the downloaded zips and the formats the kit does not read stay out of the repository
+models/_dl/
+models/*/Models/FBX format/
+models/*/Models/GLB format/
+models/*/Previews/
+models/*/*.png
+models/*/*.url
+models/*/*.html
+release/
+# the model packs are fetched on the first run (tools/get_models.py), not kept in the repository
+models/*/
+# working notes stay on this PC
+HANDOFF.md
+NEXT_STEPS.md
+PLAN.md
+PLAN_SCENES.md
+REVIEW.md
+# the window is built by gui/build.cmd and goes into the release zip, not into git
+bbb_kit.exe
+gui/*.res

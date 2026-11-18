@@ -1,0 +1,4210 @@
+{
+ "badlands": {
+  "saguaro": {
+   "long": 6.3,
+   "high": 0.9,
+   "class": "growth",
+   "kind": "cactus"
+  },
+  "barrel_cactus": {
+   "long": 4.5,
+   "high": 1.3,
+   "class": "growth",
+   "kind": "cactus"
+  },
+  "prickly_pear": {
+   "long": 4.2,
+   "high": 1.0,
+   "class": "growth",
+   "kind": "cactus"
+  },
+  "longhorn_skull": {
+   "long": 7.6,
+   "high": 0.9,
+   "class": "made",
+   "kind": "bone"
+  },
+  "tumbleweed": {
+   "long": 3.5,
+   "high": 1.6,
+   "class": "growth",
+   "kind": "shrub"
+  },
+  "hitching_rail": {
+   "long": 7.3,
+   "high": 2.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "water_trough": {
+   "long": 8.4,
+   "high": 1.1,
+   "class": "made",
+   "kind": "wood"
+  },
+  "ox_yoke": {
+   "long": 6.9,
+   "high": 0.6,
+   "class": "made",
+   "kind": "wood"
+  },
+  "rattlesnake": {
+   "long": 6.7,
+   "high": 0.6,
+   "class": "made",
+   "kind": "hide"
+  },
+  "saddle": {
+   "long": 7.8,
+   "high": 0.8,
+   "class": "made",
+   "kind": "leather"
+  },
+  "bedroll_canteen": {
+   "long": 4.8,
+   "high": 1.0,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "hat": {
+   "long": 4.0,
+   "high": 1.2,
+   "class": "made",
+   "kind": "leather"
+  },
+  "arrows": {
+   "long": 5.2,
+   "high": 0.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "cairn": {
+   "long": 3.8,
+   "high": 2.1,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "horseshoes": {
+   "long": 2.7,
+   "high": 0.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "antlers": {
+   "long": 5.1,
+   "high": 0.4,
+   "class": "made",
+   "kind": "bone"
+  },
+  "gold_pan": {
+   "long": 5.9,
+   "high": 0.7,
+   "class": "made",
+   "kind": "tin"
+  },
+  "petrified_log": {
+   "long": 7.9,
+   "high": 1.0,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "anthill": {
+   "long": 4.5,
+   "high": 0.9,
+   "class": "debris",
+   "kind": "earth"
+  },
+  "sidewinder_tracks": {
+   "long": 8.5,
+   "high": 0,
+   "class": "marks",
+   "kind": "rut"
+  },
+  "m_skull": {
+   "long": 4.5,
+   "high": 4.0,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_bone": {
+   "long": 6.9,
+   "high": 1.5,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_bone_knob": {
+   "long": 5.4,
+   "high": 1.4,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_wagon_wheel": {
+   "long": 8.1,
+   "high": 3.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_cart": {
+   "long": 10.7,
+   "high": 3.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_barrel": {
+   "long": 6.8,
+   "high": 4.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_pickaxe": {
+   "long": 7.7,
+   "high": 1.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_shovel": {
+   "long": 8.9,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_campfire": {
+   "long": 7.5,
+   "high": 1.1,
+   "class": "made",
+   "kind": "rock"
+  },
+  "m_sand_rock": {
+   "long": 6.3,
+   "high": 4.1,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_sand_rocks": {
+   "long": 6.4,
+   "high": 3.7,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_horseshoe": {
+   "long": 5.3,
+   "high": 0.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_sheriff_star": {
+   "long": 4.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_horn": {
+   "long": 8.5,
+   "high": 2.1,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_cartridge": {
+   "long": 5.5,
+   "high": 1.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_boot": {
+   "long": 6.3,
+   "high": 1.8,
+   "class": "made",
+   "kind": "leather"
+  },
+  "m_whiskey_bottle": {
+   "long": 7.3,
+   "high": 1.8,
+   "class": "made",
+   "kind": "glass"
+  }
+ },
+ "highland": {
+  "fallen_cross": {
+   "long": 5.4,
+   "high": 1.0,
+   "class": "made",
+   "kind": "slate"
+  },
+  "peat_stack": {
+   "long": 6.7,
+   "high": 1.4,
+   "class": "made",
+   "kind": "earth"
+  },
+  "targe": {
+   "long": 4.1,
+   "high": 1.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "bagpipes": {
+   "long": 5.7,
+   "high": 1.0,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "ram_skull": {
+   "long": 4.4,
+   "high": 0.8,
+   "class": "made",
+   "kind": "bone"
+  },
+  "drystone_run": {
+   "long": 8.1,
+   "high": 1.4,
+   "class": "debris",
+   "kind": "slate"
+  },
+  "thistles": {
+   "long": 3.9,
+   "high": 2.7,
+   "class": "growth",
+   "kind": "heather"
+  },
+  "heather_hummock": {
+   "long": 4.6,
+   "high": 1.0,
+   "class": "growth",
+   "kind": "heather"
+  },
+  "quern": {
+   "long": 5.1,
+   "high": 1.6,
+   "class": "made",
+   "kind": "slate"
+  },
+  "pot_still": {
+   "long": 6.5,
+   "high": 2.2,
+   "class": "made",
+   "kind": "brass"
+  },
+  "peat_cutting": {
+   "long": 5.5,
+   "high": 0.5,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "cup_and_ring": {
+   "long": 6.7,
+   "high": 0,
+   "class": "marks",
+   "kind": "glyph"
+  },
+  "creel": {
+   "long": 6.7,
+   "high": 1.7,
+   "class": "made",
+   "kind": "twig"
+  },
+  "caber_and_stone": {
+   "long": 8.1,
+   "high": 1.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "tussocks": {
+   "long": 4.0,
+   "high": 1.3,
+   "class": "growth",
+   "kind": "grass"
+  },
+  "burial_kist": {
+   "long": 7.9,
+   "high": 0.6,
+   "class": "made",
+   "kind": "slate"
+  },
+  "hurdle": {
+   "long": 6.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "wood"
+  },
+  "split_boulder": {
+   "long": 3.9,
+   "high": 1.5,
+   "class": "debris",
+   "kind": "slate"
+  },
+  "crook_and_plaid": {
+   "long": 8.6,
+   "high": 0.6,
+   "class": "made",
+   "kind": "wood"
+  },
+  "beacon_pyre": {
+   "long": 7.4,
+   "high": 3.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_standing_stone": {
+   "long": 4.6,
+   "high": 7.0,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_standing_stone_b": {
+   "long": 4.2,
+   "high": 5.5,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_standing_stone_c": {
+   "long": 4.7,
+   "high": 7.0,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_standing_stone_d": {
+   "long": 4.6,
+   "high": 6.8,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_crag": {
+   "long": 6.0,
+   "high": 6.9,
+   "class": "debris",
+   "kind": "slate"
+  },
+  "m_crag_b": {
+   "long": 6.3,
+   "high": 7.0,
+   "class": "debris",
+   "kind": "slate"
+  },
+  "m_leaning_stone": {
+   "long": 6.1,
+   "high": 6.4,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_boulder": {
+   "long": 7.6,
+   "high": 4.7,
+   "class": "debris",
+   "kind": "slate"
+  },
+  "m_outcrop": {
+   "long": 8.6,
+   "high": 4.3,
+   "class": "debris",
+   "kind": "slate"
+  },
+  "m_campfire": {
+   "long": 7.2,
+   "high": 1.1,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_round_shield": {
+   "long": 7.9,
+   "high": 1.1,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_bronze_sword": {
+   "long": 11.6,
+   "high": 0.6,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_spearhead": {
+   "long": 6.6,
+   "high": 1.0,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_horn": {
+   "long": 8.5,
+   "high": 2.0,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_skull": {
+   "long": 4.8,
+   "high": 2.9,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_arrowhead": {
+   "long": 4.4,
+   "high": 0.9,
+   "class": "made",
+   "kind": "slate"
+  },
+  "m_bowl": {
+   "long": 4.1,
+   "high": 1.4,
+   "class": "made",
+   "kind": "wood"
+  }
+ },
+ "maahl": {
+  "buried_head": {
+   "long": 7.0,
+   "high": 0.8,
+   "class": "made",
+   "kind": "ruin"
+  },
+  "obelisk_tip": {
+   "long": 9.0,
+   "high": 0.9,
+   "class": "made",
+   "kind": "obelisk"
+  },
+  "sundial": {
+   "long": 5.7,
+   "high": 1.0,
+   "class": "made",
+   "kind": "ruin"
+  },
+  "amphorae": {
+   "long": 7.3,
+   "high": 1.3,
+   "class": "made",
+   "kind": "clay"
+  },
+  "wind_ripples": {
+   "long": 6.6,
+   "high": 0,
+   "class": "marks",
+   "kind": "pan"
+  },
+  "scarab": {
+   "long": 5.4,
+   "high": 1.0,
+   "class": "made",
+   "kind": "chitin"
+  },
+  "arch_fragment": {
+   "long": 5.7,
+   "high": 1.0,
+   "class": "made",
+   "kind": "ruin"
+  },
+  "geode": {
+   "long": 4.6,
+   "high": 1.3,
+   "class": "debris",
+   "kind": "crystal"
+  },
+  "saddlebags": {
+   "long": 8.1,
+   "high": 1.0,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "oil_lamp": {
+   "long": 5.2,
+   "high": 1.1,
+   "class": "made",
+   "kind": "brass"
+  },
+  "mosaic": {
+   "long": 5.5,
+   "high": 0.3,
+   "class": "made",
+   "kind": "pavers"
+  },
+  "beast_tracks": {
+   "long": 12.5,
+   "high": 0,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "canopic_jars": {
+   "long": 3.9,
+   "high": 2.1,
+   "class": "made",
+   "kind": "clay"
+  },
+  "sphinx_paw": {
+   "long": 6.7,
+   "high": 1.0,
+   "class": "made",
+   "kind": "ruin"
+  },
+  "salt_plates": {
+   "long": 6.2,
+   "high": 0.3,
+   "class": "debris",
+   "kind": "salt"
+  },
+  "stele": {
+   "long": 5.4,
+   "high": 0.6,
+   "class": "made",
+   "kind": "ruin"
+  },
+  "well_bucket": {
+   "long": 8.7,
+   "high": 1.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "desert_rose": {
+   "long": 3.7,
+   "high": 1.1,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "fallen_capital": {
+   "long": 4.2,
+   "high": 2.4,
+   "class": "made",
+   "kind": "column"
+  },
+  "fulgurite": {
+   "long": 6.5,
+   "high": 0.8,
+   "class": "debris",
+   "kind": "glass"
+  },
+  "worm_maw": {
+   "long": 7.5,
+   "high": 0.7,
+   "class": "debris",
+   "kind": "chitin"
+  },
+  "spore_pods": {
+   "long": 4.9,
+   "high": 1.4,
+   "class": "growth",
+   "kind": "chitin"
+  },
+  "water_skins": {
+   "long": 5.2,
+   "high": 1.0,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "m_sand_rock": {
+   "long": 6.4,
+   "high": 4.7,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_sand_rock_b": {
+   "long": 7.5,
+   "high": 4.3,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_sand_rock_c": {
+   "long": 7.1,
+   "high": 5.4,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_crystals": {
+   "long": 7.8,
+   "high": 4.9,
+   "class": "debris",
+   "kind": "crystal"
+  },
+  "m_crystal_rock": {
+   "long": 8.3,
+   "high": 3.7,
+   "class": "debris",
+   "kind": "crystal"
+  },
+  "m_crater": {
+   "long": 9.5,
+   "high": 2.4,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_meteor": {
+   "long": 7.9,
+   "high": 4.1,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_rocks": {
+   "long": 9.8,
+   "high": 2.1,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_stones": {
+   "long": 7.1,
+   "high": 2.2,
+   "class": "debris",
+   "kind": "sandstone"
+  },
+  "m_amphora": {
+   "long": 6.1,
+   "high": 2.6,
+   "class": "made",
+   "kind": "clay"
+  },
+  "m_dish": {
+   "long": 5.2,
+   "high": 1.2,
+   "class": "made",
+   "kind": "clay"
+  },
+  "m_spearhead": {
+   "long": 8.0,
+   "high": 1.3,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_shield": {
+   "long": 7.7,
+   "high": 0.9,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_insect_leg": {
+   "long": 10.2,
+   "high": 1.4,
+   "class": "debris",
+   "kind": "chitin"
+  },
+  "m_horn": {
+   "long": 7.6,
+   "high": 1.9,
+   "class": "debris",
+   "kind": "chitin"
+  }
+ },
+ "corridor": {
+  "gas_cylinder": {
+   "long": 6.1,
+   "high": 0.9,
+   "class": "made",
+   "kind": "metal"
+  },
+  "toolbox": {
+   "long": 5.4,
+   "high": 1.1,
+   "class": "made",
+   "kind": "metal"
+  },
+  "helmet": {
+   "long": 5.0,
+   "high": 1.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "terminal": {
+   "long": 3.6,
+   "high": 0.8,
+   "class": "made",
+   "kind": "metal"
+  },
+  "deck_hatch": {
+   "long": 4.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "plate"
+  },
+  "cell_rack": {
+   "long": 6.3,
+   "high": 2.0,
+   "class": "made",
+   "kind": "metal"
+  },
+  "hose_reel": {
+   "long": 7.0,
+   "high": 0.8,
+   "class": "made",
+   "kind": "cable"
+  },
+  "junction_box": {
+   "long": 7.5,
+   "high": 0.7,
+   "class": "made",
+   "kind": "metal"
+  },
+  "magboots": {
+   "long": 4.2,
+   "high": 1.0,
+   "class": "made",
+   "kind": "metal"
+  },
+  "vent_fan": {
+   "long": 4.9,
+   "high": 0.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "hover_pallet": {
+   "long": 5.3,
+   "high": 1.3,
+   "class": "made",
+   "kind": "metal"
+  },
+  "dead_drone": {
+   "long": 4.7,
+   "high": 0.8,
+   "class": "made",
+   "kind": "metal"
+  },
+  "welding_set": {
+   "long": 7.7,
+   "high": 0.8,
+   "class": "made",
+   "kind": "metal"
+  },
+  "valve_stub": {
+   "long": 4.4,
+   "high": 1.7,
+   "class": "made",
+   "kind": "pipe"
+  },
+  "deck_stencil": {
+   "long": 5.4,
+   "high": 0,
+   "class": "marks",
+   "kind": "slot"
+  },
+  "drip_tray": {
+   "long": 4.5,
+   "high": 0,
+   "class": "marks",
+   "kind": "coolant"
+  },
+  "cryo_canister": {
+   "long": 4.3,
+   "high": 1.2,
+   "class": "made",
+   "kind": "glass"
+  },
+  "cable_spool": {
+   "long": 5.4,
+   "high": 1.6,
+   "class": "made",
+   "kind": "cable"
+  },
+  "plate_stack": {
+   "long": 3.9,
+   "high": 0.3,
+   "class": "made",
+   "kind": "plate"
+  },
+  "mess_tray": {
+   "long": 5.2,
+   "high": 0.9,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_container_flat": {
+   "long": 8.1,
+   "high": 4.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_container_tall": {
+   "long": 7.4,
+   "high": 5.4,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_pipe_bend": {
+   "long": 7.2,
+   "high": 4.4,
+   "class": "made",
+   "kind": "pipe"
+  },
+  "m_valve": {
+   "long": 5.3,
+   "high": 5.0,
+   "class": "made",
+   "kind": "pipe"
+  },
+  "m_cog": {
+   "long": 6.8,
+   "high": 1.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_lever": {
+   "long": 5.0,
+   "high": 5.0,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_crate": {
+   "long": 7.9,
+   "high": 3.7,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_canisters": {
+   "long": 6.6,
+   "high": 2.7,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_holo_table": {
+   "long": 6.1,
+   "high": 4.9,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_cables": {
+   "long": 10.4,
+   "high": 0.8,
+   "class": "made",
+   "kind": "cable"
+  },
+  "m_beacon": {
+   "long": 7.6,
+   "high": 2.3,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_vent_cover": {
+   "long": 8.1,
+   "high": 0.5,
+   "class": "made",
+   "kind": "plate"
+  },
+  "m_spanner": {
+   "long": 9.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_nut": {
+   "long": 5.0,
+   "high": 2.2,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_bolt": {
+   "long": 5.5,
+   "high": 2.7,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_spring": {
+   "long": 6.9,
+   "high": 1.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_gas_bottle": {
+   "long": 5.5,
+   "high": 3.0,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_fan": {
+   "long": 6.2,
+   "high": 1.2,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_radio": {
+   "long": 7.5,
+   "high": 1.8,
+   "class": "made",
+   "kind": "metal"
+  }
+ },
+ "infestation": {
+  "cocoon": {
+   "long": 6.7,
+   "high": 1.3,
+   "class": "growth",
+   "kind": "web"
+  },
+  "burst_egg": {
+   "long": 6.2,
+   "high": 2.2,
+   "class": "growth",
+   "kind": "egg"
+  },
+  "dead_crawler": {
+   "long": 6.8,
+   "high": 1.2,
+   "class": "made",
+   "kind": "carapace"
+  },
+  "resin_stump": {
+   "long": 6.1,
+   "high": 1.8,
+   "class": "growth",
+   "kind": "resin"
+  },
+  "spore_chimneys": {
+   "long": 5.7,
+   "high": 2.0,
+   "class": "growth",
+   "kind": "spore"
+  },
+  "acid_holes": {
+   "long": 6.7,
+   "high": 0.3,
+   "class": "marks",
+   "kind": "acid"
+  },
+  "hive_vent": {
+   "long": 6.2,
+   "high": 1.1,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "molt": {
+   "long": 7.1,
+   "high": 0.8,
+   "class": "made",
+   "kind": "carapace"
+  },
+  "tendril_knot": {
+   "long": 7.9,
+   "high": 1.2,
+   "class": "growth",
+   "kind": "tendril"
+  },
+  "claw_marks": {
+   "long": 6.3,
+   "high": 0,
+   "class": "marks",
+   "kind": "slot"
+  },
+  "sac_cluster": {
+   "long": 6.4,
+   "high": 1.5,
+   "class": "growth",
+   "kind": "pustule"
+  },
+  "flamethrower": {
+   "long": 8.3,
+   "high": 0.9,
+   "class": "made",
+   "kind": "metal"
+  },
+  "scanner_and_mags": {
+   "long": 6.1,
+   "high": 0.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "slime_trail": {
+   "long": 8.2,
+   "high": 0,
+   "class": "marks",
+   "kind": "acid"
+  },
+  "spine_row": {
+   "long": 8.3,
+   "high": 2.9,
+   "class": "debris",
+   "kind": "spine"
+  },
+  "larvae": {
+   "long": 6.8,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "web_anchor": {
+   "long": 8.8,
+   "high": 0.8,
+   "class": "growth",
+   "kind": "web"
+  },
+  "mandibles": {
+   "long": 6.3,
+   "high": 1.0,
+   "class": "made",
+   "kind": "carapace"
+  },
+  "egg_ledge": {
+   "long": 8.9,
+   "high": 1.4,
+   "class": "growth",
+   "kind": "egg"
+  },
+  "hive_pores": {
+   "long": 6.7,
+   "high": 0,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "victim_bones": {
+   "long": 7.1,
+   "high": 1.0,
+   "class": "debris",
+   "kind": "spine"
+  },
+  "m_insect_leg": {
+   "long": 9.9,
+   "high": 1.4,
+   "class": "debris",
+   "kind": "carapace"
+  },
+  "m_spine": {
+   "long": 10.4,
+   "high": 0.8,
+   "class": "debris",
+   "kind": "spine"
+  }
+ },
+ "urban": {
+  "hydrant": {
+   "long": 3.4,
+   "high": 2.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "street_lamp": {
+   "long": 13.5,
+   "high": 1.2,
+   "class": "made",
+   "kind": "iron"
+  },
+  "tyres": {
+   "long": 4.7,
+   "high": 1.5,
+   "class": "made",
+   "kind": "tar"
+  },
+  "post_box": {
+   "long": 7.4,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "dustbin": {
+   "long": 6.7,
+   "high": 1.3,
+   "class": "made",
+   "kind": "tin"
+  },
+  "brick_pallet": {
+   "long": 5.8,
+   "high": 1.3,
+   "class": "made",
+   "kind": "brick"
+  },
+  "storm_drain": {
+   "long": 4.9,
+   "high": 0.5,
+   "class": "made",
+   "kind": "concrete"
+  },
+  "bottles": {
+   "long": 6.5,
+   "high": 0.5,
+   "class": "made",
+   "kind": "glass"
+  },
+  "road_sign": {
+   "long": 8.2,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "crossarm": {
+   "long": 5.7,
+   "high": 1.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "hubcap_and_bumper": {
+   "long": 6.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "tin"
+  },
+  "kerbstones": {
+   "long": 6.7,
+   "high": 0.7,
+   "class": "debris",
+   "kind": "concrete"
+  },
+  "window_frame": {
+   "long": 6.9,
+   "high": 0.5,
+   "class": "made",
+   "kind": "wood"
+  },
+  "park_bench": {
+   "long": 5.4,
+   "high": 0.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "rebar_chunk": {
+   "long": 5.7,
+   "high": 1.1,
+   "class": "debris",
+   "kind": "concrete"
+  },
+  "suitcase": {
+   "long": 4.8,
+   "high": 0.9,
+   "class": "made",
+   "kind": "leather"
+  },
+  "radiator": {
+   "long": 6.8,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "bathtub": {
+   "long": 6.0,
+   "high": 1.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "chalk_outline": {
+   "long": 6.4,
+   "high": 0,
+   "class": "marks",
+   "kind": "seam"
+  },
+  "setts": {
+   "long": 5.8,
+   "high": 0.5,
+   "class": "debris",
+   "kind": "concrete"
+  },
+  "m_hydrant": {
+   "long": 2.7,
+   "high": 4.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_dumpster": {
+   "long": 7.9,
+   "high": 4.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_dumpster_ro": {
+   "long": 8.3,
+   "high": 4.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_bench": {
+   "long": 6.2,
+   "high": 4.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_street_light": {
+   "long": 11.1,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_tyre": {
+   "long": 4.6,
+   "high": 3.1,
+   "class": "made",
+   "kind": "leather"
+  },
+  "m_cone": {
+   "long": 3.3,
+   "high": 4.4,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_concrete_barrier": {
+   "long": 8.4,
+   "high": 4.4,
+   "class": "made",
+   "kind": "concrete"
+  },
+  "m_stop_sign": {
+   "long": 9.8,
+   "high": 1.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_axle": {
+   "long": 8.9,
+   "high": 2.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_tank": {
+   "long": 9.0,
+   "high": 4.5,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_cinder_block": {
+   "long": 5.9,
+   "high": 2.9,
+   "class": "made",
+   "kind": "concrete"
+  },
+  "m_drain_grate": {
+   "long": 7.0,
+   "high": 0.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_gas_bottle": {
+   "long": 5.4,
+   "high": 3.0,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_bat": {
+   "long": 11.4,
+   "high": 0.9,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_spanner": {
+   "long": 8.5,
+   "high": 0.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_bottle": {
+   "long": 7.0,
+   "high": 1.9,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_jerrycan": {
+   "long": 5.3,
+   "high": 1.7,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_hacksaw": {
+   "long": 8.6,
+   "high": 0.5,
+   "class": "made",
+   "kind": "iron"
+  }
+ },
+ "mine": {
+  "dynamite": {
+   "long": 5.8,
+   "high": 0.6,
+   "class": "made",
+   "kind": "paper"
+  },
+  "plunger": {
+   "long": 6.3,
+   "high": 2.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "miner_helmet": {
+   "long": 4.2,
+   "high": 1.2,
+   "class": "made",
+   "kind": "tin"
+  },
+  "canary_cage": {
+   "long": 2.8,
+   "high": 1.9,
+   "class": "made",
+   "kind": "brass"
+  },
+  "kibble": {
+   "long": 6.6,
+   "high": 1.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "sluice_box": {
+   "long": 6.7,
+   "high": 0.9,
+   "class": "made",
+   "kind": "wood"
+  },
+  "assay_scale": {
+   "long": 5.8,
+   "high": 1.7,
+   "class": "made",
+   "kind": "brass"
+  },
+  "lunch_pail": {
+   "long": 4.9,
+   "high": 1.7,
+   "class": "made",
+   "kind": "tin"
+  },
+  "drill_steels": {
+   "long": 8.0,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "oil_lantern": {
+   "long": 4.6,
+   "high": 0.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "wheelset": {
+   "long": 5.1,
+   "high": 1.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "stalagmites": {
+   "long": 4.3,
+   "high": 2.5,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "sorting_table": {
+   "long": 4.6,
+   "high": 1.6,
+   "class": "made",
+   "kind": "wood"
+  },
+  "pulley_block": {
+   "long": 7.5,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "claim_stake": {
+   "long": 4.0,
+   "high": 2.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "hand_pump": {
+   "long": 5.8,
+   "high": 2.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "gold_seam": {
+   "long": 8.4,
+   "high": 0.4,
+   "class": "marks",
+   "kind": "crack"
+  },
+  "switch_lever": {
+   "long": 4.8,
+   "high": 1.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "spilled_ore": {
+   "long": 6.6,
+   "high": 0.8,
+   "class": "made",
+   "kind": "sack"
+  },
+  "fallen_stull": {
+   "long": 9.9,
+   "high": 0.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_pickaxe": {
+   "long": 5.5,
+   "high": 1.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_shovel": {
+   "long": 7.6,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_hammer": {
+   "long": 4.4,
+   "high": 1.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_barrel": {
+   "long": 3.7,
+   "high": 3.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_rocks": {
+   "long": 5.2,
+   "high": 2.8,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "m_ore": {
+   "long": 4.6,
+   "high": 2.1,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "m_crystals": {
+   "long": 6.0,
+   "high": 3.5,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "m_ladder": {
+   "long": 6.6,
+   "high": 1.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_wheel": {
+   "long": 3.8,
+   "high": 2.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_ingot": {
+   "long": 6.6,
+   "high": 1.4,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_rail": {
+   "long": 12.3,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_gear": {
+   "long": 6.0,
+   "high": 1.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_gem": {
+   "long": 5.3,
+   "high": 1.1,
+   "class": "made",
+   "kind": "rock"
+  },
+  "m_spoil_heap": {
+   "long": 9.0,
+   "high": 1.8,
+   "class": "debris",
+   "kind": "rock"
+  }
+ },
+ "swamp": {
+  "lily_pool": {
+   "long": 5.9,
+   "high": 0,
+   "class": "growth",
+   "kind": "lily"
+  },
+  "cypress_knees": {
+   "long": 4.5,
+   "high": 2.1,
+   "class": "growth",
+   "kind": "root"
+  },
+  "dugout": {
+   "long": 7.6,
+   "high": 0.5,
+   "class": "made",
+   "kind": "log"
+  },
+  "fish_trap": {
+   "long": 4.0,
+   "high": 1.2,
+   "class": "made",
+   "kind": "twig"
+  },
+  "totem_stake": {
+   "long": 6.8,
+   "high": 1.3,
+   "class": "made",
+   "kind": "log"
+  },
+  "shelf_stump": {
+   "long": 5.2,
+   "high": 2.1,
+   "class": "growth",
+   "kind": "shroom"
+  },
+  "frog_idol": {
+   "long": 4.3,
+   "high": 1.6,
+   "class": "made",
+   "kind": "tflag"
+  },
+  "reed_bundle": {
+   "long": 6.4,
+   "high": 0.5,
+   "class": "made",
+   "kind": "reed"
+  },
+  "root_tangle": {
+   "long": 7.6,
+   "high": 1.3,
+   "class": "growth",
+   "kind": "root"
+  },
+  "shed_skin": {
+   "long": 9.3,
+   "high": 0.3,
+   "class": "made",
+   "kind": "hide"
+  },
+  "mud_boil": {
+   "long": 4.7,
+   "high": 0.8,
+   "class": "growth",
+   "kind": "mud"
+  },
+  "mossy_log": {
+   "long": 6.3,
+   "high": 1.2,
+   "class": "growth",
+   "kind": "moss"
+  },
+  "shaman_drum": {
+   "long": 6.0,
+   "high": 1.6,
+   "class": "made",
+   "kind": "hide"
+  },
+  "croc_skull": {
+   "long": 5.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "bone"
+  },
+  "turtle_shell": {
+   "long": 4.2,
+   "high": 1.0,
+   "class": "made",
+   "kind": "carapace"
+  },
+  "dart_gourds": {
+   "long": 7.3,
+   "high": 1.8,
+   "class": "made",
+   "kind": "clay"
+  },
+  "mat_and_bowl": {
+   "long": 4.8,
+   "high": 0.8,
+   "class": "made",
+   "kind": "reed"
+  },
+  "pilings": {
+   "long": 6.3,
+   "high": 2.6,
+   "class": "made",
+   "kind": "log"
+  },
+  "bone_fetish": {
+   "long": 6.1,
+   "high": 0.8,
+   "class": "made",
+   "kind": "bone"
+  },
+  "gator_slide": {
+   "long": 7.8,
+   "high": 0,
+   "class": "marks",
+   "kind": "rut"
+  },
+  "m_canoe": {
+   "long": 11.0,
+   "high": 1.7,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_paddle": {
+   "long": 9.2,
+   "high": 1.4,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_rowboat": {
+   "long": 7.7,
+   "high": 2.5,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_log": {
+   "long": 9.5,
+   "high": 2.3,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_tree_log": {
+   "long": 10.5,
+   "high": 2.1,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_dead_tree": {
+   "long": 10.6,
+   "high": 2.2,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_skull": {
+   "long": 4.6,
+   "high": 4.2,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_bone": {
+   "long": 7.0,
+   "high": 1.7,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_bone_knob": {
+   "long": 5.5,
+   "high": 1.6,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_fish": {
+   "long": 8.1,
+   "high": 2.1,
+   "class": "made",
+   "kind": "hide"
+  },
+  "m_boot": {
+   "long": 6.4,
+   "high": 1.8,
+   "class": "made",
+   "kind": "hide"
+  },
+  "m_mushroom": {
+   "long": 4.8,
+   "high": 2.9,
+   "class": "debris",
+   "kind": "shroom"
+  },
+  "m_toadstool": {
+   "long": 5.0,
+   "high": 2.8,
+   "class": "debris",
+   "kind": "shroom"
+  },
+  "m_fish_bone": {
+   "long": 8.3,
+   "high": 0.9,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_jug": {
+   "long": 5.6,
+   "high": 2.5,
+   "class": "made",
+   "kind": "clay"
+  }
+ },
+ "cynder": {
+  "skylight": {
+   "long": 6.6,
+   "high": 0.8,
+   "class": "marks",
+   "kind": "lava"
+  },
+  "basalt_columns": {
+   "long": 5.6,
+   "high": 2.1,
+   "class": "debris",
+   "kind": "basalt"
+  },
+  "ropy_lava": {
+   "long": 6.1,
+   "high": 0.5,
+   "class": "debris",
+   "kind": "basalt"
+  },
+  "fumarole": {
+   "long": 5.8,
+   "high": 0.9,
+   "class": "debris",
+   "kind": "ember"
+  },
+  "lava_bomb": {
+   "long": 5.6,
+   "high": 1.2,
+   "class": "debris",
+   "kind": "basalt"
+  },
+  "anvil": {
+   "long": 4.5,
+   "high": 1.7,
+   "class": "made",
+   "kind": "iron"
+  },
+  "crucible": {
+   "long": 7.3,
+   "high": 1.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "ingots": {
+   "long": 5.6,
+   "high": 0.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "obsidian_blades": {
+   "long": 6.3,
+   "high": 2.4,
+   "class": "debris",
+   "kind": "obsidian"
+  },
+  "charred_hand": {
+   "long": 8.7,
+   "high": 0.7,
+   "class": "made",
+   "kind": "ash"
+  },
+  "horn_spur": {
+   "long": 6.5,
+   "high": 1.6,
+   "class": "growth",
+   "kind": "tooth"
+  },
+  "slag_heap": {
+   "long": 5.2,
+   "high": 1.6,
+   "class": "debris",
+   "kind": "ash"
+  },
+  "forge_bellows": {
+   "long": 7.9,
+   "high": 1.3,
+   "class": "made",
+   "kind": "leather"
+  },
+  "ember_moat": {
+   "long": 6.4,
+   "high": 2.0,
+   "class": "marks",
+   "kind": "lava"
+  },
+  "sulfur_crust": {
+   "long": 4.0,
+   "high": 1.9,
+   "class": "debris",
+   "kind": "ember"
+  },
+  "shackles": {
+   "long": 8.9,
+   "high": 0.7,
+   "class": "made",
+   "kind": "iron"
+  },
+  "ash_drift": {
+   "long": 9.8,
+   "high": 0.8,
+   "class": "debris",
+   "kind": "ash"
+  },
+  "imp_idol": {
+   "long": 4.3,
+   "high": 2.7,
+   "class": "made",
+   "kind": "basalt"
+  },
+  "crust_cracks": {
+   "long": 6.8,
+   "high": 0,
+   "class": "marks",
+   "kind": "lava"
+  },
+  "quench_trough": {
+   "long": 6.7,
+   "high": 1.2,
+   "class": "made",
+   "kind": "basalt"
+  },
+  "cinder_cone": {
+   "long": 8.4,
+   "high": 1.9,
+   "class": "debris",
+   "kind": "basalt"
+  },
+  "m_meteor": {
+   "long": 6.9,
+   "high": 4.2,
+   "class": "debris",
+   "kind": "basalt"
+  },
+  "m_crater": {
+   "long": 8.4,
+   "high": 1.3,
+   "class": "debris",
+   "kind": "ash"
+  },
+  "m_shards": {
+   "long": 7.5,
+   "high": 4.8,
+   "class": "debris",
+   "kind": "obsidian"
+  },
+  "m_boulders": {
+   "long": 8.2,
+   "high": 3.9,
+   "class": "debris",
+   "kind": "basalt"
+  },
+  "m_skull": {
+   "long": 4.9,
+   "high": 2.6,
+   "class": "made",
+   "kind": "tooth"
+  },
+  "m_horn": {
+   "long": 8.4,
+   "high": 1.9,
+   "class": "made",
+   "kind": "tooth"
+  },
+  "m_tusk": {
+   "long": 9.6,
+   "high": 0.7,
+   "class": "made",
+   "kind": "tooth"
+  },
+  "m_mace": {
+   "long": 11.0,
+   "high": 1.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_sword": {
+   "long": 13.3,
+   "high": 0.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_breastplate": {
+   "long": 6.4,
+   "high": 2.9,
+   "class": "made",
+   "kind": "iron"
+  }
+ },
+ "targa": {
+  "fallen_icicles": {
+   "long": 6.7,
+   "high": 0.8,
+   "class": "debris",
+   "kind": "ice"
+  },
+  "snow_crescent": {
+   "long": 9.8,
+   "high": 1.0,
+   "class": "growth",
+   "kind": "snow"
+  },
+  "pack_and_snowshoes": {
+   "long": 6.2,
+   "high": 1.1,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "pylon_stub": {
+   "long": 6.0,
+   "high": 1.4,
+   "class": "made",
+   "kind": "alien"
+  },
+  "ice_blocks": {
+   "long": 6.6,
+   "high": 1.0,
+   "class": "made",
+   "kind": "ice"
+  },
+  "pod_lid": {
+   "long": 5.5,
+   "high": 0.6,
+   "class": "made",
+   "kind": "alien"
+  },
+  "conduit_node": {
+   "long": 11.6,
+   "high": 0.7,
+   "class": "made",
+   "kind": "alien"
+  },
+  "disc_wreck": {
+   "long": 5.7,
+   "high": 1.4,
+   "class": "made",
+   "kind": "alien"
+  },
+  "pressure_ridge": {
+   "long": 9.5,
+   "high": 1.8,
+   "class": "debris",
+   "kind": "ice"
+  },
+  "glyph_tile": {
+   "long": 4.9,
+   "high": 0.5,
+   "class": "made",
+   "kind": "alien"
+  },
+  "frost_flowers": {
+   "long": 4.8,
+   "high": 0.8,
+   "class": "growth",
+   "kind": "frost"
+  },
+  "fishing_hole": {
+   "long": 10.1,
+   "high": 0.6,
+   "class": "made",
+   "kind": "ice"
+  },
+  "thermal_grille": {
+   "long": 6.4,
+   "high": 0.4,
+   "class": "made",
+   "kind": "alien"
+  },
+  "sled": {
+   "long": 9.0,
+   "high": 0.9,
+   "class": "made",
+   "kind": "wood"
+  },
+  "tusk": {
+   "long": 7.2,
+   "high": 0.8,
+   "class": "made",
+   "kind": "bone"
+  },
+  "survey_beacon": {
+   "long": 5.3,
+   "high": 3.4,
+   "class": "made",
+   "kind": "metal"
+  },
+  "lattice_shard": {
+   "long": 4.6,
+   "high": 0.5,
+   "class": "debris",
+   "kind": "crystal"
+  },
+  "buried_steps": {
+   "long": 6.8,
+   "high": 1.7,
+   "class": "made",
+   "kind": "alien"
+  },
+  "ice_spikes": {
+   "long": 4.5,
+   "high": 2.6,
+   "class": "debris",
+   "kind": "ice"
+  },
+  "power_cell": {
+   "long": 5.3,
+   "high": 2.7,
+   "class": "made",
+   "kind": "alien"
+  },
+  "m_ice_crystals": {
+   "long": 8.2,
+   "high": 4.9,
+   "class": "debris",
+   "kind": "ice"
+  },
+  "m_ice_shard": {
+   "long": 3.5,
+   "high": 5.0,
+   "class": "debris",
+   "kind": "ice"
+  },
+  "m_snow_rocks": {
+   "long": 7.3,
+   "high": 2.3,
+   "class": "debris",
+   "kind": "ice"
+  },
+  "m_cargo": {
+   "long": 5.5,
+   "high": 5.0,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_canisters": {
+   "long": 6.5,
+   "high": 2.7,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_lights": {
+   "long": 8.4,
+   "high": 4.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_skip": {
+   "long": 8.3,
+   "high": 3.4,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_tank": {
+   "long": 8.0,
+   "high": 5.0,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_crate": {
+   "long": 8.0,
+   "high": 3.4,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_valve_wheel": {
+   "long": 6.7,
+   "high": 1.0,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_gear": {
+   "long": 5.7,
+   "high": 1.7,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_vent": {
+   "long": 8.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_spanner": {
+   "long": 8.8,
+   "high": 0.5,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_gas_bottle": {
+   "long": 5.9,
+   "high": 2.9,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_fan": {
+   "long": 6.4,
+   "high": 1.1,
+   "class": "made",
+   "kind": "metal"
+  },
+  "m_bolt": {
+   "long": 5.6,
+   "high": 2.6,
+   "class": "made",
+   "kind": "metal"
+  },
+  "skis": {
+   "long": 9.2,
+   "high": 0.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "supply_drop": {
+   "long": 6.9,
+   "high": 1.2,
+   "class": "made",
+   "kind": "metal"
+  }
+ },
+ "trederra": {
+  "wire_coil": {
+   "long": 8.0,
+   "high": 0.7,
+   "class": "made",
+   "kind": "wire"
+  },
+  "tin_hat": {
+   "long": 5.5,
+   "high": 1.3,
+   "class": "made",
+   "kind": "tin"
+  },
+  "gas_mask": {
+   "long": 7.6,
+   "high": 0.8,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "shell_cases": {
+   "long": 8.4,
+   "high": 2.6,
+   "class": "made",
+   "kind": "brass"
+  },
+  "ammo_box": {
+   "long": 7.5,
+   "high": 1.1,
+   "class": "made",
+   "kind": "tin"
+  },
+  "periscope": {
+   "long": 9.1,
+   "high": 1.0,
+   "class": "made",
+   "kind": "tin"
+  },
+  "field_telephone": {
+   "long": 7.5,
+   "high": 1.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "mortar": {
+   "long": 5.6,
+   "high": 1.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "stretcher": {
+   "long": 8.4,
+   "high": 0.7,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "ration_tins": {
+   "long": 6.0,
+   "high": 1.0,
+   "class": "made",
+   "kind": "tin"
+  },
+  "screw_pickets": {
+   "long": 9.4,
+   "high": 0.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "sniper_plate": {
+   "long": 5.4,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "dud_shell": {
+   "long": 6.5,
+   "high": 0.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "binoculars_map": {
+   "long": 5.6,
+   "high": 0.8,
+   "class": "made",
+   "kind": "leather"
+  },
+  "poppies": {
+   "long": 6.6,
+   "high": 0.8,
+   "class": "growth",
+   "kind": "flower"
+  },
+  "rats": {
+   "long": 8.9,
+   "high": 0.8,
+   "class": "made",
+   "kind": "hide"
+  },
+  "boot_puddles": {
+   "long": 8.8,
+   "high": 0,
+   "class": "marks",
+   "kind": "water"
+  },
+  "stick_grenades": {
+   "long": 7.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "bugle": {
+   "long": 5.1,
+   "high": 1.3,
+   "class": "made",
+   "kind": "brass"
+  },
+  "machine_gun": {
+   "long": 7.4,
+   "high": 1.7,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_barrel": {
+   "long": 5.4,
+   "high": 3.9,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_shovel": {
+   "long": 8.4,
+   "high": 1.7,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_pickaxe": {
+   "long": 7.2,
+   "high": 1.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_bedroll_packed": {
+   "long": 5.8,
+   "high": 2.4,
+   "class": "made",
+   "kind": "cloth"
+  },
+  "m_duckboard": {
+   "long": 7.3,
+   "high": 2.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_ammo_crate": {
+   "long": 9.1,
+   "high": 3.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_campfire": {
+   "long": 5.4,
+   "high": 2.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_grenade": {
+   "long": 4.3,
+   "high": 3.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_tin_sheet": {
+   "long": 7.0,
+   "high": 1.6,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_chest": {
+   "long": 4.4,
+   "high": 4.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_shell": {
+   "long": 6.9,
+   "high": 2.1,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_boot": {
+   "long": 6.4,
+   "high": 1.9,
+   "class": "made",
+   "kind": "leather"
+  },
+  "m_jerrycan": {
+   "long": 5.7,
+   "high": 1.6,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_gas_cylinder": {
+   "long": 5.9,
+   "high": 2.7,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_oil_drum": {
+   "long": 5.2,
+   "high": 2.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_sledgehammer": {
+   "long": 10.5,
+   "high": 1.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "sandbags": {
+   "long": 7.3,
+   "high": 1.5,
+   "class": "made",
+   "kind": "sack"
+  },
+  "duckboard": {
+   "long": 8.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "rifle": {
+   "long": 8.6,
+   "high": 0.6,
+   "class": "made",
+   "kind": "wood"
+  },
+  "rum_jar": {
+   "long": 5.3,
+   "high": 1.3,
+   "class": "made",
+   "kind": "clay"
+  },
+  "trench_sign": {
+   "long": 5.8,
+   "high": 0.7,
+   "class": "made",
+   "kind": "wood"
+  }
+ },
+ "fortress": {
+  "paper_lantern": {
+   "long": 4.7,
+   "high": 1.2,
+   "class": "made",
+   "kind": "paper"
+  },
+  "kabuto": {
+   "long": 4.8,
+   "high": 1.5,
+   "class": "made",
+   "kind": "lacquer"
+  },
+  "sake_set": {
+   "long": 4.1,
+   "high": 1.9,
+   "class": "made",
+   "kind": "clay"
+  },
+  "bonsai": {
+   "long": 4.4,
+   "high": 2.8,
+   "class": "growth",
+   "kind": "shrub"
+  },
+  "tsukubai": {
+   "long": 5.9,
+   "high": 1.6,
+   "class": "made",
+   "kind": "garden"
+  },
+  "deer_scarer": {
+   "long": 6.6,
+   "high": 1.7,
+   "class": "made",
+   "kind": "bamboo"
+  },
+  "taiko": {
+   "long": 7.0,
+   "high": 1.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "geta": {
+   "long": 4.2,
+   "high": 0.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "sword_stand": {
+   "long": 6.3,
+   "high": 1.5,
+   "class": "made",
+   "kind": "lacquer"
+  },
+  "go_board": {
+   "long": 7.3,
+   "high": 1.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "fan": {
+   "long": 5.5,
+   "high": 0.5,
+   "class": "made",
+   "kind": "paper"
+  },
+  "shuriken": {
+   "long": 6.1,
+   "high": 0.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "shamisen": {
+   "long": 7.4,
+   "high": 0.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "bamboo_fence": {
+   "long": 6.0,
+   "high": 0.6,
+   "class": "made",
+   "kind": "bamboo"
+  },
+  "rice_bales": {
+   "long": 5.9,
+   "high": 1.2,
+   "class": "made",
+   "kind": "sack"
+  },
+  "torii_beam": {
+   "long": 9.2,
+   "high": 0.7,
+   "class": "made",
+   "kind": "lacquer"
+  },
+  "raked_gravel": {
+   "long": 9.9,
+   "high": 1.1,
+   "class": "marks",
+   "kind": "pan"
+  },
+  "koro": {
+   "long": 3.2,
+   "high": 1.7,
+   "class": "made",
+   "kind": "brass"
+  },
+  "suzu_bell": {
+   "long": 6.7,
+   "high": 1.4,
+   "class": "made",
+   "kind": "brass"
+  },
+  "menpo": {
+   "long": 5.3,
+   "high": 1.1,
+   "class": "made",
+   "kind": "lacquer"
+  },
+  "m_spear": {
+   "long": 7.2,
+   "high": 1.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_bolt": {
+   "long": 6.8,
+   "high": 1.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_barrel": {
+   "long": 3.8,
+   "high": 3.9,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_barrels": {
+   "long": 3.9,
+   "high": 3.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_bedroll": {
+   "long": 5.1,
+   "high": 1.1,
+   "class": "made",
+   "kind": "sack"
+  },
+  "m_chest": {
+   "long": 3.3,
+   "high": 3.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_pot": {
+   "long": 3.3,
+   "high": 3.5,
+   "class": "made",
+   "kind": "clay"
+  },
+  "m_stone_lantern": {
+   "long": 9.3,
+   "high": 2.8,
+   "class": "made",
+   "kind": "garden"
+  },
+  "m_shuriken": {
+   "long": 3.9,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_kunai": {
+   "long": 9.1,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_sai": {
+   "long": 9.8,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_teapot": {
+   "long": 4.6,
+   "high": 2.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_rice_bowl": {
+   "long": 4.6,
+   "high": 1.5,
+   "class": "made",
+   "kind": "lacquer"
+  },
+  "m_roof_tile": {
+   "long": 6.6,
+   "high": 1.4,
+   "class": "made",
+   "kind": "clay"
+  },
+  "m_roof_tiles": {
+   "long": 7.4,
+   "high": 1.3,
+   "class": "made",
+   "kind": "clay"
+  },
+  "m_scroll": {
+   "long": 6.1,
+   "high": 1.1,
+   "class": "made",
+   "kind": "paper"
+  },
+  "m_cuirass": {
+   "long": 6.2,
+   "high": 2.8,
+   "class": "made",
+   "kind": "lacquer"
+  }
+ },
+ "beast": {
+  "molar": {
+   "long": 3.6,
+   "high": 1.2,
+   "class": "debris",
+   "kind": "tooth"
+  },
+  "polyps": {
+   "long": 3.2,
+   "high": 2.4,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "gut_folds": {
+   "long": 7.0,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "eaten_cuirass": {
+   "long": 4.0,
+   "high": 1.1,
+   "class": "made",
+   "kind": "tin"
+  },
+  "parasite_worm": {
+   "long": 6.2,
+   "high": 0.9,
+   "class": "growth",
+   "kind": "tendril"
+  },
+  "cilia": {
+   "long": 4.9,
+   "high": 1.8,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "bile_sump": {
+   "long": 7.1,
+   "high": 0,
+   "class": "marks",
+   "kind": "bile"
+  },
+  "gallstones": {
+   "long": 4.0,
+   "high": 1.4,
+   "class": "debris",
+   "kind": "tooth"
+  },
+  "vertebrae": {
+   "long": 9.9,
+   "high": 1.2,
+   "class": "made",
+   "kind": "bone"
+  },
+  "fish_bones": {
+   "long": 6.5,
+   "high": 0.5,
+   "class": "made",
+   "kind": "bone"
+  },
+  "taste_buds": {
+   "long": 4.6,
+   "high": 1.0,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "tendon_cords": {
+   "long": 7.9,
+   "high": 1.1,
+   "class": "growth",
+   "kind": "vein"
+  },
+  "embedded_eye": {
+   "long": 4.2,
+   "high": 1.1,
+   "class": "growth",
+   "kind": "flesh"
+  },
+  "ulcer": {
+   "long": 6.4,
+   "high": 0.7,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "dissolving_barrel": {
+   "long": 6.4,
+   "high": 0.5,
+   "class": "made",
+   "kind": "wood"
+  },
+  "nerve_cluster": {
+   "long": 9.0,
+   "high": 0.9,
+   "class": "growth",
+   "kind": "vein"
+  },
+  "bone_spurs": {
+   "long": 9.3,
+   "high": 2.4,
+   "class": "debris",
+   "kind": "bone"
+  },
+  "lamprey_mouth": {
+   "long": 5.2,
+   "high": 1.1,
+   "class": "growth",
+   "kind": "tooth"
+  },
+  "split_cyst": {
+   "long": 4.6,
+   "high": 1.0,
+   "class": "growth",
+   "kind": "pustule"
+  },
+  "barnacles": {
+   "long": 4.4,
+   "high": 0.9,
+   "class": "growth",
+   "kind": "tooth"
+  },
+  "m_bone": {
+   "long": 5.3,
+   "high": 1.9,
+   "class": "debris",
+   "kind": "bone"
+  },
+  "m_bone_knob": {
+   "long": 5.5,
+   "high": 1.4,
+   "class": "debris",
+   "kind": "bone"
+  },
+  "m_long_bone": {
+   "long": 7.6,
+   "high": 1.8,
+   "class": "debris",
+   "kind": "bone"
+  },
+  "m_skull": {
+   "long": 4.8,
+   "high": 4.0,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_barrel": {
+   "long": 6.6,
+   "high": 3.1,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_crate": {
+   "long": 5.0,
+   "high": 4.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_chest": {
+   "long": 5.3,
+   "high": 3.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_rowboat": {
+   "long": 8.1,
+   "high": 2.1,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_fish": {
+   "long": 7.7,
+   "high": 2.2,
+   "class": "made",
+   "kind": "flesh"
+  },
+  "m_horn": {
+   "long": 8.3,
+   "high": 1.8,
+   "class": "debris",
+   "kind": "tooth"
+  },
+  "m_tusk": {
+   "long": 10.5,
+   "high": 0.8,
+   "class": "debris",
+   "kind": "tooth"
+  },
+  "m_fish_bone": {
+   "long": 8.9,
+   "high": 1.0,
+   "class": "debris",
+   "kind": "bone"
+  },
+  "m_insect_leg": {
+   "long": 10.0,
+   "high": 1.4,
+   "class": "debris",
+   "kind": "bone"
+  },
+  "m_ship_wheel": {
+   "long": 8.9,
+   "high": 0.5,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_cannon": {
+   "long": 8.4,
+   "high": 2.2,
+   "class": "made",
+   "kind": "tin"
+  }
+ },
+ "frontier": {
+  "spittoon": {
+   "long": 3.8,
+   "high": 1.2,
+   "class": "made",
+   "kind": "brass"
+  },
+  "poker_hand": {
+   "long": 5.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "paper"
+  },
+  "wanted_board": {
+   "long": 4.6,
+   "high": 0.6,
+   "class": "made",
+   "kind": "board"
+  },
+  "batwing_door": {
+   "long": 4.7,
+   "high": 0.6,
+   "class": "made",
+   "kind": "board"
+  },
+  "washtub": {
+   "long": 6.1,
+   "high": 1.3,
+   "class": "made",
+   "kind": "tin"
+  },
+  "branding_irons": {
+   "long": 9.3,
+   "high": 0.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "butter_churn": {
+   "long": 2.7,
+   "high": 3.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "hay_bale": {
+   "long": 6.8,
+   "high": 1.6,
+   "class": "made",
+   "kind": "sack"
+  },
+  "boots_and_spurs": {
+   "long": 6.2,
+   "high": 2.0,
+   "class": "made",
+   "kind": "leather"
+  },
+  "lasso": {
+   "long": 7.3,
+   "high": 0.6,
+   "class": "made",
+   "kind": "rope"
+  },
+  "whiskey_jug": {
+   "long": 6.2,
+   "high": 2.1,
+   "class": "made",
+   "kind": "clay"
+  },
+  "busted_safe": {
+   "long": 5.8,
+   "high": 1.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "gunbelt": {
+   "long": 8.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "leather"
+  },
+  "singletree": {
+   "long": 8.4,
+   "high": 0.5,
+   "class": "made",
+   "kind": "wood"
+  },
+  "potbelly_stove": {
+   "long": 6.9,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "church_bell": {
+   "long": 6.0,
+   "high": 1.3,
+   "class": "made",
+   "kind": "brass"
+  },
+  "shop_sign": {
+   "long": 5.2,
+   "high": 0.6,
+   "class": "made",
+   "kind": "board"
+  },
+  "nail_keg": {
+   "long": 5.7,
+   "high": 1.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "horse_collar": {
+   "long": 5.9,
+   "high": 0.7,
+   "class": "made",
+   "kind": "leather"
+  },
+  "rut_puddles": {
+   "long": 9.1,
+   "high": 0,
+   "class": "marks",
+   "kind": "water"
+  },
+  "m_barrel": {
+   "long": 6.9,
+   "high": 5.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_barrel_upright": {
+   "long": 4.9,
+   "high": 5.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_bottle_crate": {
+   "long": 5.7,
+   "high": 4.7,
+   "class": "made",
+   "kind": "board"
+  },
+  "m_cart": {
+   "long": 10.3,
+   "high": 3.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_wagon_wheel": {
+   "long": 7.5,
+   "high": 3.9,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_chest": {
+   "long": 4.8,
+   "high": 4.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_pickaxe": {
+   "long": 7.8,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_shovel": {
+   "long": 8.6,
+   "high": 1.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_axe": {
+   "long": 7.6,
+   "high": 1.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_signpost": {
+   "long": 10.4,
+   "high": 1.2,
+   "class": "made",
+   "kind": "board"
+  },
+  "m_horseshoe": {
+   "long": 5.3,
+   "high": 1.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_sheriff_star": {
+   "long": 4.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "tin"
+  },
+  "m_whiskey_bottle": {
+   "long": 7.3,
+   "high": 1.9,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_claw_hammer": {
+   "long": 8.0,
+   "high": 1.2,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_padlock": {
+   "long": 5.0,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  }
+ },
+ "graveyard": {
+  "wooden_cross": {
+   "long": 3.6,
+   "high": 3.0,
+   "class": "made",
+   "kind": "wood"
+  },
+  "wreath": {
+   "long": 6.2,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "leaf"
+  },
+  "broken_obelisk": {
+   "long": 6.7,
+   "high": 2.1,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "angel_wing": {
+   "long": 4.8,
+   "high": 0.9,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "open_coffin": {
+   "long": 6.4,
+   "high": 1.0,
+   "class": "made",
+   "kind": "coffin"
+  },
+  "candles": {
+   "long": 3.3,
+   "high": 2.3,
+   "class": "made",
+   "kind": "wax"
+  },
+  "fallen_railing": {
+   "long": 5.7,
+   "high": 0.4,
+   "class": "made",
+   "kind": "fence"
+  },
+  "skull_pile": {
+   "long": 4.3,
+   "high": 1.7,
+   "class": "made",
+   "kind": "bone"
+  },
+  "robbers_hole": {
+   "long": 7.6,
+   "high": 0.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "raven": {
+   "long": 6.0,
+   "high": 1.2,
+   "class": "made",
+   "kind": "hide"
+  },
+  "grave_bell": {
+   "long": 4.4,
+   "high": 2.6,
+   "class": "made",
+   "kind": "brass"
+  },
+  "effigy_slab": {
+   "long": 6.6,
+   "high": 1.1,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "toppled_vase": {
+   "long": 5.5,
+   "high": 1.0,
+   "class": "made",
+   "kind": "clay"
+  },
+  "sunken_grave": {
+   "long": 6.9,
+   "high": 0,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "footstones": {
+   "long": 8.4,
+   "high": 1.7,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "ivy": {
+   "long": 7.7,
+   "high": 0.3,
+   "class": "growth",
+   "kind": "leaf"
+  },
+  "dead_bat": {
+   "long": 5.5,
+   "high": 0.7,
+   "class": "made",
+   "kind": "hide"
+  },
+  "chalice_rosary": {
+   "long": 6.4,
+   "high": 0.9,
+   "class": "made",
+   "kind": "gold"
+  },
+  "gargoyle_head": {
+   "long": 4.8,
+   "high": 2.0,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "mortsafe": {
+   "long": 6.9,
+   "high": 0.8,
+   "class": "made",
+   "kind": "fence"
+  },
+  "m_gravestone_cross": {
+   "long": 4.4,
+   "high": 1.6,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_gravestone_round": {
+   "long": 2.7,
+   "high": 1.4,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_gravestone_bevel": {
+   "long": 2.9,
+   "high": 1.5,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_gravestone_roof": {
+   "long": 2.6,
+   "high": 3.2,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_gravestone_wide": {
+   "long": 4.0,
+   "high": 2.7,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_gravestone_fancy": {
+   "long": 2.8,
+   "high": 3.1,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_gravestone_broken": {
+   "long": 3.0,
+   "high": 1.9,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_wood_cross": {
+   "long": 4.9,
+   "high": 2.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_stone_cross": {
+   "long": 5.1,
+   "high": 1.3,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_coffin": {
+   "long": 6.9,
+   "high": 2.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_coffin_old": {
+   "long": 6.3,
+   "high": 1.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_lantern": {
+   "long": 2.5,
+   "high": 1.7,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_lantern_glass": {
+   "long": 2.0,
+   "high": 2.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_urn": {
+   "long": 2.4,
+   "high": 1.8,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_urn_square": {
+   "long": 1.9,
+   "high": 2.3,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_pumpkin": {
+   "long": 2.0,
+   "high": 1.9,
+   "class": "made",
+   "kind": "shrub"
+  },
+  "m_candles": {
+   "long": 2.4,
+   "high": 1.5,
+   "class": "made",
+   "kind": "wax"
+  },
+  "m_shovel": {
+   "long": 3.5,
+   "high": 2.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_fire_basket": {
+   "long": 2.9,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_obelisk": {
+   "long": 4.2,
+   "high": 1.7,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_grave": {
+   "long": 6.7,
+   "high": 1.2,
+   "class": "made",
+   "kind": "earth"
+  },
+  "m_bench": {
+   "long": 5.3,
+   "high": 2.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_chalice": {
+   "long": 2.7,
+   "high": 1.8,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_altar": {
+   "long": 5.6,
+   "high": 2.7,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_skull": {
+   "long": 4.7,
+   "high": 2.9,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_tomb": {
+   "long": 6.8,
+   "high": 3.1,
+   "class": "made",
+   "kind": "headstone"
+  },
+  "m_mallet": {
+   "long": 7.2,
+   "high": 1.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_trowel": {
+   "long": 6.9,
+   "high": 0.8,
+   "class": "made",
+   "kind": "iron"
+  }
+ },
+ "forest": {
+  "fern_fronds": {
+   "long": 6.1,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "fern"
+  },
+  "pine_cones": {
+   "long": 4.8,
+   "high": 0.5,
+   "class": "growth",
+   "kind": "twig"
+  },
+  "acorns_and_leaves": {
+   "long": 5.0,
+   "high": 0.3,
+   "class": "growth",
+   "kind": "leaf"
+  },
+  "snag": {
+   "long": 3.2,
+   "high": 3.2,
+   "class": "growth",
+   "kind": "stump"
+  },
+  "wild_hive": {
+   "long": 3.8,
+   "high": 1.3,
+   "class": "growth",
+   "kind": "wax"
+  },
+  "fox_den": {
+   "long": 6.6,
+   "high": 0.7,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "puffballs": {
+   "long": 3.8,
+   "high": 1.2,
+   "class": "growth",
+   "kind": "shroom"
+  },
+  "moss_stones": {
+   "long": 5.8,
+   "high": 1.3,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "brambles": {
+   "long": 7.4,
+   "high": 0.8,
+   "class": "growth",
+   "kind": "twig"
+  },
+  "hollow_log": {
+   "long": 6.1,
+   "high": 1.4,
+   "class": "made",
+   "kind": "log"
+  },
+  "snare": {
+   "long": 7.5,
+   "high": 1.5,
+   "class": "made",
+   "kind": "rope"
+  },
+  "sap_bucket": {
+   "long": 4.8,
+   "high": 2.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "feathers_pellets": {
+   "long": 6.0,
+   "high": 0.5,
+   "class": "debris",
+   "kind": "hide"
+  },
+  "boar_wallow": {
+   "long": 11.0,
+   "high": 0,
+   "class": "marks",
+   "kind": "water"
+  },
+  "leaf_litter": {
+   "long": 5.4,
+   "high": 0.4,
+   "class": "growth",
+   "kind": "leaf"
+  },
+  "amanita": {
+   "long": 3.3,
+   "high": 2.1,
+   "class": "growth",
+   "kind": "shroom"
+  },
+  "waymarker": {
+   "long": 4.2,
+   "high": 1.0,
+   "class": "made",
+   "kind": "rock"
+  },
+  "fallen_branch": {
+   "long": 8.5,
+   "high": 0.6,
+   "class": "debris",
+   "kind": "twig"
+  },
+  "squirrel_cache": {
+   "long": 5.9,
+   "high": 0.7,
+   "class": "made",
+   "kind": "twig"
+  },
+  "wolf_tracks": {
+   "long": 7.0,
+   "high": 0,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "m_log": {
+   "long": 9.4,
+   "high": 2.6,
+   "class": "debris",
+   "kind": "log"
+  },
+  "m_tree_log": {
+   "long": 10.6,
+   "high": 3.1,
+   "class": "debris",
+   "kind": "log"
+  },
+  "m_fallen_tree": {
+   "long": 11.1,
+   "high": 2.6,
+   "class": "debris",
+   "kind": "log"
+  },
+  "m_campfire": {
+   "long": 7.1,
+   "high": 1.1,
+   "class": "made",
+   "kind": "rock"
+  },
+  "m_fire_pit": {
+   "long": 6.8,
+   "high": 2.8,
+   "class": "made",
+   "kind": "rock"
+  },
+  "m_rocks": {
+   "long": 8.4,
+   "high": 4.2,
+   "class": "debris",
+   "kind": "rock"
+  },
+  "m_axe": {
+   "long": 7.3,
+   "high": 1.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_mushroom": {
+   "long": 4.9,
+   "high": 2.9,
+   "class": "debris",
+   "kind": "shroom"
+  },
+  "m_toadstool": {
+   "long": 4.9,
+   "high": 2.7,
+   "class": "debris",
+   "kind": "shroom"
+  },
+  "m_firewood": {
+   "long": 6.3,
+   "high": 2.4,
+   "class": "made",
+   "kind": "log"
+  },
+  "m_mallet": {
+   "long": 7.2,
+   "high": 1.8,
+   "class": "made",
+   "kind": "wood"
+  }
+ },
+ "dungeon": {
+  "stocks": {
+   "long": 6.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "bear_trap": {
+   "long": 7.5,
+   "high": 0.6,
+   "class": "made",
+   "kind": "iron"
+  },
+  "torch": {
+   "long": 6.7,
+   "high": 0.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "potions": {
+   "long": 9.4,
+   "high": 1.7,
+   "class": "made",
+   "kind": "glass"
+  },
+  "skull_candle": {
+   "long": 3.0,
+   "high": 2.4,
+   "class": "made",
+   "kind": "bone"
+  },
+  "spellbook": {
+   "long": 5.0,
+   "high": 0.7,
+   "class": "made",
+   "kind": "paper"
+  },
+  "key_ring": {
+   "long": 5.3,
+   "high": 0.4,
+   "class": "made",
+   "kind": "iron"
+  },
+  "crown_sceptre": {
+   "long": 7.1,
+   "high": 1.6,
+   "class": "made",
+   "kind": "gold"
+  },
+  "portcullis_piece": {
+   "long": 5.8,
+   "high": 0.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "gibbet_cage": {
+   "long": 7.4,
+   "high": 1.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "mimic": {
+   "long": 5.3,
+   "high": 1.8,
+   "class": "made",
+   "kind": "wood"
+  },
+  "pressure_plate": {
+   "long": 6.0,
+   "high": 0.4,
+   "class": "made",
+   "kind": "flag"
+  },
+  "block_and_axe": {
+   "long": 6.2,
+   "high": 1.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "keystone": {
+   "long": 5.1,
+   "high": 1.1,
+   "class": "made",
+   "kind": "flag"
+  },
+  "dice_and_cup": {
+   "long": 4.6,
+   "high": 0.9,
+   "class": "made",
+   "kind": "bone"
+  },
+  "ooze": {
+   "long": 7.0,
+   "high": 0.6,
+   "class": "debris",
+   "kind": "slime"
+  },
+  "mace_and_shield": {
+   "long": 5.3,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "scrolls": {
+   "long": 7.0,
+   "high": 0.5,
+   "class": "made",
+   "kind": "paper"
+  },
+  "blood_drain": {
+   "long": 7.3,
+   "high": 0,
+   "class": "marks",
+   "kind": "slot"
+  },
+  "candelabra": {
+   "long": 7.8,
+   "high": 0.5,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_chest_gold": {
+   "long": 4.9,
+   "high": 3.2,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_chest": {
+   "long": 3.7,
+   "high": 3.3,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_trunk": {
+   "long": 5.2,
+   "high": 3.4,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_barrel": {
+   "long": 3.2,
+   "high": 3.6,
+   "class": "made",
+   "kind": "wood"
+  },
+  "m_coins": {
+   "long": 6.0,
+   "high": 3.1,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_key": {
+   "long": 5.5,
+   "high": 1.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_keyring": {
+   "long": 5.4,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_bottles": {
+   "long": 3.1,
+   "high": 1.9,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_trap": {
+   "long": 5.4,
+   "high": 1.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_pot": {
+   "long": 3.5,
+   "high": 3.4,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_shield": {
+   "long": 3.5,
+   "high": 1.5,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_sword": {
+   "long": 5.6,
+   "high": 1.7,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_potion": {
+   "long": 2.5,
+   "high": 3.5,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_skull": {
+   "long": 5.0,
+   "high": 3.1,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_mace": {
+   "long": 11.7,
+   "high": 1.9,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_breastplate": {
+   "long": 6.2,
+   "high": 2.8,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_padlock": {
+   "long": 4.9,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_goblet": {
+   "long": 5.1,
+   "high": 2.7,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_gem": {
+   "long": 4.7,
+   "high": 1.1,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_candlestick": {
+   "long": 7.6,
+   "high": 2.6,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_scroll": {
+   "long": 6.1,
+   "high": 1.1,
+   "class": "made",
+   "kind": "paper"
+  }
+ },
+ "temple": {
+  "offering_bowl": {
+   "long": 3.8,
+   "high": 1.3,
+   "class": "made",
+   "kind": "gold"
+  },
+  "censer": {
+   "long": 6.4,
+   "high": 1.8,
+   "class": "made",
+   "kind": "gold"
+  },
+  "idol": {
+   "long": 2.5,
+   "high": 2.5,
+   "class": "made",
+   "kind": "gold"
+  },
+  "prayer_wheel": {
+   "long": 6.6,
+   "high": 1.2,
+   "class": "made",
+   "kind": "gold"
+  },
+  "gong": {
+   "long": 6.5,
+   "high": 0.9,
+   "class": "made",
+   "kind": "gold"
+  },
+  "singing_bowl": {
+   "long": 5.0,
+   "high": 1.6,
+   "class": "made",
+   "kind": "gold"
+  },
+  "sun_inlay": {
+   "long": 6.7,
+   "high": 0,
+   "class": "marks",
+   "kind": "glyph"
+  },
+  "votive_tablets": {
+   "long": 6.4,
+   "high": 0.5,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "sun_mask": {
+   "long": 6.1,
+   "high": 0.8,
+   "class": "made",
+   "kind": "gold"
+  },
+  "serpent_drum": {
+   "long": 5.8,
+   "high": 1.4,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "lotus_basin": {
+   "long": 4.5,
+   "high": 1.0,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "black_mirror": {
+   "long": 5.9,
+   "high": 0.7,
+   "class": "made",
+   "kind": "obsidian"
+  },
+  "ritual_dagger": {
+   "long": 6.5,
+   "high": 0.8,
+   "class": "made",
+   "kind": "gold"
+  },
+  "glyph_lintel": {
+   "long": 9.4,
+   "high": 1.0,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "figurines": {
+   "long": 8.3,
+   "high": 2.0,
+   "class": "made",
+   "kind": "jade"
+  },
+  "calendar_stone": {
+   "long": 5.5,
+   "high": 0.7,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "sun_staff": {
+   "long": 11.6,
+   "high": 0.5,
+   "class": "made",
+   "kind": "gold"
+  },
+  "prayer_beads": {
+   "long": 5.6,
+   "high": 0.7,
+   "class": "made",
+   "kind": "wood"
+  },
+  "meander_relief": {
+   "long": 7.3,
+   "high": 0.6,
+   "class": "made",
+   "kind": "tflag"
+  },
+  "water_clock": {
+   "long": 6.2,
+   "high": 1.9,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_column_stub": {
+   "long": 3.3,
+   "high": 3.9,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_pillar_fallen": {
+   "long": 5.4,
+   "high": 2.3,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_statue": {
+   "long": 2.7,
+   "high": 5.1,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_gold_chest": {
+   "long": 4.8,
+   "high": 3.1,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_pot": {
+   "long": 3.5,
+   "high": 3.4,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_steps": {
+   "long": 4.0,
+   "high": 2.1,
+   "class": "made",
+   "kind": "tflag"
+  },
+  "m_blocks": {
+   "long": 4.4,
+   "high": 2.3,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_brazier": {
+   "long": 2.8,
+   "high": 1.3,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_altar": {
+   "long": 5.6,
+   "high": 2.6,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_urn": {
+   "long": 2.1,
+   "high": 3.3,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_obelisk": {
+   "long": 4.3,
+   "high": 1.5,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_amphora": {
+   "long": 6.1,
+   "high": 2.7,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_dish": {
+   "long": 5.3,
+   "high": 1.3,
+   "class": "made",
+   "kind": "tcolumn"
+  },
+  "m_spearhead": {
+   "long": 7.6,
+   "high": 1.2,
+   "class": "made",
+   "kind": "obsidian"
+  },
+  "m_shield": {
+   "long": 7.7,
+   "high": 1.0,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_goblet": {
+   "long": 5.0,
+   "high": 2.7,
+   "class": "made",
+   "kind": "gold"
+  },
+  "m_jade_gem": {
+   "long": 4.9,
+   "high": 1.3,
+   "class": "made",
+   "kind": "jade"
+  },
+  "m_gold_bar": {
+   "long": 6.3,
+   "high": 1.5,
+   "class": "made",
+   "kind": "gold"
+  }
+ },
+ "coast": {
+  "starfish": {
+   "long": 5.8,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "shell"
+  },
+  "conch": {
+   "long": 3.6,
+   "high": 1.0,
+   "class": "made",
+   "kind": "shell"
+  },
+  "crab": {
+   "long": 5.0,
+   "high": 0.9,
+   "class": "made",
+   "kind": "shell"
+  },
+  "lobster_pot": {
+   "long": 7.8,
+   "high": 1.5,
+   "class": "made",
+   "kind": "twig"
+  },
+  "net_floats": {
+   "long": 5.7,
+   "high": 1.1,
+   "class": "made",
+   "kind": "glass"
+  },
+  "driftwood": {
+   "long": 10.0,
+   "high": 0.8,
+   "class": "debris",
+   "kind": "drift"
+  },
+  "scallops": {
+   "long": 5.0,
+   "high": 0.6,
+   "class": "debris",
+   "kind": "shell"
+  },
+  "urchins": {
+   "long": 4.4,
+   "high": 0.8,
+   "class": "growth",
+   "kind": "shell"
+  },
+  "bollard": {
+   "long": 7.3,
+   "high": 2.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "oars": {
+   "long": 8.9,
+   "high": 0.4,
+   "class": "made",
+   "kind": "drift"
+  },
+  "ship_wheel": {
+   "long": 6.8,
+   "high": 0.8,
+   "class": "made",
+   "kind": "drift"
+  },
+  "kelp": {
+   "long": 8.0,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "kelp"
+  },
+  "crab_burrows": {
+   "long": 7.0,
+   "high": 0,
+   "class": "marks",
+   "kind": "pit"
+  },
+  "jellyfish": {
+   "long": 5.8,
+   "high": 0.6,
+   "class": "growth",
+   "kind": "glass"
+  },
+  "fish_crate": {
+   "long": 4.9,
+   "high": 1.1,
+   "class": "made",
+   "kind": "drift"
+  },
+  "capstan": {
+   "long": 5.9,
+   "high": 2.2,
+   "class": "made",
+   "kind": "drift"
+  },
+  "cannon": {
+   "long": 7.7,
+   "high": 1.1,
+   "class": "made",
+   "kind": "iron"
+  },
+  "spyglass_compass": {
+   "long": 4.4,
+   "high": 0.6,
+   "class": "made",
+   "kind": "brass"
+  },
+  "whale_vertebra": {
+   "long": 6.7,
+   "high": 1.1,
+   "class": "made",
+   "kind": "bone"
+  },
+  "sand_castle": {
+   "long": 6.9,
+   "high": 1.9,
+   "class": "made",
+   "kind": "sandstone"
+  },
+  "m_rowboat": {
+   "long": 7.9,
+   "high": 2.4,
+   "class": "made",
+   "kind": "drift"
+  },
+  "m_barrel": {
+   "long": 5.1,
+   "high": 4.7,
+   "class": "made",
+   "kind": "drift"
+  },
+  "m_keg": {
+   "long": 6.9,
+   "high": 3.8,
+   "class": "made",
+   "kind": "drift"
+  },
+  "m_crate_bottles": {
+   "long": 6.0,
+   "high": 4.9,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_chest": {
+   "long": 5.7,
+   "high": 4.7,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_bottle": {
+   "long": 6.8,
+   "high": 2.8,
+   "class": "made",
+   "kind": "glass"
+  },
+  "m_paddle": {
+   "long": 9.5,
+   "high": 1.9,
+   "class": "made",
+   "kind": "drift"
+  },
+  "m_shovel": {
+   "long": 9.8,
+   "high": 1.3,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_fish": {
+   "long": 7.4,
+   "high": 2.0,
+   "class": "made",
+   "kind": "shell"
+  },
+  "m_rocks": {
+   "long": 8.0,
+   "high": 5.0,
+   "class": "made",
+   "kind": "sandstone"
+  },
+  "m_ship_wheel": {
+   "long": 9.0,
+   "high": 0.7,
+   "class": "made",
+   "kind": "drift"
+  },
+  "m_scallop": {
+   "long": 5.0,
+   "high": 1.3,
+   "class": "debris",
+   "kind": "shell"
+  },
+  "m_seashell": {
+   "long": 5.1,
+   "high": 1.8,
+   "class": "debris",
+   "kind": "shell"
+  },
+  "m_propeller": {
+   "long": 6.8,
+   "high": 1.1,
+   "class": "made",
+   "kind": "brass"
+  },
+  "m_cannon": {
+   "long": 8.6,
+   "high": 3.0,
+   "class": "made",
+   "kind": "iron"
+  },
+  "m_fish_bone": {
+   "long": 9.5,
+   "high": 1.1,
+   "class": "made",
+   "kind": "bone"
+  },
+  "m_rope": {
+   "long": 7.0,
+   "high": 1.7,
+   "class": "made",
+   "kind": "drift"
+  },
+  "m_amphora": {
+   "long": 6.4,
+   "high": 2.7,
+   "class": "made",
+   "kind": "sandstone"
+  }
+ }
+}
