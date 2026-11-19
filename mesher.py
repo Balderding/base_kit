@@ -18,6 +18,7 @@ from shapely.strtree import STRtree
 
 GRID = 1e-4          # every coordinate snaps to this, so shared edges really are shared
 NSEG = 360           # facets round the rim
+NSEG_OVAL = 480      # facets round an oval's rim
 TILE = float(os.environ.get('MESH_TILE', 12.0))     # mm: size of the ground squares the top surface starts as
 
 
@@ -40,15 +41,18 @@ class Flat:
 
 class Slope:
     """height rises from z0 at the outline of `poly`, by `cot` mm per mm inwards, up to zmax"""
-    __slots__ = ("poly", "ring", "z0", "cot", "zmax", "tan")
+    __slots__ = ("poly", "ring", "z0", "cot", "zmax", "tan", "_ab")
     def __init__(s, poly, z0, tan, zmax):
-        s.poly = poly; s.ring = poly.boundary; s.z0 = z0; s.tan = tan; s.cot = 1.0 / tan; s.zmax = zmax
+        s.poly = poly; s.ring = poly.boundary; s.z0 = z0; s.tan = tan; s.cot = 1.0 / tan; s.zmax = zmax; s._ab = {}
     def at(s, x, y): return round(min(s.zmax, s.z0 + s.ring.distance(Point(x, y)) * s.cot), 4)
     def above(s, z):
-        """the part of the outline where this slope is higher than z"""
+        """the part of the outline where this slope is higher than z (worked out once per height: most cells it is
+        asked about are ground at the same height)"""
         if z <= s.z0: return s.poly
         if z >= s.zmax: return None
-        return s.poly.buffer(-(z - s.z0) * s.tan, join_style=2)
+        g = s._ab.get(z)
+        if g is None: g = s._ab[z] = s.poly.buffer(-(z - s.z0) * s.tan, join_style=2)
+        return g
     lo = property(lambda s: s.z0); hi = property(lambda s: s.zmax)
 
 
@@ -76,31 +80,48 @@ class Band:
 
 
 class Field:
-    """the top surface as cells that never overlap: [(polygon, rule)]"""
+    """the top surface as cells that never overlap: [(polygon, rule)]. The cells are kept in buckets, one per ground
+    tile (a cell never leaves its tile: every step only splits cells), so a step only looks at the tiles it reaches.
+    `cells` is all buckets one after the other: the same list, in the same order, as one flat list would be."""
     def __init__(s, disc, z):
         s.disc = disc; s.cells = [(disc, Flat(z))]; s.chains = {}
+
+    @property
+    def cells(s): return [c for b in s.buckets for c in b]
+    @cells.setter
+    def cells(s, v):
+        s.buckets = [list(v)]; s.bbox = [(-1e18, -1e18, 1e18, 1e18)]
 
     def tile(s, guard, z, size=None):
         """start with the ground cut into squares instead of one big cell: each piece then only reshapes the few
         squares it stands on, not one huge outline with every earlier piece already cut into it"""
         from shapely.geometry import box
         size = size or TILE
-        x0, y0, x1, y1 = guard.bounds; cells = [(P(s.disc.difference(guard)), Flat(z))]
+        x0, y0, x1, y1 = guard.bounds; ring = P(s.disc.difference(guard))
+        s.buckets = [[(ring, Flat(z))] if ring is not None and not ring.is_empty else []]; s.bbox = [ring.bounds if s.buckets[0] else (0, 0, 0, 0)]
         nx = max(1, math.ceil((x1 - x0) / size)); ny = max(1, math.ceil((y1 - y0) / size))
         for i in range(nx):
             for j in range(ny):
-                q = guard.intersection(box(x0 + i * size, y0 + j * size, x0 + (i + 1) * size, y0 + (j + 1) * size))
-                for g in polys(P(q)): cells.append((g, Flat(z)))
-        s.cells = [c for c in cells if c[0] is not None and not c[0].is_empty]
+                b = (x0 + i * size, y0 + j * size, x0 + (i + 1) * size, y0 + (j + 1) * size)
+                q = guard.intersection(box(*b))
+                got = [(g, Flat(z)) for g in polys(P(q)) if g is not None and not g.is_empty]
+                if got: s.buckets.append(got); s.bbox.append(b)
 
-    def _apply(s, region, new_for):
-        """new_for(cell_poly, rule) -> list of (sub_polygon, new_rule) to take over inside region"""
+    def _region(s, region):
         region = P(region.intersection(s.disc))
-        if region is None or region.is_empty: return
+        return None if region is None or region.is_empty else region
+
+    def _touched(s, region):
+        """the buckets whose box the region's box reaches"""
+        x0, y0, x1, y1 = region.bounds
+        return [k for k, (a, b, c, d) in enumerate(s.bbox) if a <= x1 and x0 <= c and b <= y1 and y0 <= d]
+
+    @staticmethod
+    def _apply_bucket(cells, region, new_for):
+        """one bucket's cells after the step (exactly what the one flat list did to them)"""
         out = []
-        tree = STRtree([c[0] for c in s.cells]); hit = set(int(i) for i in tree.query(region))
-        for i, (cp, rule) in enumerate(s.cells):
-            if i not in hit or not cp.intersects(region): out.append((cp, rule)); continue
+        for cp, rule in cells:
+            if not cp.intersects(region): out.append((cp, rule)); continue
             inter = cp.intersection(region)
             taken = []
             if not inter.is_empty and inter.area > 1e-7:
@@ -110,7 +131,13 @@ class Field:
             rest = cp.difference(unary_union([q for q, _ in taken]))
             for q in polys(P(rest)): out.append((q, rule))
             out += taken
-        s.cells = out
+        return out
+
+    def _apply(s, region, new_for):
+        """new_for(cell_poly, rule) -> list of (sub_polygon, new_rule) to take over inside region"""
+        region = s._region(region)
+        if region is None: return
+        for k in s._touched(region): s.buckets[k] = s._apply_bucket(s.buckets[k], region, new_for)
 
     def join_prism(s, poly, z1, f=None):
         f = f or Flat(z1)
@@ -127,7 +154,7 @@ class Field:
         prev = s.chains.get(chain)
         if prev is not None and prev.z > prev.zb + 1e-4 and not poly.is_empty:
             band = Band(prev.poly, poly, prev.zb, prev.z)
-            s.cells = [(cp, band if r is prev else r) for cp, r in s.cells]
+            s.buckets = [[(cp, band if r is prev else r) for cp, r in b] for b in s.buckets]
         f = Step(z1); f.poly = poly; f.zb = min(zb, z1); s.chains[chain] = f
         s.join_prism(poly, z1, f)
 
@@ -214,6 +241,7 @@ def scale_plan(s):
     import gg
     from shapely import affinity
     fin = float(os.environ.get("KIT_FINAL_MM", 0) or 0); sc = float(os.environ.get("KIT_SCALE", 1) or 1)
+    if gg.oval(): return _oval_plan(s, gg.oval(), sc)
     if not fin or (abs(sc - 1) < 1e-6 and abs(fin - gg.BASE_MM) < 1e-6): return None
     tx = ty = 0.0; pads = None; sd = getattr(s, "stand", None)
     try:
@@ -224,6 +252,53 @@ def scale_plan(s):
             slack = max(0.0, (gg.BASE_MM * sc - fin) / 2); dx, dy = qx - px, qy - py; dh = math.hypot(dx, dy)
             if dh > slack and dh > 0: dx, dy = dx * slack / dh, dy * slack / dh          # slide no further than the layout has to give: the top may not go bare at the far side
             tx, ty = dx, dy; pads = affinity.translate(affinity.scale(U, fin / gg.BASE_MM, fin / gg.BASE_MM, origin=(c.x, c.y)), qx - c.x, qy - c.y)          # the spots are a share of the base: as large as the finished base needs
+    except Exception: pads = None
+    return sc, fin, tx, ty, pads
+
+
+def _oval_plan(s, ov, sc):
+    """scale_plan() for an oval base (even with no scenery scale: the round layout is wider than the oval). The
+    standing spots are sized as on a round base of the oval's length, made smaller only if they would not fit, and
+    moved (no further than needed) so that they lie wholly on the oval's flat top, 2.4 mm inside its outline, which
+    keeps them on the flat even with the 1.2 mm margin they are cut with. The scene is slid along as far as the round
+    layout still covers the whole oval."""
+    import gg
+    from shapely import affinity
+    A, B = ov; a, b = A / 2.0, B / 2.0; fin = A
+    ring, T = gg.ellipse_ring(a, b, 240)
+    inner = Polygon(gg.ellipse_offset(a, b, T, 2.4))
+    tx = ty = 0.0; pads = None; sd = getattr(s, "stand", None)
+    try:
+        if sd and sd.get("pads"):
+            U = unary_union([q for q in sd["pads"] if q is not None and not q.is_empty]); c = U.centroid
+            k = fin / gg.BASE_MM
+            for _ in range(30):                             # too big for the oval: smaller until they fit in its middle
+                Q = affinity.scale(U, k, k, origin=(c.x, c.y))
+                if inner.contains(affinity.translate(Q, -c.x, -c.y)): break
+                k *= 0.9
+            def fits(x, y): return inner.contains(affinity.translate(Q, x - c.x, y - c.y))
+            px, py = c.x * sc, c.y * sc
+            if fits(px, py): qx, qy = px, py
+            else:
+                lo, hi = 0.0, 1.0
+                for _ in range(24):
+                    mid = (lo + hi) / 2
+                    if fits(px * mid, py * mid): lo = mid
+                    else: hi = mid
+                qx, qy = px * lo, py * lo
+            dx, dy = qx - px, qy - py; RL = gg.BASE_MM * sc / 2.0 + 0.1
+            def covers(t): return all(math.hypot(x - t * dx, y - t * dy) <= RL for x, y in ring)          # the layout still reaches every part of the oval: its top never goes bare
+            t = 0.0
+            if sc > 1.0 + 1e-6 and (dx or dy) and covers(0.0):
+                if covers(1.0): t = 1.0
+                else:
+                    lo, hi = 0.0, 1.0
+                    for _ in range(24):
+                        mid = (lo + hi) / 2
+                        if covers(mid): lo = mid
+                        else: hi = mid
+                    t = lo
+            tx, ty = dx * t, dy * t; pads = affinity.translate(Q, qx - c.x, qy - c.y)
     except Exception: pads = None
     return sc, fin, tx, ty, pads
 
@@ -285,6 +360,7 @@ def rescale(groups, f, mm, cap=25.0, floor=2.9, tx=0.0, ty=0.0, pads=None):
 
 def field_from_cmds(groups):
     """run the kit's command groups on a height field. Returns (field, base radius, top z, rim tan, magnet (r, depth))"""
+    import gg
     F = None; R0 = H = None; rim_tan = 0.0; mag = None; skipped = []
     for g in groups:
         ext = [c for c in g if c["command"] == "solid.extrude"]
@@ -302,12 +378,22 @@ def field_from_cmds(groups):
                 if name == "Base":
                     R0 = cur[0]["params"]["radius"]; H = off + dist; rim_tan = math.tan(math.radians(tap))
                     rt = R0 - H * rim_tan
-                    ang = [2 * math.pi * i / NSEG for i in range(NSEG)]
-                    disc = P(Polygon([(rt * math.cos(a), rt * math.sin(a)) for a in ang]))
-                    F = Field(disc, H); F.guard = P(disc.buffer(-0.02, join_style=2)); F.tile(F.guard, H); continue
-                if name == "MagCut": mag = (cur[0]["params"]["radius"], off, [tuple(c_["params"]["center"]) for c_ in cur]); continue
+                    ov = gg.oval()
+                    if ov:                                      # an oval base: its top is the outline H*tan(rim) inside the oval all round (an offset curve)
+                        oa, ob = ov[0] / 2.0, ov[1] / 2.0; ring, T = gg.ellipse_ring(oa, ob, NSEG_OVAL); topr = gg.ellipse_offset(oa, ob, T, H * rim_tan)
+                        disc = P(Polygon(topr))
+                    else:
+                        ang = [2 * math.pi * i / NSEG for i in range(NSEG)]
+                        disc = P(Polygon([(rt * math.cos(a), rt * math.sin(a)) for a in ang]))
+                    F = Field(disc, H); F.guard = P(disc.buffer(-0.02, join_style=2)); F.tile(F.guard, H)
+                    if ov: F.oval = (oa, ob, topr, ring); F.ref_area = math.pi * (rt - 0.02) ** 2          # "a cut far larger than the base" is measured against the round layout, as on a round base
+                    continue
+                if name == "MagCut":
+                    mag = (cur[0]["params"]["radius"], off, [tuple(c_["params"]["center"]) for c_ in cur])
+                    if gg.oval(): mag = (mag[0], mag[1], gg.oval_magnet_centres(*gg.oval()))          # an oval's pockets lie along its long axis
+                    continue
                 if F is None: continue
-                if op == "cut" and reg.area > 1.5 * F.guard.area: skipped.append(f"{name}: a cut far larger than the base, left out"); continue          # never let one bad outline plane the base
+                if op == "cut" and reg.area > 1.5 * getattr(F, "ref_area", F.guard.area): skipped.append(f"{name}: a cut far larger than the base, left out"); continue          # never let one bad outline plane the base
                 reg = reg.intersection(F.guard)
                 if reg.is_empty: continue
                 try:
@@ -321,6 +407,57 @@ def field_from_cmds(groups):
                 except Exception as e:
                     skipped.append(f"{name}: {type(e).__name__}")
     return F, R0, H, rim_tan, mag, skipped
+
+
+def field_ops(groups):
+    """field_from_cmds() for the C field builder (the CPU threads switch): the same reading of the command groups,
+    but the steps are only written down, for bbb_kit.exe --core-build to cut on all threads. Returns
+    (base: dict of what the mesher needs, steps: [(kind, name, outline, a, b, c, chain)], skipped). Kinds: 1 prism
+    (a = top z), 2 step (a = top z, b = zb, chain), 3 taper (a = z0, b = height, c = tan), 4 cut (a = bottom z)."""
+    import gg
+    base = None; steps = []; skipped = []; chains = {}; mag = None
+    for g in groups:
+        ext = [c for c in g if c["command"] == "solid.extrude"]
+        if not ext: continue
+        cur = []; off = 0.0
+        for c in g:
+            k = c["command"]; p = c["params"]
+            if k == "sketch.create": cur = []; off = p.get("offset", 0.0)
+            elif k.startswith("sketch.") and k != "sketch.finish": cur.append(c)
+            elif k == "solid.extrude":
+                name = str(p.get("name", "")); op = p.get("operation"); dist = p["distance"]; tap = abs(p.get("taper", 0.0))
+                reg = sketch_region(cur)
+                if reg is None or reg.is_empty: continue
+                if name == "Base":
+                    R0 = cur[0]["params"]["radius"]; H = off + dist; rim_tan = math.tan(math.radians(tap)); rt = R0 - H * rim_tan
+                    ov = gg.oval(); oval = None; ref_area = None
+                    if ov:
+                        oa, ob = ov[0] / 2.0, ov[1] / 2.0; ring, T = gg.ellipse_ring(oa, ob, NSEG_OVAL); topr = gg.ellipse_offset(oa, ob, T, H * rim_tan)
+                        disc = P(Polygon(topr)); oval = (oa, ob, topr, ring); ref_area = math.pi * (rt - 0.02) ** 2
+                    else:
+                        ang = [2 * math.pi * i / NSEG for i in range(NSEG)]
+                        disc = P(Polygon([(rt * math.cos(a), rt * math.sin(a)) for a in ang]))
+                    guard = P(disc.buffer(-0.02, join_style=2))
+                    base = {"R0": R0, "H": H, "rim_tan": rim_tan, "disc": disc, "guard": guard, "oval": oval, "ref_area": ref_area or guard.area}
+                    continue
+                if name == "MagCut":
+                    mag = (cur[0]["params"]["radius"], off, [tuple(c_["params"]["center"]) for c_ in cur])
+                    if gg.oval(): mag = (mag[0], mag[1], gg.oval_magnet_centres(*gg.oval()))
+                    continue
+                if base is None: continue
+                if op == "cut" and reg.area > 1.5 * base["ref_area"]: skipped.append(f"{name}: a cut far larger than the base, left out"); continue
+                reg = reg.intersection(base["guard"])
+                if reg.is_empty: continue
+                try:
+                    if op == "cut": steps.append((4, name, reg, off - dist if p.get("direction") == "negative" else off, 0.0, 0.0, -1))
+                    elif tap > 0.01:
+                        for q in polys(reg): steps.append((3, name, q, off, dist, math.tan(math.radians(tap)), -1))
+                    elif p.get("loft"): steps.append((2, name, P(reg), off + dist, p["loft"][1], 0.0, chains.setdefault(p["loft"][0], len(chains))))
+                    else: steps.append((1, name, reg, off + dist, 0.0, 0.0, -1))
+                except Exception as e:
+                    skipped.append(f"{name}: {type(e).__name__}")
+    if base is not None: base["mag"] = mag
+    return base, steps, skipped
 
 
 def _earclip(pts):
@@ -377,6 +514,8 @@ def mesh_from_field(F, R0, H, rim_tan, mag, fix=None):
         ks = [(round(x / 1e-6), round(y / 1e-6)) for x, y in f.exterior.coords]
         return len(set(ks)) >= 3
     keep = [(f, r) for f, r in zip(faces, frule) if r is not None and _real(f)]
+    _ST = os.environ.get("MESH_STAGES")          # the C port's proof: the same stage lines as cport/mesh.c
+    if _ST: print("S faces", len(faces), "none", sum(1 for r in frule if r is None), "keep", len(keep), file=sys.stderr)
     # 2. heights of every face at every corner; all heights met at each corner
     hts = {}          # (x, y) -> set of z
     edges = {}        # undirected edge -> list of (z at p, z at q)
@@ -522,7 +661,9 @@ def mesh_from_field(F, R0, H, rim_tan, mag, fix=None):
                 if n > 2: out.add(v); break
         return out
     zat = settle()
+    if _ST: print("S settle forced", len(forced), "edges", len(edges), file=sys.stderr)
     pins = pinches() if fix is None else set(fix)
+    if _ST: print("S pins", len(pins), file=sys.stderr)
     for _try in range(6):
         if not pins: break
         saved = ([list(map(list, r)) for r in rings_of], len(keep), dict(forced))
@@ -533,6 +674,7 @@ def mesh_from_field(F, R0, H, rim_tan, mag, fix=None):
             zat = settle()
         except Exception:                                   # leave the corners as they were: a pinched edge still prints
             rings_of = saved[0]; del keep[saved[1]:]; forced.clear(); forced.update(saved[2]); zat = settle(); break
+    if _ST: print("S cut keep", len(keep), "forced", len(forced), "edges", len(edges), file=sys.stderr)
     for (f, r), rings in zip(keep, rings_of):
         poly = Polygon(rings[0], rings[1:])
         if not poly.is_valid: poly = f
@@ -544,6 +686,7 @@ def mesh_from_field(F, R0, H, rim_tan, mag, fix=None):
             if (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0) < 0: t = (t[0], t[2], t[1])      # counter-clockwise from above: faces up
             tri(*[vid(x, y, zat(r, x, y)) for x, y in t])
     n_top = len(tris)
+    if _ST: print("S top tris", len(tris), "verts", len(verts), file=sys.stderr)
     if os.environ.get("DBG_MESH"):
         for (a, b), lst in edges.items():
             if len(lst) > 2:
@@ -579,17 +722,22 @@ def mesh_from_field(F, R0, H, rim_tan, mag, fix=None):
             tri(*[vid(*q) for q in pts])
     # 4. rim (12 degree cone), bottom, magnet pocket
     n_wall = len(tris)
+    if _ST: print("S walls tris", len(tris), "verts", len(verts), file=sys.stderr)
     rimc = list(F.disc.exterior.coords)[:-1]                 # the very corners the top surface ends on
     ang = [math.atan2(y, x) for x, y in rimc]; NS = len(rimc)
     top = [vid(x, y, H) for x, y in rimc]
-    bot = [vid(R0 * math.cos(a), R0 * math.sin(a), 0.0) for a in ang]
+    ov = getattr(F, "oval", None)
+    if ov:                                                  # an oval: each top corner goes straight down the slope to the oval point it was drawn from
+        TR = np.array(ov[2]); outer = [ov[3][int(np.argmin(((TR - (x, y)) ** 2).sum(axis=1)))] for x, y in rimc]
+        bot = [vid(x, y, 0.0) for x, y in outer]
+    else: bot = [vid(R0 * math.cos(a), R0 * math.sin(a), 0.0) for a in ang]
     for i in range(NS):
         j = (i + 1) % NS
         tri(top[i], bot[i], bot[j]); tri(top[i], bot[j], top[j])
     if mag:
         rm, dm, cens = mag; MS = 72
         ma = [2 * math.pi * i / MS for i in range(MS)]
-        outer = [(R0 * math.cos(a), R0 * math.sin(a)) for a in ang]
+        if not ov: outer = [(R0 * math.cos(a), R0 * math.sin(a)) for a in ang]
         holes = [[(cx + rm * math.cos(a), cy + rm * math.sin(a)) for a in ma] for cx, cy in cens]
         for t in _tri2d(Polygon(outer, holes)):                       # flat bottom round the pockets
             tri(*[vid(x, y, 0.0) for x, y in t])
@@ -629,8 +777,13 @@ def add_solids(s, m, skipped=None, rlim=None):
                 try:
                     V3, F3 = mk(zb, zs); t3 = trimesh.Trimesh(V3, F3, process=False)
                     if t3.volume < 0: t3.invert()          # faces outwards
-                    d = np.hypot(t3.vertices[:, 0], t3.vertices[:, 1]); out = d > rlim          # nothing reaches past the edge of the base's top: what would is pressed back to it
-                    if out.any(): t3.vertices[out, :2] *= (rlim / d[out])[:, None]
+                    if gg.oval():                          # an oval: pressed back inside the oval's top
+                        oa, ob = gg.oval()[0] / 2.0 - 0.97, gg.oval()[1] / 2.0 - 0.97
+                        d = np.hypot(t3.vertices[:, 0] / oa, t3.vertices[:, 1] / ob); out = d > 1.0
+                        if out.any(): t3.vertices[out, :2] /= d[out][:, None]
+                    else:
+                        d = np.hypot(t3.vertices[:, 0], t3.vertices[:, 1]); out = d > rlim          # nothing reaches past the edge of the base's top: what would is pressed back to it
+                        if out.any(): t3.vertices[out, :2] *= (rlim / d[out])[:, None]
                     extra.append(t3)
                 except Exception as e: (skipped if skipped is not None else []).append(f"solid {cid}: {type(e).__name__}")
         if extra: m = trimesh.util.concatenate([m] + extra)
@@ -646,13 +799,29 @@ def build(style, n, path=None):
     gg3.smooth_isolated(s)
     groups = list(gg.build_cmds(s))
     fin = float(os.environ.get("KIT_FINAL_MM", 0) or 0); sc = float(os.environ.get("KIT_SCALE", 1) or 1)          # the scenery scale: laid out small, built sc times larger on the base that was asked for
-    sp = scale_plan(s)
-    if sp: groups = rescale(groups, sp[0], sp[1], tx=sp[2], ty=sp[3])
-    F, R0, H, rim_tan, mag, skipped = field_from_cmds(groups)
-    if sp and sp[4] is not None:
-        try: stand_flat(F, sp[4].buffer(1.2, 6), H, sp[0])
-        except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
-    v, f = mesh_from_field(F, R0, H, rim_tan, mag)
+    sp = scale_plan(s); ov = gg.oval()
+    if sp and not (ov and abs(sp[0] - 1) < 1e-6 and not sp[2] and not sp[3]): groups = rescale(groups, sp[0], sp[1], tx=sp[2], ty=sp[3])          # an oval with no scenery scale is built as laid out, only cut to the oval
+    import cmesh
+    got = None
+    if cmesh.threads() > 1 or os.environ.get("KIT_CFIELD") == "1":          # the CPU threads switch: the height field cut in C on all threads, and meshed there
+        base, steps, skipped = field_ops(groups)
+        if base is not None:
+            stand = None
+            if sp and sp[4] is not None:
+                try: stand = (sp[4].buffer(1.2, 6), base["H"], sp[0])
+                except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
+            res = cmesh.build_c(base, steps, stand)
+            if res is not None:
+                v, f, ncells, sk = res; skipped += sk; got = (v, f)
+                R0, H, rim_tan = base["R0"], base["H"], base["rim_tan"]
+    if got is None:          # one core: the proven path (Python field, the C mesher)
+        F, R0, H, rim_tan, mag, skipped = field_from_cmds(groups)
+        if sp and sp[4] is not None:
+            try: stand_flat(F, sp[4].buffer(1.2, 6), H, sp[0])
+            except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
+        got = cmesh.mesh(F, R0, H, rim_tan, mag)          # the C mesher (bbb_kit.exe): the same mesh, faster; None = use Python
+        v, f = got if got is not None else mesh_from_field(F, R0, H, rim_tan, mag)
+        ncells = len(F.cells)
     m = trimesh.Trimesh(v, f, process=False)
     m.merge_vertices()
     m, extra = add_solids(s, m, skipped, R0 - H * rim_tan - 0.12) if not (fin and abs(sc - 1) > 1e-6) else (m, [])
@@ -662,29 +831,114 @@ def build(style, n, path=None):
     if gg3.CFG.get("drawing_2d", True):          # the 2D drawing of this very base beside its STL, to check the 3D against
         try: draw2d(s, path[:-4] + "_2d.png")
         except Exception: pass
-    r = {"name": s.name, "secs": round(time.time() - t, 1), "skipped": skipped, "restarts": 0, "rock_fallbacks": 0, "sig": f"{style}{gg.BASE_MM:g}" + sig,
-         "variant": os.environ.get("RESEED", ""), "steps": len(groups), "slowest": "", "path": path, "cells": len(F.cells), "tris": len(f), "watertight": bool(m.is_watertight),
-         "top_mm": round(float(m.bounds[1][2]) - H, 1), "solids": len(extra)}
+    r = {"name": s.name, "secs": round(time.time() - t, 1), "skipped": skipped, "restarts": 0, "rock_fallbacks": 0, "sig": f"{style}{gg.BASE_MM:g}" + (f"o{ov[1]:g}" if ov else "") + sig,
+         "variant": os.environ.get("RESEED", ""), "steps": len(groups), "slowest": "", "path": path, "cells": ncells, "tris": len(f), "watertight": bool(m.is_watertight),
+         "top_mm": round(float(m.bounds[1][2]) - H, 1), "solids": len(extra), "mesher": ("C, " + cmesh.LAST.get("by", "")) if cmesh.LAST["used"] else ("Python" + (f" ({cmesh.LAST['error']})" if cmesh.LAST["error"] else ""))}
     try: r["want_mm"] = round(min(25.0, (max((float(op[3]) for op in s.ops if op[0] == "prism"), default=H) - H) * (sc if fin else 1.0)), 1)          # how high the tallest thing was designed to stand: the runner checks the mesh got there
     except Exception: r["want_mm"] = 0.0
-    if sp and sp[1] / sp[0] < gg.BASE_MM - 0.05: r["want_mm"] = 0.0          # only a part of the layout is on the base: its tallest thing may be off it, so the height says nothing here
+    if sp and (ov or sp[1] / sp[0] < gg.BASE_MM - 0.05): r["want_mm"] = 0.0          # (an oval shows only the part of the round layout that lies on it)          # only a part of the layout is on the base: its tallest thing may be off it, so the height says nothing here
     r.update(gg3.scene_report(s)); return r
 
 
 
 
-def draw2d(s, png, px=900):
-    """the base seen from straight above as a colour drawing (what the kit laid out, before it became a mesh)"""
+def draw2d(s, png, px=900, transparent=False):
+    """the base seen from straight above as a colour drawing (what the kit laid out, before it became a mesh). Drawn
+    with PIL (fast); draw2d_mpl is the older matplotlib drawing (settings.json "drawing_2d_mpl": true).
+    transparent: no white round the base (the window's choice pictures)."""
+    import gg3
+    if gg3.CFG.get("drawing_2d_mpl", False): return draw2d_mpl(s, png, px, transparent)
+    try: return _draw2d_pil(s, png, px, transparent)
+    except Exception: return draw2d_mpl(s, png, px, transparent)
+
+
+def _draw2d_pil(s, png, px=900, transparent=False):
+    from PIL import Image, ImageDraw
+    import gg
+    SS = 2; W = px * SS; R0 = gg.R0
+    cx, cy, half, clip = 0.0, 0.0, R0 + 1.0, ("circle", 0.0, 0.0, R0, R0); ring = None
+    sp = scale_plan(s)
+    if sp and gg.oval():                                    # an oval: just the oval part of the round layout
+        sc, fin, tx, ty = sp[:4]; A, B = gg.oval(); ocx, ocy = -tx / sc, -ty / sc; w, h = A / sc, B / sc
+        clip = ("ellipse", ocx, ocy, w / 2, h / 2); ring = clip; cx, cy, half = ocx, ocy, w / 2 * 1.03
+    elif sp and sp[1] / sp[0] < gg.BASE_MM - 0.05:          # a figure scale: just the part that is on the base
+        sc, fin, tx, ty = sp[:4]; r = fin / sc / 2.0; ocx, ocy = -tx / sc, -ty / sc
+        clip = ("circle", ocx, ocy, r, r); ring = clip; cx, cy, half = ocx, ocy, r * 1.03
+    k = W / (2 * half)
+    def X(x): return (x - (cx - half)) * k
+    def Y(y): return ((cy + half) - y) * k
+    def ell(c): return [X(c[1] - c[3]), Y(c[2] + c[4]), X(c[1] + c[3]), Y(c[2] - c[4])]
+    img = Image.new("RGB", (W, W), "white"); d = ImageDraw.Draw(img)
+    d.ellipse(ell(("c", 0.0, 0.0, R0 + 0.6, R0 + 0.6)), fill="#1d1b1a")
+    lay = Image.new("RGB", (W, W), s.ground); dl = ImageDraw.Draw(lay)          # everything inside the base, clipped to it at the end
+    def rings(p): return [[(X(x), Y(y)) for x, y in r.coords] for r in [p.exterior] + list(p.interiors)]
+    def fill(p, colour):
+        rs = rings(p)
+        if len(rs[0]) < 3: return
+        if len(rs) == 1: dl.polygon(rs[0], fill=colour); return
+        xs = [x for x, _ in rs[0]]; ys = [y for _, y in rs[0]]; x0, y0 = int(max(0, min(xs))), int(max(0, min(ys))); x1, y1 = int(min(W, max(xs) + 2)), int(min(W, max(ys) + 2))
+        if x1 <= x0 or y1 <= y0: return
+        m = Image.new("L", (x1 - x0, y1 - y0), 0); dm = ImageDraw.Draw(m)
+        dm.polygon([(x - x0, y - y0) for x, y in rs[0]], fill=255)
+        for h in rs[1:]:
+            if len(h) >= 3: dm.polygon([(x - x0, y - y0) for x, y in h], fill=0)
+        lay.paste(colour, (x0, y0, x1, y1), m)
+    def shadow(p, dx, dy):          # black at 35 %: the ground under it darkened
+        rs = rings(p); ox, oy = dx * k, -dy * k
+        xs = [x + ox for x, _ in rs[0]]; ys = [y + oy for _, y in rs[0]]
+        if len(xs) < 3: return
+        x0, y0 = int(max(0, min(xs))), int(max(0, min(ys))); x1, y1 = int(min(W, max(xs) + 2)), int(min(W, max(ys) + 2))
+        if x1 <= x0 or y1 <= y0: return
+        m = Image.new("L", (x1 - x0, y1 - y0), 0); dm = ImageDraw.Draw(m)
+        dm.polygon([(x + ox - x0, y + oy - y0) for x, y in rs[0]], fill=89)
+        for h in rs[1:]:
+            if len(h) >= 3: dm.polygon([(x + ox - x0, y + oy - y0) for x, y in h], fill=0)
+        box = (x0, y0, x1, y1); lay.paste(Image.composite(Image.new("RGB", m.size, "black"), lay.crop(box), m), box)
+    for ps, dep, kind in s.final_gcuts():
+        for p in ps: fill(p, gg.CUTC.get(kind, "#222222"))
+    lw = max(1, int(round(0.3 / 72 * (px / 3) * SS)))
+    for op in s.ops:
+        if op[0] == "prism": _, ps, z0, top, kind = op; tier = z0 > gg.H
+        else: _, ps, z0, hh, a, kind = op; top = z0 + hh; tier = z0 > gg.H - gg.SINK + 0.01
+        kk = 0.78 + 0.13 * (top - gg.H); col = gg.COL.get(kind, "#8a8a8a")
+        for p in ps:
+            if p is None or p.is_empty: continue
+            if not tier: shadow(p, .2 + .12 * (top - gg.H), -.2 - .12 * (top - gg.H))
+            fill(p, gg.shade(col, kk))
+            for r in rings(p): dl.line(r, fill=gg.shade(col, .55), width=lw)
+    for ps, z0, z1, kind in s.tcuts:
+        for p in ps: fill(p, gg.CUTC.get(kind, "#111111"))
+    m = Image.new("L", (W, W), 0); ImageDraw.Draw(m).ellipse(ell(clip), fill=255)
+    if clip[0] == "circle" and ring is None: m2 = m
+    else: m2 = m
+    img.paste(lay, (0, 0), m2)
+    if ring is not None: d.ellipse(ell(ring), outline="#1a1a1a", width=max(2, int(3 / 72 * (px / 3) * SS)))
+    if transparent:          # only the base itself is drawn
+        a = Image.new("L", (W, W), 0); ImageDraw.Draw(a).ellipse(ell(("c", 0.0, 0.0, R0 + 0.6, R0 + 0.6)), fill=255)
+        if ring is not None: a = Image.new("L", (W, W), 0); ImageDraw.Draw(a).ellipse(ell((ring[0], ring[1], ring[2], ring[3] * 1.01, ring[4] * 1.01)), fill=255)
+        img = img.convert("RGBA"); img.putalpha(a)
+    img.resize((px, px), Image.LANCZOS).save(png)
+
+
+def draw2d_mpl(s, png, px=900, transparent=False):
+    """the older 2D drawing, with matplotlib"""
     import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt, gg3
     fig, ax = plt.subplots(figsize=(3, 3), dpi=px / 3); gg3.render(s, ax); ax.set_title(""); ax.set_axis_off(); fig.subplots_adjust(0, 0, 1, 1)
     crop_to_scale(ax, s)
-    fig.savefig(png, dpi=px / 3, facecolor="white"); plt.close(fig)
+    fig.savefig(png, dpi=px / 3, **({"transparent": True} if transparent else {"facecolor": "white"})); plt.close(fig)
 
 
 def crop_to_scale(ax, s=None):
     """with a scenery scale the finished base may show only a part of what was laid out: draw just that part"""
     import gg
     sp = scale_plan(s) if s is not None else None
+    if sp and gg.oval():                                    # an oval: just the oval part of the round layout
+        import matplotlib.patches as mp
+        sc, fin, tx, ty = sp[:4]; A, B = gg.oval(); cx, cy = -tx / sc, -ty / sc; w, h = A / sc, B / sc
+        ring = mp.Ellipse((cx, cy), w, h, fill=False, ec="#1a1a1a", lw=3, zorder=200); ax.add_patch(ring)
+        for art in list(ax.patches) + list(ax.collections) + list(ax.lines) + list(ax.images):
+            if art is not ring: art.set_clip_path(mp.Ellipse((cx, cy), w, h, transform=ax.transData))
+        r = w / 2.0; ax.set_xlim(cx - r * 1.03, cx + r * 1.03); ax.set_ylim(cy - r * 1.03, cy + r * 1.03); return
     if not sp or sp[1] / sp[0] >= gg.BASE_MM - 0.05: return
     import matplotlib.patches as mp
     sc, fin, tx, ty = sp[:4]; r = fin / sc / 2.0; cx, cy = -tx / sc, -ty / sc; ring = mp.Circle((cx, cy), r, fill=False, ec="#1a1a1a", lw=3, zorder=200); ax.add_patch(ring)
@@ -700,6 +954,9 @@ def shot(mesh_or_path, png, w=900, h=560, elev=30, azim=-60):
     from PIL import Image
     m = trimesh.load(mesh_or_path, process=False) if isinstance(mesh_or_path, str) else mesh_or_path
     V = np.asarray(m.vertices, dtype=float); Fc = np.asarray(m.faces)
+    import cmesh
+    im = cmesh.shot(V, Fc, w, h, elev, azim)          # the video card (the window's Video card switch); None = draw it here
+    if im is not None: im.save(png); return
     e_, a_ = math.radians(elev), math.radians(azim)
     cam = np.array([math.cos(e_) * math.cos(a_), math.cos(e_) * math.sin(a_), math.sin(e_)])        # towards the viewer
     right = np.array([-math.sin(a_), math.cos(a_), 0.0]); upv = np.cross(cam, right)

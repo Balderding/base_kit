@@ -23,3 +23,8 @@ REVIEW.md
 # the window is built by gui/build.cmd and goes into the release zip, not into git
 bbb_kit.exe
 gui/*.res
+
+# built by cport\build.cmd: not kept in git
+bbbcore.dll
+cport/bin/
+cport/*.exe

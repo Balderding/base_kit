@@ -1,1 +1,4 @@
 1 24 "bbb_kit.manifest"
+/* the pixel font (Silkscreen, SIL Open Font License 1.1, see docs/fonts/OFL.txt), baked by tools/bake_font.py: regular, bold */
+201 RCDATA "pixelfont.bin"
+202 RCDATA "pixelfont_bold.bin"

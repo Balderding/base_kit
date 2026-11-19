@@ -10,7 +10,7 @@ _DEFAULTS = {
     "step_limit_per_command_secs": 1.5,
     "base_limit_secs": 120,
     "batch_limit_mins": 45,
-    "workers": 2,
+    "workers": "auto",
     "stop_if_fail_fraction": 0.25,
     "max_dropped_pieces": 4,
     "sketch_tolerance_mm": 0.03,
@@ -26,7 +26,11 @@ def load():
         with open(p, encoding="utf-8") as f: cfg.update(json.load(f))
     if not os.path.isabs(cfg["out_folder"]): cfg["out_folder"] = os.path.join(HERE, cfg["out_folder"])
     os.makedirs(cfg["out_folder"], exist_ok=True)
+    if str(cfg.get("workers", "auto")).strip().lower() in ("auto", "0", ""):          # "auto": a third of the cores, 2 to 12 (each worker builds one base at a time)
+        cfg["workers"] = max(2, min(12, (os.cpu_count() or 6) // 3))
+    else: cfg["workers"] = max(1, int(cfg["workers"]))
     if os.environ.get("KIT_SCENES") in ("0", "1"): cfg["scenes"] = os.environ["KIT_SCENES"] == "1"      # set by --scenes on|off
+    if os.environ.get("KIT_OBJECTS"): cfg["objects_amount"] = float(os.environ["KIT_OBJECTS"])      # set by --objects
     if os.environ.get("KIT_SUPPORTS") in ("0", "1"): cfg["allow_supports"] = os.environ["KIT_SUPPORTS"] == "1"      # set by --supports on|off
     return cfg
 

@@ -3,7 +3,7 @@
 
 **Save time and money.**
 
-Makes round bases for tabletop miniatures that you print yourself, instead of buying them. You say which style, how
+Makes round and oval bases for tabletop miniatures that you print yourself, instead of buying them. You say which style, how
 many and what size; the kit designs each base, builds it as an STL file, checks that it will print, and saves it with
 a preview picture. No two bases come out the same.
 
@@ -12,9 +12,9 @@ a preview picture. No two bases come out the same.
 - **19 styles, 95 themes.** Badlands, mine, swamp, graveyard, temple, space-ship corridor and more. Each base is a
   small scene with a theme ("tram stop", "hanging tree", "ore siding"), not scattered clutter.
 - **Any size from 20 to 200 mm.** The usual sizes (30, 40, 50, 60, 80, 100, 130, 160 mm) are tested.
-- **Objects at the miniature's scale.** A barrel, a chest or a rail track is the right size beside a 32 mm figure
-  (or 28 mm, or 15 mm: you choose), and the same size on every base. A small base holds a few things, a large one
-  a whole scene.
+- **Oval bases too**, in the usual sizes: 60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95 and 170x109 mm.
+- **A whole small scene on every base** (the classic look, the default), or, if you choose, **objects at the
+  miniature's true scale**: a barrel or a chest the right size beside a 32, 28 or 15 mm figure.
 - **Ready to print.** Every STL is one closed solid of exactly the size asked for, with nothing overhanging, so it
   prints without supports. A base that fails the check is thrown out and a new one is built in its place.
 - **Magnet pockets** for 6 x 2 mm magnets in the bottom of every base.
@@ -42,6 +42,42 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## What is new in 1.5: sharper objects, ovals, a figure for scale, real ground
+
+- **The classic look is the default again.** Every base is a whole small scene, its things about a third of true
+  size, as up to 1.3: on small bases the true figure scale of 1.4 showed only a bare part of a scene. True figure
+  scale is still there: choose 32 mm, 28 mm or 15 mm in the window's row "Objects sized for figures of" (it is
+  called "classic" there), or `--scale 3` on the command line. Everything below about real ground and the figure
+  post is part of that figure scale.
+- **Fewer things on top, if you want.** `--objects 0.33` (or `"objects_amount"` in `settings.json`) keeps a third
+  of the things that stand on a base; the ground itself is never cut. The default is 1, all of them.
+- **Ground shape from 50 mm up** at figure scale (it was 90 mm and up): lower on smaller bases, about 7 mm at the
+  edge of a 60 mm base and 5.5 mm on a 50 mm one, 12 mm from 90 mm up.
+- **Faster: two SPEED switches in the window**, both on by default.
+  - **CPU threads:** the base's height field and its mesh are made in C, inside `bbb_kit.exe`, on as many CPU threads as the base needs (about one per 8 ground tiles, up to every thread the PC has). For
+    those two steps that is about 3 times faster (a 160 mm temple: 7.5 s down to 2.5 s; the whole build 28 s down to
+    20 s). The surface is the same as with the switch off. With one thread the C code gives the very same STL as
+    Python, byte for byte (checked on 7 bases). Off: one core, the proven path.
+  - **Video card:** the 3D pictures are drawn by the video card (Direct3D 11) instead of by Python: 0.3 s instead of
+    4.7 s for a 160 mm base. Without a usable card, Windows' own software renderer draws them. Off: Python.
+  - In `settings.json`: `"cpu_threads"` and `"video_card"` (true/false). The window's switches win over them.
+
+- **117 objects redrawn for their true size.** At the 32 mm figure scale the biggest things (carts, boats, tents,
+  machines, ruins, logs) are built three times larger than they were drawn, and some looked plain. They now have
+  planks, rivets, ribs, ropes and broken edges, each kept to its real footprint.
+- **Oval bases**: 60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95 and 170x109 mm, in the window's second size row or
+  with `--size 90x52`. Magnet pockets run along the long axis. See "Oval bases" below.
+- **A figure for scale in the window.** Each picture of a built base has a plain post beside it, as tall as the
+  figure size you chose (32 mm, 28 mm, 15 mm), so you can see at once how big things are.
+- **Real ground on big bases** (90 mm and up). The ring round the clear middle now rises and falls with the style:
+  mesas and gullies in the badlands, dunes, snow drifts and crevasses, mud pools with islands, rubble heaps and shell
+  craters, heaved deck plates, root mats, grave mounds. Low near the miniature, up to 12 mm high at the edge, with
+  nothing overhanging. Bases under 90 mm are unchanged.
+
+Known limits: on big bases the raised ground sits mostly in the outer ring, so some read like a shallow bowl; the
+slopes show small steps; cuts can only go about 1 mm deep (the magnet pockets are below), so gullies and pools get
+raised banks instead; floor styles (corridor, dungeon, urban, fortress) change the least.
+
 ## What is new in 1.4: objects at the miniature's scale
 
 Until now the kit built a small landscape: beside a 32 mm figure everything was about a third of true size (a rail
@@ -54,9 +90,10 @@ base would have looked the size of an airship.
   laid out small and built larger, so what does not fit is cut off at the edge like any real scenic base.
 - **The miniature can always stand.** Whatever the scale, its standing spots are on the base, flat, and level with
   the ground they lie on.
-- **You choose the figure size**: 32 mm (the default), 28 mm or 15 mm; "tiny" is the old small-landscape look.
+- **You choose the figure size**: 32 mm, 28 mm or 15 mm; "classic" is the small-landscape look (the default
+  again since 1.5).
   In the window it is the row "Objects sized for figures of"; on the command line `--scale 3` (32 mm), `2.6` (28 mm),
-  `1.4` (15 mm) or `1` (tiny); in `settings.json` it is `"scenery_scale"`.
+  `1.4` (15 mm) or `1` (classic, the default); in `settings.json` it is `"scenery_scale"`.
 - **Each object has its own real size** (695 objects, a size in metres for each, in `scale/real.json`): a skull is
   about 4 mm, a barrel 11 mm across, a chest 14 mm, a rowing boat 54 mm. Nothing prints under 3 mm, so a coin or a
   key is shown a little larger than life.
@@ -170,14 +207,14 @@ STL files; `python tools\make_examples.py` makes a fresh set).
 <!-- EXAMPLES -->
 | Size | | |
 |---|---|---|
-| **30 mm** | ![badlands 30 mm](examples/030mm_1_badlands.png)<br>badlands: "dry camp" | ![coast 30 mm](examples/030mm_2_coast.png)<br>coast: "whale bones" |
-| **40 mm** | ![swamp 40 mm](examples/040mm_1_swamp.png)<br>swamp: "hanging tree" | ![forest 40 mm](examples/040mm_2_forest.png)<br>forest: "stream ford" |
-| **50 mm** | ![frontier 50 mm](examples/050mm_1_frontier.png)<br>frontier: "corral" | ![trederra 50 mm](examples/050mm_2_trederra.png)<br>trederra: "dugout entrance" |
-| **60 mm** | ![highland 60 mm](examples/060mm_1_highland.png)<br>highland: "standing stones" | ![beast 60 mm](examples/060mm_2_beast.png)<br>beast: "feeding pit" |
-| **80 mm** | ![corridor 80 mm](examples/080mm_1_corridor.png)<br>corridor: "cargo hold" | ![urban 80 mm](examples/080mm_2_urban.png)<br>urban: "open manhole" |
-| **100 mm** | ![temple 100 mm](examples/100mm_1_temple.png)<br>temple: "high altar" | ![fortress 100 mm](examples/100mm_2_fortress.png)<br>fortress: "garden shrine" |
-| **130 mm** | ![dungeon 130 mm](examples/130mm_1_dungeon.png)<br>dungeon: "pit trap" | ![cynder 130 mm](examples/130mm_2_cynder.png)<br>cynder: "lava vent" |
-| **160 mm** | ![infestation 160 mm](examples/160mm_1_infestation.png)<br>infestation: "acid pool" | ![targa 160 mm](examples/160mm_2_targa.png)<br>targa: "power core" |
+| **30 mm** | ![highland 30 mm](examples/030mm_1_highland.png)<br>highland: "standing stones" | ![coast 30 mm](examples/030mm_2_coast.png)<br>coast: "tide pool" |
+| **40 mm** | ![forest 40 mm](examples/040mm_1_forest.png)<br>forest: "fallen giant" | ![swamp 40 mm](examples/040mm_2_swamp.png)<br>swamp: "hunters' hide" |
+| **50 mm** | ![badlands 50 mm](examples/050mm_1_badlands.png)<br>badlands: "broken wagon" | targa: did not build |
+| **60 mm** | ![maahl 60 mm](examples/060mm_1_maahl.png)<br>maahl: "buried temple" | ![dungeon 60 mm](examples/060mm_2_dungeon.png)<br>dungeon: "summoning circle" |
+| **80 mm** | ![urban 80 mm](examples/080mm_1_urban.png)<br>urban: "tram stop" | ![trederra 80 mm](examples/080mm_2_trederra.png)<br>trederra: "field graves" |
+| **100 mm** | ![fortress 100 mm](examples/100mm_1_fortress.png)<br>fortress: "armoury" | ![infestation 100 mm](examples/100mm_2_infestation.png)<br>infestation: "egg chamber" |
+| **130 mm** | ![mine 130 mm](examples/130mm_1_mine.png)<br>mine: "shaft head" | ![temple 130 mm](examples/130mm_2_temple.png)<br>temple: "processional way" |
+| **160 mm** | ![graveyard 160 mm](examples/160mm_1_graveyard.png)<br>graveyard: "robbed tomb" | ![cynder 160 mm](examples/160mm_2_cynder.png)<br>cynder: "ash burial" |
 <!-- /EXAMPLES -->
 
 **Every base is one place.** A base is not a pile of objects: it has a subject (a mine shaft, a wreck, a shrine), a
@@ -331,6 +368,17 @@ round sizes:
 | 80, 90, 100 | Large monsters, big walkers |
 | 130, 160 | The largest models |
 
+An oval base is long x short: `--size 90x52` (or `90x52mm`). The common ovals:
+
+| Oval (mm) | Commonly used for |
+|---|---|
+| 60x35.5 | Cavalry, bikes |
+| 75x42 | Large cavalry |
+| 90x52 | Monstrous cavalry, chariots |
+| 105x70 | Large monsters, flyers |
+| 120x92 | Big monsters, small vehicles |
+| 150x95, 170x109 | Very large flyers, the largest models |
+
 How size works:
 - The base, its sloped edge and all the checks use the size you ask for. One 6 x 2 mm magnet pocket sits in the centre.
 - Bigger bases get **more** detail, not just bigger detail: extra pieces (rocks, crates, bones...) stay the same real
@@ -339,7 +387,7 @@ How size works:
   base simply shows more of it.
 - Big bases take longer: a few seconds at 30 to 100 mm, up to about a minute at 160 mm (see the times below).
   The time limit per base grows with the size.
-- Oval and square bases are not supported yet.
+- Square bases are not supported yet. Ovals are: see "Oval bases" below.
 
 Every base is new, whatever you ask for. Files are numbered in the order asked: `urban_30mm_001.stl`, `urban_30mm_002.stl`...
 The report lists each base's detail level.
@@ -349,7 +397,7 @@ Other options:
 | Option | What it does |
 |---|---|
 | `-q` | Quiet: only one OK / FLAG line per base |
-| `--workers 3` | Build 3 bases at the same time (default 2). Use about one per CPU core you can spare |
+| `--workers 3` | Build 3 bases at the same time (default "auto": a third of the CPU cores, 2 to 12) |
 | `--seed abc12` | Rebuild exactly the bases of an earlier run: same theme, count and detail, plus its seed (printed at the start of every run) |
 | `--theme "tunnel mouth"` | Every base gets this theme of the style. A wrong name prints the style's themes |
 | `--plan file.json` | Build from a scene plan file (see "Editing a scene" below) |
@@ -423,7 +471,9 @@ Everything is optional.
 | `designer` | off | The local AI model that can write scene plans; see "The designer model" for its settings |
 | `big_base_height_factor` | 1.5 | Bases of 60 mm and up may carry detail this much taller (3.3 mm x 1.5) |
 | `out_folder` | `out` | Where runs are saved |
-| `workers` | 2 | Bases built at the same time |
+| `workers` | "auto" | Bases built at the same time ("auto" = a third of the CPU cores, 2 to 12; or a number) |
+| `cpu_threads` | true | One base's height field and mesh on as many CPU threads as it needs, up to every thread the PC has, in C (a number = that many threads; false = one core, the proven path). The window's CPU threads switch wins |
+| `video_card` | true | 3D pictures drawn by the video card (Direct3D 11; Windows' software renderer if there is no card). false = Python draws them. The window's Video card switch wins |
 | `max_attempts` | 4 | Tries per base before it is flagged |
 | `max_detail_height_mm` | 0 | Tallest detail above the 4 mm base. 0 = no limit |
 | `max_slenderness` | 3.0 | A part may be this many times taller than it is thick. 0 = no such limit |
@@ -558,6 +608,25 @@ Every pocket fits a 6 x 2 mm magnet (6.2 mm across, 2.1 mm deep), in the bottom 
 | over 100 mm (130, 160) | 5 | four evenly spaced, a quarter of the diameter out, and one in the middle |
 
 The builder follows this table.
+
+An oval base has its pockets along its long axis: one in the middle up to 60 mm long (60x35.5), two a quarter of the
+length out from the middle up to 105 mm long (75x42, 90x52, 105x70), three (those two and one in the middle) when
+longer (120x92, 150x95, 170x109). Every pocket is more than 8 mm from the edge.
+
+## Oval bases
+
+`python run_set.py temple 4 --size 105x70` builds four 105 x 70 mm oval bases; in the window, the oval sizes are the
+second block of the base size choices. Files are named by size like the round ones: `temple_105x70mm_001.stl`.
+
+- The scene is laid out as for a round base as long as the oval (with the scenery scale, as for a round base of
+  long / scale), and the builder cuts it to the oval: the base is exactly long x short, its sloped 12 degree edge runs
+  all round (the top edge stays 0.85 mm inside the oval everywhere), and nothing reaches past it.
+- The miniature's standing spots are moved, if they have to be, so that they lie wholly on the oval's flat top, and are
+  cut flat as on a round base. The scene slides with them as far as the layout still covers the whole oval.
+- The magnet pockets are along the long axis (see "Magnet pockets"); the print check tests the length and the width
+  and every pocket.
+- The 2D drawing beside the STL and the choices in the window show just the oval part of the layout.
+- Ovals are built by the mesh builder only (the default; `--engine solidcraft` refuses them).
 
 
 ## Scenes and themes

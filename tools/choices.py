@@ -1,4 +1,4 @@
-"""the choices to pick from: python tools/choices.py <style> <out folder> [--size 60] [--detail 1|2|3|4|mix] [--count 20] [--seed X] [--mini biped] [--supports on|off] [--jobs 6] [--px 360] [--json]
+"""the choices to pick from: python tools/choices.py <style> <out folder> [--size 60 | --size 90x52] [--detail 1|2|3|4|mix] [--count 20] [--seed X] [--mini biped] [--supports on|off] [--jobs 6] [--px 360] [--json]
 Draws each candidate base as a small 2D colour picture (a .png per base with a see-through background; no STL is
 built, a second or two each) and prints one line per base as it is ready:
     CHOICE <number> | <picture file> | <theme> | detail <1-4>
@@ -19,12 +19,17 @@ def flag(name):
     return False
 size = opt("--size", "30"); detail = opt("--detail", "mix"); count = int(opt("--count", "20")); mini = opt("--mini", ""); sup = opt("--supports", "")
 import kit_settings as _ks
-scale = float(opt("--scale", "") or _ks.CFG.get("scenery_scale", 1.0)); lay = float(size) if scale == 1.0 else round(max(30.0, float(size) / scale), 1)          # the scenery scale: the scene is laid out smaller and built larger (see run_set.py --scale)
+_sz = size.strip().lower().replace("mm", "").replace(" ", "").replace("*", "x")          # "60" round, "90x52" an oval (long x short): laid out round on its long size, cut to the oval
+if "x" in _sz: _a, _b = sorted((float(v) for v in _sz.split("x", 1)), reverse=True); oval = (_a, _b) if _a != _b else None
+else: _a = float(_sz); oval = None
+scale = float(opt("--scale", "") or _ks.CFG.get("scenery_scale", 1.0)); lay = _a if scale == 1.0 else round(max(30.0, _a / scale), 1)          # the scenery scale: the scene is laid out smaller and built larger (see run_set.py --scale)
 jobs = int(opt("--jobs", str(max(1, min(8, (os.cpu_count() or 4) // 2))))); only = opt("--only", ""); px = int(opt("--px", "360")); JSON = flag("--json")
 seed = opt("--seed", "") or "".join(random.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(5))
 style, out = a[0], os.path.abspath(a[1]); os.makedirs(out, exist_ok=True)
 os.environ.update({"SALT": seed, "RESEED": "", "BASE_MM": f"{lay:g}", "KIT_QUIET": "1"})
-if scale != 1.0: os.environ.update({"KIT_FINAL_MM": f"{float(size):g}", "KIT_SCALE": f"{scale:g}"})          # exactly what the runner gives a build
+if scale != 1.0: os.environ.update({"KIT_FINAL_MM": f"{_a:g}", "KIT_SCALE": f"{scale:g}"})          # exactly what the runner gives a build
+if oval: os.environ["KIT_OVAL"] = f"{oval[0]:g}x{oval[1]:g}"          # the pictures are cropped to the oval (mesher.crop_to_scale)
+else: os.environ.pop("KIT_OVAL", None)
 if mini: os.environ["KIT_MINI"] = mini
 if sup in ("on", "off"): os.environ["KIT_SUPPORTS"] = "1" if sup == "on" else "0"
 sys.argv = sys.argv[:1]
@@ -58,9 +63,7 @@ for n, tier in pl:
         s = gg3.make(style, n)
         try: gg.build_cmds(s)
         except Exception: pass
-        fig, ax = plt.subplots(figsize=(3, 3), dpi=px / 3); gg3.render(s, ax); ax.set_title(""); ax.set_axis_off(); fig.subplots_adjust(0, 0, 1, 1)
-        import mesher; mesher.crop_to_scale(ax, s)
-        png = os.path.join(out, f"c_{seed}_{n}.png"); fig.savefig(png, dpi=px / 3, transparent=True); plt.close(fig)
+        import mesher; png = os.path.join(out, f"c_{seed}_{n}.png"); mesher.draw2d(s, png, px, transparent=True)          # the same drawing as beside each STL (PIL: fast)
         theme = getattr(s, "theme", "") or style
         say({"ev": "choice", "seed": seed, "n": n, "img": png, "theme": theme, "tier": tier}, f"CHOICE {n} | {png} | {theme} | detail {tier}")
     except Exception as e:

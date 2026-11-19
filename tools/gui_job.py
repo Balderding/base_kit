@@ -2,6 +2,7 @@
 with an "ev" field, so the window never has to guess from printed text.
 
   python tools/gui_job.py choices <style> --size 60 --detail 4 --count 20 [--mini biped] [--supports on]
+      (--size 90x52: an oval base, long x short)
       {"ev": "seed", "seed": "x"}
       {"ev": "choice", "seed": "x", "n": 16, "img": "...png", "theme": "ore siding", "tier": 4}      one per base, as it is drawn
       {"ev": "skip", "n": 17, "why": "..."}
@@ -36,6 +37,16 @@ size = opt("--size", "30"); detail = opt("--detail", "mix"); count = opt("--coun
 if len(a) < 2 or a[0] not in ("choices", "build"): ev("error", text="usage: gui_job.py choices|build <style> ..."); sys.exit(2)
 job, style = a[0], a[1]; extra = (["--mini", mini] if mini else []) + (["--supports", sup] if sup else []) + (["--scale", scale] if scale else [])
 env = dict(os.environ, PYTHONWARNINGS="ignore", PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+
+def size_tag(txt):
+    """the size as it goes into file names: 60 for a round base, 90x52 for an oval"""
+    t = str(txt).strip().lower().replace("mm", "").replace(" ", "").replace("*", "x")
+    try:
+        if "x" in t:
+            a_, b_ = sorted((float(v) for v in t.split("x", 1)), reverse=True)
+            return f"{a_:g}" if a_ == b_ else f"{a_:g}x{b_:g}"
+        return f"{float(t):g}"
+    except ValueError: return t
 
 def models():
     """the first run: fetch the public-domain model packs the details are made from, saying so (tools/get_models.py)"""
@@ -86,6 +97,22 @@ def see_through(src, dst, px=480):
     if box: im = im.crop(box)
     im.thumbnail((px, px), Image.LANCZOS); im.save(dst)
 
+def with_figure(stl, png, px=480):
+    """the base seen from the side, with a plain figure standing on the table beside it: as tall as the figures the
+    objects are sized for (32 mm at scale 3, 28 at 2.6, 15 at 1.4), so the picture shows at once whether the scale
+    is right. Saved see-through, like the builder's own picture."""
+    import trimesh, mesher
+    try: sc = float(scale or json.load(open(os.path.join(KIT, "settings.json"), encoding="utf-8")).get("scenery_scale", 1.0))
+    except Exception: sc = 3.0
+    m = trimesh.load(stl, process=False)
+    if sc <= 1.01:          # the classic look is not sized for a figure: the base alone
+        tmp = png[:-4] + "_raw.png"; mesher.shot(m, tmp, 900, 700, 34, -60); see_through(tmp, png, px); os.remove(tmp); return
+    h = 32.0 * sc / 3.0; r = float(m.bounds[1][0]); w = max(3.0, h * 0.28)
+    fig = trimesh.util.concatenate([trimesh.creation.cylinder(radius=w / 2, height=h * 0.82, sections=20).apply_translation([0, 0, h * 0.41]),
+                                    trimesh.creation.icosphere(2, w * 0.45).apply_translation([0, 0, h * 0.82 + w * 0.4])])
+    fig.apply_translation([r * 0.71 + w + 2, -(r * 0.71 + w + 2), 0]); tmp = png[:-4] + "_raw.png"
+    mesher.shot(trimesh.util.concatenate([m, fig]), tmp, 900, 700, 34, -60); see_through(tmp, png, px); os.remove(tmp)
+
 for seed, nums in groups.items():
     p = subprocess.Popen([sys.executable, "-u", os.path.join(KIT, "run_set.py"), style, ",".join(map(str, nums)) + ",", "--seed", seed, "--size", size, "-q"] + extra,
                          cwd=KIT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", creationflags=NOWIN)
@@ -106,12 +133,16 @@ for seed, nums in groups.items():
             stl = os.path.join(folder, style, name + ".stl")
             if tok == "OK" and os.path.exists(stl):
                 th = re.search(r'plan: \w+ "([^"]*)"', rest); theme = th.group(1) if th else ""; sm = re.match(r"([\d.]+) s", rest)
-                tag = re.sub(r"[^a-z0-9]+", "_", theme.lower()).strip("_"); new = f"{style}_{float(size):g}mm_{tag + '_' if tag else ''}{seed}_{n}"
+                tag = re.sub(r"[^a-z0-9]+", "_", theme.lower()).strip("_"); new = f"{style}_{size_tag(size)}mm_{tag + '_' if tag else ''}{seed}_{n}"
                 dstl = os.path.join(dest, new + ".stl"); img = img2 = ""
                 try:
                     shutil.copy2(stl, dstl)
                     if os.path.exists(stl[:-4] + "_plan.json"): shutil.copy2(stl[:-4] + "_plan.json", os.path.join(dest, new + "_plan.json"))
-                    if os.path.exists(stl[:-4] + "_iso.png"): img = os.path.join(dest, new + "_3d.png"); see_through(stl[:-4] + "_iso.png", img)
+                    img = os.path.join(dest, new + "_3d.png")
+                    try: with_figure(stl, img)          # the finished base with a figure of the chosen size standing beside it, for scale
+                    except Exception as e:
+                        ev("log", text=f"no picture with a figure for {name}: {type(e).__name__}: {e}")
+                        if os.path.exists(stl[:-4] + "_iso.png"): see_through(stl[:-4] + "_iso.png", img)
                     if os.path.exists(stl[:-4] + "_2d.png"):          # the drawing of the base that was really built (a fresh variant has its own)
                         shutil.copy2(stl[:-4] + "_2d.png", os.path.join(dest, new + "_2d.png"))
                         img2 = os.path.join(KIT, "out", "choices", "built_" + new + "_2d.png"); os.makedirs(os.path.dirname(img2), exist_ok=True); see_through(stl[:-4] + "_2d.png", img2, 360)

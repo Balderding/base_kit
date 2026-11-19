@@ -6,6 +6,7 @@ subject, path, props, clutter, open), places the subject, lays the path, holds t
 ordinary details under a "focus": gg3.FOCUS decides where a detail's random spot is, gg3.AIM how it is turned.
 The plan comes from the theme table (themes.py), from a file (--plan) or from a local model (designer.py); all three
 go through validate_plan(), so they are built the same way."""
+import shapely
 import math, os, json, random as _random
 from shapely.affinity import rotate as _arot, scale as _ascale
 
@@ -641,10 +642,20 @@ def curve(r0, r1, z0, z1, n=6, out=True):
     return pts
 
 def _steps(solids, kind, parent=None, cuts=()):
-    """the "steps" layer of one object: its solids merged into one smooth surface"""
-    pieces = sculpt(solids, cuts)
-    if not pieces: return ("up", Polygon(), 0.0, kind)
-    return ("steps", _u([p[0] for p in pieces]), pieces, kind) + ((parent,) if parent is not None else ())
+    """the "steps" layer of one object: its solids merged into one smooth surface. The outline comes from the
+    solids' own ground sections (cheap); the nested pieces are only cut when the object is really placed (a detail
+    is tried in many spots and most tries are thrown away: they never pay for the 6-40 sections, sd_r_models._Later)."""
+    from sd_r_models import _Later
+    try:
+        sol = [box(*x[:2])[0] if not callable(x[0]) else x for x in solids]
+        foot = _u([g for g in (x[0](1e-6) for x in sol if x[1] > 1e-6) if g is not None and not g.is_empty])
+    except Exception: foot = None
+    if foot is None:          # an odd solid: the old way, all at once
+        pieces = sculpt(solids, cuts)
+        if not pieces: return ("up", Polygon(), 0.0, kind)
+        return ("steps", _u([p[0] for p in pieces]), pieces, kind) + ((parent,) if parent is not None else ())
+    if foot.is_empty: return ("up", Polygon(), 0.0, kind)
+    return ("steps", foot, _Later(lambda: sculpt(solids, cuts)), kind) + ((parent,) if parent is not None else ())
 
 def b_keg(kind="wood", iron="iron"):
     """a barrel standing up: a round belly drawing in to the head, hoops, the chime standing proud, staves and a bung"""
@@ -1796,6 +1807,12 @@ def release(s):
                 if lst[i] is p: del lst[i]
     s.held = []
 
+def _share():
+    """how many of the things that stand on the base are kept: 1 (the default) = all, 0.33 = a third. The ground
+    itself (its shape, cracks, puddles, ruts, paving) is never cut."""
+    try: return max(0.0, min(1.0, float(CFG.get("objects_amount", 1.0))))
+    except (TypeError, ValueError): return 1.0
+
 def _count(sc, n):
     n = n * max(1.0, sc.K / 2)
     return max(1, int(round(n + (sc.mixr.uniform(-1, 1) if n >= 2 else 0))))
@@ -1821,6 +1838,27 @@ def _bare(sc, lim):
     disc = Point(0, 0).buffer(gg.R0 - 1.0, 64)
     return disc.difference(_u(gs).buffer(lim, 4)) if gs else disc.buffer(-lim)
 
+def _bare_grid(sc, lim):
+    """the same question as _bare, fast: a grid of points over the top (spacing lim / 3) and how far each is from
+    the nearest piece, cut or plate edge (one GEOS nearest-search for all of them, no union, no buffer). A point
+    whose clearance is over lim is bare ground. Returns (points (N, 2), clearance (N,))."""
+    import numpy as np
+    s = sc.s; big = 3.1416 * lim * lim * 1.5; small, rings = [], []
+    for ps in [op[1] for op in s.ops] + [g[0] for g in s.gcuts] + [c[0] for c in s.tcuts]:
+        for q in ps:
+            if q is None or q.is_empty: continue
+            if q.area < big: small.append(q)
+            else: rings.append(q.exterior)          # a wide flat plate is only its edge: its middle is still plain
+    r = gg.R0 - 1.0; st = lim / 3.0; xs = np.arange(-r + st / 2, r, st)
+    gx, gy = np.meshgrid(xs, xs); keep = gx * gx + gy * gy <= r * r; P = np.column_stack([gx[keep], gy[keep]])
+    if not len(P): return P, np.zeros(0)
+    pts = shapely.points(P); d = np.full(len(P), np.inf)
+    for geoms, off in ((small, 0.0), (rings, 0.5)):
+        if not geoms: continue
+        tree = shapely.STRtree(geoms); (ia, ib), dist = tree.query_nearest(pts, return_distance=True, all_matches=False)
+        np.minimum.at(d, ia, dist - off)
+    return P, d
+
 def no_bare(sc, plan, marks_only=False, cracks=False):
     """the rule: no part of a base's top is plain smooth. Wherever a circle of bare ground is left (7 mm radius on a
     100 mm base, 3 mm on a 30 mm one), the style's own natural details go down there; a crack if nothing else fits."""
@@ -1829,14 +1867,14 @@ def no_bare(sc, plan, marks_only=False, cracks=False):
     by = {}
     for f in D.DETAILS.get(sc.style, []):
         if not _banned(f, plan): by.setdefault(klass(f), []).append(f)
-    fs = by.get("marks", []) * 2 + ([] if marks_only else by.get("debris", []) + by.get("growth", []))
+    fs = by.get("marks", []) * 2 + ([] if marks_only or _share() < 0.999 else by.get("debris", []) + by.get("growth", []))          # with fewer things on top, bare ground is filled with ground marks
     if cracks: fs = []          # the edge ring, after it was swept: cuts only, nothing loose stands there
+    import numpy as np
     for rnd in range(3):
-        bare = _bare(sc, lim)
+        P, clear = _bare_grid(sc, lim); free = clear > lim
         for _ in range(60):
-            ps = [q for q in polys_of(bare) if q.area > 0.05]
-            if not ps: break
-            c = max(ps, key=lambda q: q.area).representative_point(); x, y = c.x, c.y; ok = False
+            if not free.any(): break
+            i = int(np.argmax(np.where(free, clear, -1.0))); x, y = float(P[i, 0]), float(P[i, 1]); ok = False          # the middle of the widest bare patch
             at = lambda rng, x=x, y=y: (x + rng.uniform(-1, 1) * lim * 0.35, y + rng.uniform(-1, 1) * lim * 0.35)
             for k in range(3 if fs else 0):
                 if _run(sc, rr.choice(fs), at): ok = True; break
@@ -1846,7 +1884,7 @@ def no_bare(sc, plan, marks_only=False, cracks=False):
                 j = rr.randrange(1, n - 1); b = a + rr.choice((-1, 1)) * rr.uniform(0.6, 1.2)
                 g = _u([LineString(pts).buffer(0.3, 2), LineString([pts[j], (pts[j][0] + L * 0.4 * math.cos(b), pts[j][1] + L * 0.4 * math.sin(b))]).buffer(0.26, 2)])
                 s.gcut(polys_of(g), 0.4, "crack")
-            put += 1; bare = bare.difference(Point(x, y).buffer(lim * 1.2, 8))
+            put += 1; free &= (P[:, 0] - x) ** 2 + (P[:, 1] - y) ** 2 > (lim * 1.2) ** 2
     return put
 
 def clear_edge(sc):
@@ -1929,7 +1967,8 @@ def place_props(sc, plan):
         fn = prop_fn(pr["what"], sc.pal)
         if fn is None: continue
         at, aim_ = sc.relation(pr["where"])
-        for _ in range(_count(sc, pr["count"])): placed += _run(sc, fn, at, aim_)
+        for _ in range(_count(sc, pr["count"])):
+            if sc.mixr.random() < _share(): placed += _run(sc, fn, at, aim_)
     return placed
 
 def _banned(fn, plan):
@@ -1971,6 +2010,7 @@ def tier_features(sc, plan, fns):
             continue
         for r in range(1 + reps):
             if r and sc.mixr.random() < 0.4: continue
+            if c != "marks" and sc.mixr.random() >= _share(): continue
             if c == "made": _run(sc, fn, made_at, a_par(sc.subj.convex_hull) if sc.subj is not None and sc.mixr.random() < 0.5 else None)
             elif c == "marks": sc.marks_later.append(fn)
             else: _run(sc, fn, sm.get(c) or sm["debris"])
@@ -1987,7 +2027,7 @@ def clutter(sc, plan, n_each=None):
     for c in ("debris", "growth"):
         fs = by.get(c, [])
         if not fs or sm[c] is None: continue
-        for _ in range(round((AMOUNT[c] * sc.K * sc.K if n_each is None else n_each) * cl.get(c, 1.0))): _run(sc, sc.mixr.choice(fs), sm[c])
+        for _ in range(round((AMOUNT[c] * sc.K * sc.K if n_each is None else n_each) * cl.get(c, 1.0) * _share())): _run(sc, sc.mixr.choice(fs), sm[c])
     sc.mark_pool = by.get("marks", [])
 
 def marks(sc, plan, n_each=None):
@@ -2047,7 +2087,7 @@ def lay_scene(sc, plan, small=False, force=False):
 
 def small_scene(sc, plan):
     """A6, under 60 mm: no room for a subject and a path, so the theme's props gather round one focal piece"""
-    s = sc.s; props = list(plan["props"]); sc.mixr.shuffle(props); want = max(1, round((1 + sc.t) * sc.K * sc.K)); R = sc.R; placed = 0
+    s = sc.s; props = list(plan["props"]); sc.mixr.shuffle(props); want = max(1, round((1 + sc.t) * sc.K * sc.K * _share())); R = sc.R; placed = 0
     line = sc.lines if not sc.lines.is_empty else None
     ring_ = lambda rng: (lambda a, r: (r * math.cos(a), r * math.sin(a)))(rng.uniform(0, 6.2832), R * rng.uniform(0.25, 0.5))
     for pr in props + [pr for pr in props if pr["count"] > 1]:
@@ -2122,6 +2162,9 @@ def compose(s, style, mixr, rng, t, fns):
         if ts != 1.0:          # the middle of the base belongs to the miniature (on a large base, a large one): nothing is laid there
             rv = min(sc.R, float(os.environ.get("KIT_FINAL_MM") or 2 * sc.R * ts) / (2 * ts)); clear = Point(0, 0).buffer(float(CFG.get("clear_middle", 0.45)) * rv, 24)
             s.keepout = list(getattr(s, "keepout", [])) + [clear]; sc.taken.append(clear)
+            if float(os.environ.get("KIT_FINAL_MM") or 0) >= 49.9:          # a base is mostly ground: terrain at the scale of the base (ground_big.py), lower on smaller bases
+                try: import ground_big; ground_big.apply(sc)
+                except Exception as e: sc.log.append(f"ground_big: {type(e).__name__} {str(e)[:60]}")
         small_scene(sc, plan)
         _style_made(sc, plan)
         late = tier_features(sc, plan, fns); clutter(sc, plan, (1 + t) * sc.K * sc.K)

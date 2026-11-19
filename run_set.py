@@ -43,6 +43,23 @@ def kill_tree(p):
 QUIET = False
 SIZE = 30.0           # base diameter, mm
 KNOWN_SIZES = [25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 130, 160]      # common round bases
+OVAL_SIZES = [(60, 35.5), (75, 42), (90, 52), (105, 70), (120, 92), (150, 95), (170, 109)]      # common oval bases, long x short
+OVAL = None           # (long, short) mm for an oval base (--size 90x52), None for a round one
+
+
+def parse_size(txt):
+    """--size: "60" or "60mm" is a round base of that diameter; "90x52" or "90x52mm" an oval, long x short (either
+    order). Returns (long or diameter, short or None). Raises ValueError for anything else."""
+    t = str(txt).strip().lower().replace("mm", "").replace(" ", "").replace("*", "x")
+    if "x" in t:
+        a, b = (float(v) for v in t.split("x", 1))
+        return max(a, b), min(a, b)
+    return float(t), None
+
+
+def size_tag():
+    """the size as it goes into file names: 60 or 90x52"""
+    return f"{OVAL[0]:g}x{OVAL[1]:g}" if OVAL else f"{SIZE:g}"
 
 
 def base_limit():
@@ -53,7 +70,7 @@ TIER = {}
 LABEL = {}            # (style, internal number) -> file name, e.g. urban_007
 
 
-def nm(style, n): return LABEL.get((style, n), f"{style}_{SIZE:g}mm_{n:02d}")
+def nm(style, n): return LABEL.get((style, n), f"{style}_{size_tag()}mm_{n:02d}")
 
 
 def plan(count, detail):
@@ -318,18 +335,20 @@ def print_check(path):
     import trimesh
     m = trimesh.load(path)
     parts = [q for q in m.split(only_watertight=False) if abs(q.volume) > 0.05]
-    b = m.bounds; w = float(b[1][0] - b[0][0]); top = float(b[1][2])
+    b = m.bounds; w = float(b[1][0] - b[0][0]); top = float(b[1][2]); dy = float(b[1][1] - b[0][1])
     probs = []
     m.merge_vertices()
     if _edge_counts(m)[0]: probs.append("not watertight")      # an open edge. Edges where two parts just touch (4 faces) are closed and slice fine
     if len(parts) != 1 and not CFG.get("allow_supports", False): probs.append(f"{len(parts)} loose pieces")      # with supports allowed, objects are closed shells sunk into the base
-    if abs(w - SIZE) > 0.05: probs.append(f"{w:.2f} mm wide, not {SIZE:g}")
+    if OVAL:                                                    # an oval: its length along x and its width along y
+        if abs(w - OVAL[0]) > 0.05 or abs(dy - OVAL[1]) > 0.05: probs.append(f"{w:.2f} x {dy:.2f} mm, not {OVAL[0]:g} x {OVAL[1]:g}")
+    elif abs(w - SIZE) > 0.05: probs.append(f"{w:.2f} mm wide, not {SIZE:g}")
     import gg as _gg
     if top > 4.0 + min(_gg.max_height(SIZE) * SCALE, 1000.0) + 0.05 and top > 4.0 + (25.0 if SCALE != 1.0 else 0) + 0.05: probs.append(f"too tall ({top - 4:.1f} mm above deck)")
     import gg
-    cens = gg.magnet_centres(SIZE)
+    cens = gg.oval_magnet_centres(*OVAL) if OVAL else gg.magnet_centres(SIZE)
     if any(m.contains([[x, y, 1.0] for x, y in cens])): probs.append("magnet hole blocked")
-    if len(cens) > 1 and (0.0, 0.0) not in cens and not m.contains([[0, 0, 1.0]])[0]: probs.append("hole in the middle of the bottom")      # bases over 100 mm have a pocket in the middle on purpose
+    if len(cens) > 1 and (0.0, 0.0) not in cens and not m.contains([[0, 0, 1.0]])[0]: probs.append("hole in the middle of the bottom")      # bases over 100 mm (and ovals over 105 mm long) have a pocket in the middle on purpose
     return probs
 
 
@@ -439,7 +458,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("style", help="one of: " + " ".join(ALL_STYLES) + ", or all")
     ap.add_argument("count", help="how many bases to build")
-    ap.add_argument("--size", default="30", help="base diameter in mm (default 30). Common round sizes: " + ", ".join(f"{x:g}" for x in KNOWN_SIZES) + ". Any size from 20 to 200 works")
+    ap.add_argument("--size", default="30", help="base diameter in mm (default 30). Common round sizes: " + ", ".join(f"{x:g}" for x in KNOWN_SIZES) + ". Any size from 20 to 200 works. "
+                    "An oval base is long x short, e.g. --size 90x52; common ovals: " + ", ".join(f"{a:g}x{b:g}" for a, b in OVAL_SIZES))
     ap.add_argument("--detail", default="mix", help="1 (simplest) to 4 (most detailed), or mix (default: an even mix of all four)")
     ap.add_argument("--workers", type=int, default=CFG["workers"])
     ap.add_argument("--seed", default="", help="reuse an earlier run's seed to rebuild the same bases (shown at the start of every run)")
@@ -448,6 +468,7 @@ def main():
     ap.add_argument("--scenes", choices=["on", "off"], default=None, help="every base is one place with a theme (default: the scenes setting in settings.json)")
     ap.add_argument("--theme", default="", help="build every base with this theme of the style, e.g. --theme \"tunnel mouth\" (a wrong name lists the themes)")
     ap.add_argument("--plan", default="", help="build from a scene plan file (a <name>_plan.json from an earlier run, edited or not)")
+    ap.add_argument("--objects", type=float, default=None, help="how many of the things that stand on the base are kept, 0 to 1: 1 = all (the default, settings.json objects_amount), 0.33 = a third. The ground's own shape is never cut")
     ap.add_argument("--supports", choices=["on", "off"], default=None, help="on: objects may overhang, so the print needs supports (a barrel narrower at the foot than the belly, ribs arching off the ground). Default off: nothing overhangs")
     ap.add_argument("--mini", default="", help="the kind of miniature the bases are for: biped (default), wide, walker, tripod, quad, many, scorpion, crawler, tracked, hover, none, or mix. Its contact spots are kept flat and clear")
     ap.add_argument("--scale", default="", help="the scenery scale: 1 = as the kit lays things out (a small landscape, objects about a third of true size beside a 32 mm figure); 3 = true size for 32 mm figures, 2.6 for 28 mm, 1.4 for 15 mm. A small base then shows a fragment of the scene. Default: scenery_scale in settings.json")
@@ -455,6 +476,7 @@ def main():
     a = ap.parse_args()
     if a.scenes: os.environ["KIT_SCENES"] = "1" if a.scenes == "on" else "0"; CFG["scenes"] = a.scenes == "on"
     if a.designer: os.environ["KIT_DESIGNER"] = a.designer
+    if a.objects is not None: os.environ["KIT_OBJECTS"] = str(max(0.0, min(1.0, a.objects))); CFG["objects_amount"] = max(0.0, min(1.0, a.objects))
     if a.supports: os.environ["KIT_SUPPORTS"] = "1" if a.supports == "on" else "0"; CFG["allow_supports"] = a.supports == "on"
     if a.mini:
         os.environ["KIT_MINI"] = a.mini
@@ -470,11 +492,18 @@ def main():
         if not os.path.exists(a.plan): raise SystemExit(f"--plan: no such file {a.plan}")
         os.environ["PLAN_JSON"] = os.path.abspath(a.plan)
     global QUIET, SIGFILE; QUIET = a.quiet; globals()["ENGINE"] = a.engine
-    global SIZE
-    try: SIZE = float(str(a.size).lower().replace("mm", ""))
-    except ValueError: raise SystemExit("--size must be a number of millimetres, e.g. --size 40")
+    global SIZE, OVAL
+    try: SIZE, short = parse_size(a.size)
+    except ValueError: raise SystemExit("--size must be a number of millimetres, e.g. --size 40, or long x short for an oval, e.g. --size 90x52")
     if not 20 <= SIZE <= 200: raise SystemExit("--size must be between 20 and 200 mm")
-    if SIZE not in KNOWN_SIZES: print(f"note: {SIZE:g} mm is not one of the common base sizes ({', '.join(f'{x:g}' for x in KNOWN_SIZES)}); building it anyway", flush=True)
+    if short is not None and abs(short - SIZE) > 1e-9:          # an oval (a "60x60" is just a round 60)
+        if short < 20: raise SystemExit("--size: an oval's short size must be 20 mm or more")
+        if a.engine != "mesh": raise SystemExit("oval bases are built with the mesh engine only (--engine mesh)")
+        OVAL = (SIZE, short); os.environ["KIT_OVAL"] = size_tag()
+        if OVAL not in OVAL_SIZES: print(f"note: {size_tag()} mm is not one of the common oval sizes ({', '.join(f'{x:g}x{y:g}' for x, y in OVAL_SIZES)}); building it anyway", flush=True)
+    else:
+        os.environ.pop("KIT_OVAL", None)
+        if SIZE not in KNOWN_SIZES: print(f"note: {SIZE:g} mm is not one of the common base sizes ({', '.join(f'{x:g}' for x in KNOWN_SIZES)}); building it anyway", flush=True)
     if a.detail != "mix" and a.detail not in ("1", "2", "3", "4"): raise SystemExit("--detail must be 1, 2, 3, 4 or mix")
     global SCALE, LAYOUT
     try: SCALE = float(a.scale or CFG.get("scenery_scale", 1.0))
@@ -483,7 +512,8 @@ def main():
     LAYOUT = SIZE if SCALE == 1.0 else round(max(30.0, SIZE / SCALE), 1)          # the size the scene is laid out at; below 30 mm the kit cannot lay one out, so a small base shows the middle of a 30 mm layout
     if SCALE != 1.0:
         os.environ.update({"KIT_FINAL_MM": f"{SIZE:g}", "KIT_SCALE": f"{SCALE:g}", "BASE_MM": f"{LAYOUT:g}"})
-        print(f"scale  : x{SCALE:g}: laid out as a {LAYOUT:g} mm base, built {SCALE:g} times larger on the {SIZE:g} mm base" + ("" if LAYOUT * SCALE <= SIZE + 0.5 else f" (it shows the middle {SIZE / SCALE:.0f} mm of that layout)"), flush=True)
+        print(f"scale  : x{SCALE:g}: laid out as a {LAYOUT:g} mm base, built {SCALE:g} times larger on the {size_tag()} mm base" + ("" if LAYOUT * SCALE <= SIZE + 0.5 else f" (it shows the middle {SIZE / SCALE:.0f} mm of that layout)"), flush=True)
+    if OVAL: print(f"oval   : {OVAL[0]:g} x {OVAL[1]:g} mm: the scene is laid out round on the long size and cut to the oval", flush=True)
     detail = None if a.detail == "mix" else int(a.detail)
     if a.style != "all" and a.style not in ALL_STYLES:
         import difflib
@@ -494,7 +524,7 @@ def main():
     if a.count.isdigit():
         pl = plan(int(a.count), detail); nums = [n for n, _ in pl]
         for st in (ALL_STYLES if a.style == "all" else [a.style]):
-            for i, (n, tier) in enumerate(pl, 1): LABEL[(st, n)] = f"{st}_{SIZE:g}mm_{i:03d}"; TIER[(st, n)] = tier
+            for i, (n, tier) in enumerate(pl, 1): LABEL[(st, n)] = f"{st}_{size_tag()}mm_{i:03d}"; TIER[(st, n)] = tier
     else: nums = parse_nums(a.count)             # old form: explicit internal numbers such as 3,7,12-15
     preflight()
     try:          # the public-domain model packs: only say so here (the window and bbb_kit.cmd fetch them; this plain runner never downloads by itself)
@@ -578,7 +608,7 @@ def run_style(style, nums, workers):
     class a: pass
     a.style = style
     stop = {"now": False}; t0 = time.time(); results = []; flagged = 0
-    print(f"{a.style}: {len(nums)} bases, {SIZE:g} mm, {workers} at a time, limits {CFG['step_limit_secs']} s/step, "
+    print(f"{a.style}: {len(nums)} bases, {size_tag()} mm, {workers} at a time, limits {CFG['step_limit_secs']} s/step, "
           f"{base_limit():.0f} s/base, {CFG['batch_limit_mins']} min/batch", flush=True)
     with ThreadPoolExecutor(workers) as ex:
         futs = {ex.submit(one_base, a.style, n, stop): n for n in nums}

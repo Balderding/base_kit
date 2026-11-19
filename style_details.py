@@ -160,7 +160,7 @@ def scatter_made(sc, plan):
     S = _S()
     fs = [f for f in NEW20.get(sc.style, []) if f.cls == "made" and not S._banned(f, plan)]
     if not fs or not CFG.get("style_details", True): return 0
-    n = max(1, round(float(CFG.get("style_details_amount", 0.5)) * sc.K * sc.K)); sc.mixr.shuffle(fs); placed = 0
+    n = max(1, round(float(CFG.get("style_details_amount", 0.5)) * sc.K * sc.K * S._share())); sc.mixr.shuffle(fs); placed = 0
     if sc.subj is not None:
         spots = [(3, "at"), (2, "wall"), (2, "path"), (2, "far"), (1, "also"), (1, "back")]
     else: spots = []

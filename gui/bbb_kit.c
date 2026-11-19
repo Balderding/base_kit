@@ -32,6 +32,7 @@
 #include <string.h>
 #include <wchar.h>
 #include <math.h>
+int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core-mesh and the other C parts of the kit */
 
 #define WM_LINE (WM_APP + 1)
 #define WM_ENDED (WM_APP + 2)
@@ -47,9 +48,26 @@
 #define C_ONACC 0xFF06211Du
 #define C_GOLD 0xFFE2B33Cu
 #define C_ONGOLD 0xFF14213Du
+/* the pixel look's ramp (work\ui_research\REPORT.md), made from the colours above. No red anywhere: navy, teal, green, gold */
+#define C_EDGE 0xFF0D0F13u          /* the dark outline round every pixel box */
+#define C_OFF 0xFF5F6775u           /* ink of a button that is off */
+#define C_BEVH 0xFF343946u          /* bevel: the lit top and left edge of a box */
+#define C_BEVHH 0xFF3E4452u
+#define C_BEVD 0xFF1C1F26u          /* bevel: the shaded bottom and right edge */
+#define C_NAVY 0xFF1E2A4Au
+#define C_NAVYH 0xFF2E4373u
+#define C_NAVYD 0xFF172038u
+#define C_TEALD 0xFF0E6B62u
+#define C_TEALM 0xFF149384u
+#define C_TEALL 0xFF6FE3D4u
+#define C_GREEN 0xFF5DBB63u
+#define C_GOLDD 0xFF9A7420u
+#define C_BAR 0xFFC9D3E6u           /* label ink on a navy bar */
+#define C_STONEL 0xFF20242Bu        /* the stone texture's light and dark grain on the side panel */
+#define C_STONED 0xFF16181Eu
 enum { SIDE_W = 300, HEAD_H = 74, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED };
 
 typedef struct { char seed[16]; int n, tier, picked, state, retry; GpImage *img, *img3; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; } Cell;
 typedef struct { RECT r; int kind, idx; } Hit;
@@ -58,21 +76,34 @@ static Hit hits[400]; static int nhit, hovK, hovI = -1;
 static WCHAR *logv[MAXLOG]; static int nlog;
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], py[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
-static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "3"; static int curSup, selScale;
+static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1"; static int curSup, selScale = 3;
 static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, showDetails = 0;          /* selCount: how many bases, 1 to 20 */
 static int busy, wanted, doneN, nOK, nBad, scrollY, scrollMax, anim, selftest, stStep; static WCHAR stShot[MAX_PATH];
 static HANDLE hJob;
 static int stSize = 8, demoShot; static RECT gridR, savedR; static int savedMax, showHelp, autoBuild; static DWORD lastDigit;
+/* the look: three switches, saved in out\bbb_kit.ini. lookPix: pixel frames (off = the smooth look with round corners);
+   lookTex: textures (dither, scanlines, segmented progress, marching ants; with the pixel look only); lookFont: the pixel
+   font for labels, chips, buttons and the title. PX: one art pixel in screen pixels, a whole number from the monitor's
+   scaling (2 at 100 %, 3 at 150 %, 4 at 200 %); FS: the pixel font's scale, also whole */
+static int lookPix = 1, lookTex = 1, lookFont = 1, PX = 2, FS = 1;
+/* speed: two switches, saved in out\bbb_kit.ini and handed to Python as KIT_THREADS / KIT_GPU (cmesh.py).
+   spThr: the height field and the mesh on as many CPU threads as the base needs (off = one core, the proven path). spGpu: the 3D pictures on
+   the video card (off = drawn by Python, much slower). */
+static int spThr = 1, spGpu = 1;
+static void speed_env(void) { WCHAR n[16]; DWORD c = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS); swprintf(n, 16, L"%lu", (unsigned long)(c > 1 ? c : 2)); SetEnvironmentVariableW(L"KIT_THREADS", spThr ? n : L"0"); SetEnvironmentVariableW(L"KIT_GPU", spGpu ? L"1" : L"0"); }
 
 static const char *STYLES[] = { "badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine", "swamp", "cynder", "targa",
                                 "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast" };
-static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50", "60", "65", "70", "80", "90", "100", "130", "160" };          /* the common round bases; the kit itself takes any size from 20 to 200 */
+static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50", "60", "65", "70", "80", "90", "100", "130", "160",          /* the common round bases; the kit itself takes any size from 20 to 200 */
+                                "60x35.5", "75x42", "90x52", "105x70", "120x92", "150x95", "170x109" };          /* then the common oval bases, long x short */
+enum { NROUND = 16, NSIZES = 23 };
 static const char *DETAILL[] = { "Mix", "1", "2", "3", "4" }, *DETAILV[] = { "mix", "1", "2", "3", "4" };
-static const char *SCALES[] = { "32 mm", "28 mm", "15 mm", "tiny" }, *SCALEV[] = { "3", "2.6", "1.4", "1" };          /* the scenery scale: how many times larger than laid out, for figures of that height */
+static const char *SCALES[] = { "32 mm", "28 mm", "15 mm", "classic" }, *SCALEV[] = { "3", "2.6", "1.4", "1" };          /* the scenery scale: how many times larger than laid out, for figures of that height */
 static const char *MINIS[] = { "default", "biped", "wide", "walker", "tripod", "quad", "many", "scorpion", "crawler", "tracked", "hover", "none", "mix" };
 
 
 static int S(double x) { return (int)(x * SC + 0.5); }
+static int snp(double v) { return (int)floor(v / PX + 0.5) * PX; }          /* to the nearest whole art pixel */
 static void redraw(void) { InvalidateRect(hMain, NULL, FALSE); }
 static int npicked(void) { int i, k = 0; for (i = 0; i < ncell; i++) k += cells[i].picked && cells[i].state == ST_NONE; return k; }
 
@@ -232,9 +263,15 @@ static void on_line(int mode, const WCHAR *t) {
     }
 }
 static void capture(const WCHAR *path);
+/* the animation timer (1) runs while Python works; with the pixel look and textures it also runs, slower, while picked
+   cards are on show, to move their marching ants */
+static void anim_tick(void) {
+    if (busy) return;
+    if (lookPix && lookTex && npicked()) SetTimer(hMain, 1, 120, NULL); else KillTimer(hMain, 1);
+}
 static void on_ended(int mode, DWORD code) {
     int i;
-    busy = 0; KillTimer(hMain, 1);
+    busy = 0; KillTimer(hMain, 1); anim_tick();
     if (mode == 1) {
         drop_pending();
         if (ncell) { wcscpy(head, L"Click the bases you want"); wcscpy(sub, L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
@@ -289,35 +326,213 @@ static void rr(double x, double y, double w, double h, double r, ARGB fill, ARGB
     if (line) { GpPen *pn; GdipCreatePen1(line, (REAL)lw, UnitPixel, &pn); GdipDrawPath(G, pn, p); GdipDeletePen(pn); }
     GdipDeletePath(p);
 }
-static void fillrect(int x, int y, int w, int h, ARGB c) { GpSolidFill *b; GdipCreateSolidFill(c, &b); GdipFillRectangleI(G, (GpBrush *)b, x, y, w, h); GdipDeleteBrush((GpBrush *)b); }
+static GpSolidFill *fillB;          /* one brush for every plain fill: the pixel look fills many small rectangles */
+static void fillrect(int x, int y, int w, int h, ARGB c) {
+    if (w <= 0 || h <= 0) return;
+    if (!fillB) GdipCreateSolidFill(c, &fillB); else GdipSetSolidFillColor(fillB, c);
+    GdipFillRectangleI(G, (GpBrush *)fillB, x, y, w, h);
+}
 static void txt(const WCHAR *s, int x, int y, int w, int h, HFONT f, ARGB c, UINT fl) {
     RECT r = { x, y, x + w, y + h }; GdipFlush(G, FlushIntentionSync);
     SelectObject(DC, f); SetTextColor(DC, RGB((c >> 16) & 255, (c >> 8) & 255, c & 255)); DrawTextW(DC, s, -1, &r, fl | DT_NOPREFIX);
 }
-static void txta(const char *s, int x, int y, int w, int h, HFONT f, ARGB c, UINT fl) { WCHAR b[200]; swprintf(b, 200, L"%hs", s); txt(b, x, y, w, h, f, c, fl); }
 static void hit(int x, int y, int w, int h, int kind, int idx) { if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
 static int hov(int kind, int idx) { return hovK == kind && hovI == idx; }
 
+/* ---------- the pixel drawing kit: boxes with notched corners and a bevel, discs, dither textures made in code ----------
+   Everything is whole art pixels (PX), filled rectangles only, no smoothing; the base pictures on the cards stay smooth. */
+static void px_shape(int x, int y, int w, int h, int k, ARGB c) {          /* a filled box whose corners step in k art pixels */
+    int j;
+    if (w <= 0 || h <= 0 || !c) return;
+    while (k > 0 && (2 * k * PX > w || 2 * k * PX > h)) k--;
+    for (j = 0; j < k; j++) { int in = (k - j) * PX; fillrect(x + in, y + j * PX, w - 2 * in, PX, c); fillrect(x + in, y + h - (j + 1) * PX, w - 2 * in, PX, c); }
+    fillrect(x, y + k * PX, w, h - 2 * k * PX, c);
+}
+/* a pixel box: an outline (edge, 0 = none) round a fill, lit top-left (hi) and shaded bottom-right (lo); 0 leaves one out */
+static void px_box(double xd, double yd, double wd, double hd, int k, ARGB fill, ARGB edge, ARGB hi, ARGB lo) {
+    int x = snp(xd), y = snp(yd), w = snp(xd + wd) - x, h = snp(yd + hd) - y, p = PX;
+    if (w < 2 * p || h < 2 * p) { px_shape(x, y, w, h, 0, fill); return; }
+    if (edge) { px_shape(x, y, w, h, k, edge); x += p; y += p; w -= 2 * p; h -= 2 * p; if (k) k--; }
+    px_shape(x, y, w, h, k, fill);
+    if (hi) { fillrect(x + k * p, y, w - 2 * k * p, p, hi); fillrect(x, y + k * p, p, h - 2 * k * p, hi); }
+    if (lo) { fillrect(x + k * p, y + h - p, w - 2 * k * p, p, lo); fillrect(x + w - p, y + k * p, p, h - 2 * k * p, lo); }
+}
+static void px_disc(double cx, double cy, double r, ARGB c) {          /* a round disc, stepped in art pixels */
+    int R = (int)(r / PX + 0.5), X = snp(cx), Y = snp(cy), j;
+    for (j = -R; j < R; j++) { double yy = j + 0.5; int hw = (int)(sqrt(R * R - yy * yy) + 0.5); fillrect(X - hw * PX, Y + j * PX, 2 * hw * PX, PX, c); }
+}
+static void px_tick(double cx, double cy, ARGB c) {          /* the tick of a picked card, two art pixels thick */
+    static const signed char pt[7][2] = { { -3, 0 }, { -2, 1 }, { -1, 2 }, { 0, 1 }, { 1, 0 }, { 2, -1 }, { 3, -2 } }; int i, X = snp(cx), Y = snp(cy);
+    for (i = 0; i < 7; i++) fillrect(X + (pt[i][0] - 1) * PX, Y + (pt[i][1] - 1) * PX, PX, 2 * PX, c);
+}
+/* the 8 x 8 Bayer matrix: the order the dots of a dither come on in, so any level from 0 to 64 looks even */
+static const unsigned char BAYER[64] = { 0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54, 22,
+                                         3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21 };
+static unsigned hash2(int x, int y) { unsigned h = (unsigned)x * 374761393u + (unsigned)y * 668265263u; h = (h ^ (h >> 13)) * 1274126177u; return h ^ (h >> 16); }
+typedef struct { int kind, lvl, px; ARGB c; GpBitmap *bm; GpTexture *t; } TexC;
+static TexC texc[32]; static int ntexc;
+/* a tiling texture brush, made once and kept: kind 0 Bayer dither of colour c at level lvl (of 64), kind 1 scanlines (every
+   second art row c), kind 2 stone (low-contrast grain from value noise, dithered). Tiles start at the window's corner, so
+   neighbouring fills join without a seam */
+static GpTexture *tex_of(int kind, ARGB c, int lvl) {
+    int i, n = kind == 2 ? 64 : 8, X, Y, x, y; GpBitmap *bm = NULL; GpTexture *t = NULL;
+    for (i = 0; i < ntexc; i++) if (texc[i].kind == kind && texc[i].c == c && texc[i].lvl == lvl && texc[i].px == PX) return texc[i].t;
+    if (ntexc == 32) { for (i = 0; i < ntexc; i++) { GdipDeleteBrush((GpBrush *)texc[i].t); GdipDisposeImage((GpImage *)texc[i].bm); } ntexc = 0; }
+    GdipCreateBitmapFromScan0(n * PX, n * PX, 0, PixelFormat32bppARGB, NULL, &bm);
+    if (!bm) return NULL;
+    for (Y = 0; Y < n; Y++) for (X = 0; X < n; X++) {
+        ARGB v = 0; int th = BAYER[(Y & 7) * 8 + (X & 7)];
+        if (kind == 0) v = th < lvl ? c : 0;
+        else if (kind == 1) v = (Y & 1) ? c : 0;
+        else {          /* stone: smooth noise on an 8 x 8 lattice that wraps (64 art pixels a tile), plus grain, cut into light / none / dark */
+            int gx = X / 8, gy = Y / 8; double fx = (X % 8) / 8.0, fy = (Y % 8) / 8.0, a, b, cc, d, nv, tt;
+            fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+            a = (hash2(gx & 7, gy & 7) & 255) / 255.0; b = (hash2((gx + 1) & 7, gy & 7) & 255) / 255.0;
+            cc = (hash2(gx & 7, (gy + 1) & 7) & 255) / 255.0; d = (hash2((gx + 1) & 7, (gy + 1) & 7) & 255) / 255.0;
+            nv = (a + (b - a) * fx) * (1 - fy) + (cc + (d - cc) * fx) * fy; tt = nv * 0.6 + (hash2(X + 101, Y + 37) & 255) / 255.0 * 0.4;
+            v = tt > 0.66 + th / 64.0 * 0.22 ? c : tt < 0.12 + th / 64.0 * 0.22 ? C_STONED : 0;
+        }
+        for (y = 0; y < PX; y++) for (x = 0; x < PX; x++) GdipBitmapSetPixel(bm, X * PX + x, Y * PX + y, v);
+    }
+    GdipCreateTexture((GpImage *)bm, WrapModeTile, &t);
+    if (!t) { GdipDisposeImage((GpImage *)bm); return NULL; }
+    texc[ntexc].kind = kind; texc[ntexc].c = c; texc[ntexc].lvl = lvl; texc[ntexc].px = PX; texc[ntexc].bm = bm; texc[ntexc].t = t; ntexc++;
+    return t;
+}
+static void texfill(int x, int y, int w, int h, int kind, ARGB c, int lvl) { GpTexture *t; if (w > 0 && h > 0 && (t = tex_of(kind, c, lvl))) GdipFillRectangleI(G, (GpBrush *)t, x, y, w, h); }
+/* the kit's boxes in the pixel look. st: 0 quiet, 1 teal (picked / the main button), 2 gold edge (Stop), 3 off, 4 sunken */
+static void pbox(double x, double y, double w, double h, int k, int st, int hv) {
+    switch (st) {
+    case 1: px_box(x, y, w, h, k, hv ? C_ACCH : C_ACC, C_EDGE, C_TEALL, C_TEALM); break;
+    case 2: px_box(x, y, w, h, k, hv ? C_CARDH : C_CARD, C_GOLD, hv ? C_BEVHH : C_BEVH, C_GOLDD); break;
+    case 3: px_box(x, y, w, h, k, C_CARD, C_EDGE, 0, 0);
+        if (lookTex) { int X = snp(x) + PX, Y = snp(y) + PX; texfill(X, Y, snp(x + w) - PX - X, snp(y + h) - PX - Y, 0, 0xFF1B1E25u, 24); }          /* an off button: dithered back, like a greyed-out old one */
+        break;
+    case 4: px_box(x, y, w, h, k, C_BG, hv ? C_ACCH : C_ACC, 0xFF0F1115u, 0xFF2A2F39u); break;
+    default: px_box(x, y, w, h, k, hv ? C_CARDH : C_CARD, C_EDGE, hv ? C_BEVHH : C_BEVH, C_BEVD);
+    }
+}
+static int mod8(int v) { return ((v % 8) + 8) % 8; }
+/* one side of the marching ants: len art pixels from (x0, y0), dashes 4 on 4 off, at perimeter place p0 stepping by dir */
+static void ant_side(int horiz, int x0, int y0, int len, int p0, int dir, ARGB c) {
+    int i, run = -1;
+    for (i = 0; i <= len; i++) {
+        int on = i < len && mod8(p0 + dir * i - anim) < 4;
+        if (on && run < 0) run = i;
+        if (!on && run >= 0) { if (horiz) fillrect(x0 + run * PX, y0, (i - run) * PX, 2 * PX, c); else fillrect(x0, y0 + run * PX, 2 * PX, (i - run) * PX, c); run = -1; }
+    }
+}
+static void ants(int xd, int yd, int wd, int hd) {          /* dark dashes walking clockwise round a picked card's teal outline (the animation timer moves them) */
+    int x = snp(xd), y = snp(yd), W = (snp(xd + wd) - x) / PX, H = (snp(yd + hd) - y) / PX, lw = W - 4, lh = H - 4;
+    if (lw < 1 || lh < 1) return;
+    ant_side(1, x + 2 * PX, y, lw, 0, 1, C_TEALD);
+    ant_side(0, x + (W - 2) * PX, y + 2 * PX, lh, lw, 1, C_TEALD);
+    ant_side(1, x + 2 * PX, y + (H - 2) * PX, lw, 2 * lw + lh - 1, -1, C_TEALD);
+    ant_side(0, x, y + 2 * PX, lh, 2 * lw + 2 * lh - 1, -1, C_TEALD);
+}
+static void ribbon(int xd, int yd, int wd, ARGB c) {          /* a built card: a stepped corner flag, top right */
+    int xr = snp(xd + wd) - 2 * PX, yt = snp(yd) + 2 * PX, n = 7, j;
+    for (j = 0; j < n; j++) { fillrect(xr - (n - j) * PX, yt + j * PX, (n - j) * PX, PX, j == n - 1 ? C_EDGE : c); }
+}
+static void px_spinner(double cx, double cy, double r) {          /* 8 blocks round a ring; the lit one walks clockwise with a fading trail */
+    static const ARGB ramp[8] = { C_ACCH, C_ACC, C_TEALM, C_TEALD, C_NAVYH, C_NAVYH, C_NAVY, C_NAVY }; int i, b = 3 * PX, head = (anim / 2) & 7;
+    for (i = 0; i < 8; i++) { double a = i * 3.14159265358979 / 4 - 3.14159265358979 / 2; fillrect(snp(cx + r * cos(a) - b / 2.0), snp(cy + r * sin(a) - b / 2.0), b, b, ramp[(head - i) & 7]); }
+}
+
+/* ---------- the pixel font: Silkscreen (SIL Open Font License 1.1, docs\fonts\OFL.txt), regular and bold ----------
+   tools\bake_font.py bakes each face into a 1-bit atlas with its widths; bbb_kit.rc embeds both (RCDATA 201, 202), so
+   the exe stays one file. A string is built letter by letter into a small picture at one font pixel per pixel and drawn
+   scaled by a whole number with nearest-neighbour, so it stays crisp. Short text only: labels, chips, buttons, pills
+   and the title; long text (help, Details, the line under the title, captions) stays Segoe UI. A text that does not
+   fit its box at any pixel size is written in the plain font instead. */
+typedef struct { int rows, base, cap, first, count, aw; const unsigned char *gl, *at; } PFont;
+static PFont pf[2];          /* 0 regular, 1 bold */
+static void pf_load(void) {
+    int i;
+    for (i = 0; i < 2; i++) {
+        HRSRC r = FindResourceW(NULL, MAKEINTRESOURCEW(201 + i), (LPCWSTR)RT_RCDATA); HGLOBAL g; const unsigned char *p;
+        if (!r || !(g = LoadResource(NULL, r)) || !(p = (const unsigned char *)LockResource(g)) || SizeofResource(NULL, r) < 14 || memcmp(p, "BPF1", 4)) continue;
+        pf[i].rows = p[4]; pf[i].base = p[5]; pf[i].cap = p[6]; pf[i].first = p[7]; pf[i].count = p[8]; pf[i].aw = p[12] | p[13] << 8;
+        pf[i].gl = p + 14; pf[i].at = p + 14 + 5 * pf[i].count;
+    }
+}
+static const unsigned char *pf_glyph(const PFont *f, WCHAR ch) {          /* each: u16 atlas x, u8 ink width, s8 x offset, u8 advance */
+    int k;
+    if (ch == 0x2212) ch = L'-';          /* the minus sign of the number box */
+    k = ch - f->first;
+    if (k < 0 || k >= f->count) k = '?' - f->first;
+    return f->gl + 5 * k;
+}
+static int pf_width(const PFont *f, const WCHAR *s) {          /* from the pen to the right edge of the last letter's ink */
+    int pen = 0, right = 0;
+    for (; *s; s++) { const unsigned char *g = pf_glyph(f, *s); if (g[2]) right = pen + (signed char)g[3] + g[2]; pen += g[4]; }
+    return right;
+}
+/* which face and size a text gets: 1 regular x FS, 2 bold x FS, 3 regular x 2FS, 4 bold x 2FS; 0 the plain font.
+   role 0: labels, chips, buttons (bold, else regular); 1: the main buttons (big if it fits); 2: numbers and titles, big bold first */
+static const int ROLES[3][5] = { { 2, 1, 0 }, { 3, 2, 1, 0 }, { 4, 3, 2, 1, 0 } };
+static int spec_fits(int sp, const WCHAR *s, int w) { const PFont *f = &pf[(sp - 1) & 1]; int sc = sp > 2 ? 2 * FS : FS; return f->gl && pf_width(f, s) * sc <= w - 2 * sc; }
+static int pick_spec(int role, const WCHAR *s, int w) { const int *r; if (!lookFont) return 0; for (r = ROLES[role]; *r; r++) if (spec_fits(*r, s, w)) return *r; return 0; }
+static void pf_draw(int sp, const WCHAR *s, int x, int y, int w, int h, ARGB c, UINT fl) {
+    const PFont *f = &pf[(sp - 1) & 1]; int sc = sp > 2 ? 2 * FS : FS, tw = pf_width(f, s), bw = tw + 4, bh = f->rows, pen = 2, dx, dy, r, i; UINT32 *buf; GpBitmap *bm = NULL; const WCHAR *q;
+    if (tw <= 0 || !(buf = (UINT32 *)calloc((size_t)bw * bh, 4))) return;
+    for (q = s; *q; q++) {
+        const unsigned char *g = pf_glyph(f, *q); int ax = g[0] | g[1] << 8, iw = g[2], xo = (signed char)g[3];
+        for (r = 0; r < bh; r++) for (i = 0; i < iw; i++) if (f->at[r * f->aw + ax + i]) { int X = pen + xo + i; if (X >= 0 && X < bw) buf[r * bw + X] = c; }
+        pen += g[4];
+    }
+    dx = fl & DT_CENTER ? x + (w - tw * sc) / 2 : fl & DT_RIGHT ? x + w - tw * sc : x;
+    dy = y + (h - f->cap * sc + 1) / 2 - (f->base - f->cap) * sc;          /* the capitals centred in the box */
+    GdipCreateBitmapFromScan0(bw, bh, bw * 4, PixelFormat32bppARGB, (BYTE *)buf, &bm);
+    if (bm) {
+        GdipSetInterpolationMode(G, InterpolationModeNearestNeighbor); GdipDrawImageRectI(G, (GpImage *)bm, dx - 2 * sc, dy, bw * sc, bh * sc);
+        GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipDisposeImage((GpImage *)bm);
+    }
+    free(buf);
+}
+/* short text: the pixel font when it is on and the text fits (sp -1: choose for this text by role), else the plain font fo */
+static void ltxt(const WCHAR *s, int x, int y, int w, int h, HFONT fo, ARGB c, UINT fl, int role, int sp) {
+    if (sp < 0) sp = pick_spec(role, s, w);
+    if (sp && lookFont) pf_draw(sp, s, x, y, w, h, c, fl); else txt(s, x, y, w, h, fo, c, fl);
+}
+static int chipSpec = -1;          /* chips of one block share one font size, chosen so that every label of the block fits */
 static void chip(const char *label, int x, int y, int w, int h, int on, int kind, int idx) {
-    rr(x, y, w, h, S(6), on ? C_ACC : hov(kind, idx) ? C_CARDH : C_CARD, on ? 0 : C_LINE, 1);
-    txta(label, x, y, w, h, fUI, on ? C_ONACC : C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE); hit(x, y, w, h, kind, idx);
+    WCHAR b[200]; swprintf(b, 200, L"%hs", label);
+    if (lookPix) pbox(x, y, w, h, 1, on ? 1 : 0, !on && hov(kind, idx));
+    else rr(x, y, w, h, S(6), on ? C_ACC : hov(kind, idx) ? C_CARDH : C_CARD, on ? 0 : C_LINE, 1);
+    ltxt(b, x, y, w, h, fUI, on ? C_ONACC : C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 0, chipSpec); hit(x, y, w, h, kind, idx);
+}
+static void section(const WCHAR *label, int x, int y, int w, int h) {          /* the label over a block of the side panel */
+    if (lookPix && lookTex) {          /* on a navy scanline bar with a teal grip */
+        int X = snp(x), Y = snp(y), Wd = snp(x + w) - X, Hd = snp(y + h) - PX - Y, my = snp(Y + Hd / 2.0);
+        fillrect(X, Y, Wd, Hd, C_NAVY); texfill(X, Y, Wd, Hd, 1, C_NAVYD, 0); fillrect(X, Y, Wd, PX, C_NAVYH);
+        fillrect(X + 2 * PX, my - 3 * PX, PX, PX, C_ACC); fillrect(X + 2 * PX, my - PX, PX, PX, C_ACC); fillrect(X + 2 * PX, my + PX, PX, PX, C_ACC);
+        ltxt(label, X + 5 * PX, Y, Wd - 6 * PX, Hd, fLabel, C_BAR, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
+    } else ltxt(label, x, y, w, h, fLabel, C_DIM, DT_LEFT | DT_SINGLELINE, 0, -1);
 }
 static void chips(const WCHAR *label, const char **items, int n, int cols, int sel, int kind, int *y) {
-    int x0 = S(16), wAll = S(SIDE_W - 32), gap = S(4), ch = S(24), cw = (wAll - (cols - 1) * gap) / cols, i;
-    txt(label, x0, *y, wAll, S(18), fLabel, C_DIM, DT_LEFT | DT_SINGLELINE); *y += S(20);
+    int x0 = S(16), wAll = S(SIDE_W - 32), gap = S(4), ch = S(24), cw = (wAll - (cols - 1) * gap) / cols, i; const int *r;
+    if (label) { section(label, x0, *y, wAll, S(18)); *y += S(20); }          /* no label: a second block of the same choice */
+    chipSpec = 0;
+    if (lookFont) for (r = ROLES[0]; *r && !chipSpec; r++) { for (i = 0; i < n; i++) { WCHAR b[64]; swprintf(b, 64, L"%hs", items[i]); if (!spec_fits(*r, b, cw)) break; } if (i == n) chipSpec = *r; }
     for (i = 0; i < n; i++) chip(items[i], x0 + (i % cols) * (cw + gap), *y + (i / cols) * (ch + gap), cw, ch, i == sel, kind, i);
-    *y += ((n + cols - 1) / cols) * (ch + gap) + S(6);
+    chipSpec = -1; *y += ((n + cols - 1) / cols) * (ch + gap) + S(6);
 }
 /* style: 0 quiet, 1 the main button (teal), 2 gold outline, 3 off */
 static void button(const WCHAR *label, int x, int y, int w, int h, int style, int kind) {
     int hv = hov(kind, 0) && style != 3;
-    if (style == 1) rr(x, y, w, h, S(8), hv ? C_ACCH : C_ACC, 0, 0);
+    if (lookPix) pbox(x, y, w, h, 1, style, hv);
+    else if (style == 1) rr(x, y, w, h, S(8), hv ? C_ACCH : C_ACC, 0, 0);
     else if (style == 2) rr(x, y, w, h, S(8), hv ? C_CARDH : C_CARD, C_GOLD, S(2));
     else rr(x, y, w, h, S(8), hv ? C_CARDH : C_CARD, C_LINE, 1);
-    txt(label, x, y, w, h, style == 1 ? fBtn : fUI, style == 1 ? C_ONACC : style == 2 ? C_GOLD : style == 3 ? 0xFF5F6775u : C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    ltxt(label, x, y, w, h, style == 1 ? fBtn : fUI, style == 1 ? C_ONACC : style == 2 ? C_GOLD : style == 3 ? C_OFF : C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, style == 1 || style == 2 ? 1 : 0, -1);
     if (style != 3) hit(x, y, w, h, kind, 0);
 }
-static void pill(const WCHAR *s, int x, int y, int w, int h, ARGB bg, ARGB ink) { rr(x, y, w, h, h / 2.0, bg, 0, 0); txt(s, x, y, w, h, fSmall, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS); }
+static void pill(const WCHAR *s, int x, int y, int w, int h, ARGB bg, ARGB ink) {
+    int sp = pick_spec(0, s, w);
+    if (lookPix) px_box(x, y, w, h, 1, bg, 0, 0, 0); else rr(x, y, w, h, h / 2.0, bg, 0, 0);
+    if (sp) pf_draw(sp, s, x, y, w, h, ink, DT_CENTER); else txt(s, x, y, w, h, fSmall, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
 static void image_fit(GpImage *im, double x, double y, double w, double h) {
     UINT iw = 1, ih = 1; double s, dw, dh; GdipGetImageWidth(im, &iw); GdipGetImageHeight(im, &ih);
     s = w / iw < h / ih ? w / iw : h / ih; dw = iw * s; dh = ih * s; GdipDrawImageRect(G, im, (REAL)(x + (w - dw) / 2), (REAL)(y + (h - dh) / 2), (REAL)dw, (REAL)dh);
@@ -326,22 +541,34 @@ static void card(int i, int x, int y, int w, int h) {
     Cell *c = &cells[i]; int pad = S(10), iw = w - 2 * pad, hv = hov(H_CARD, i) && !busy, capY = y + pad + iw + S(6); WCHAR b[160];
     if (c->state == ST_PENDING) {          /* a grey card that breathes while its picture is being drawn */
         ARGB a = (ARGB)(150 + (int)(70 * (0.5 + 0.5 * sin((anim + i * 3) * 0.18))));
+        if (lookPix) {
+            px_box(x, y, w, h, 2, (a << 24) | (C_CARD & 0xFFFFFF), 0, 0, 0); px_disc(x + pad + iw / 2.0, y + pad + iw / 2.0, iw / 2.0, ((a / 6) << 24) | 0xFFFFFF);
+            px_box(x + pad, capY + S(4), iw * 0.6, S(10), 0, 0x18FFFFFF, 0, 0, 0); return;
+        }
         rr(x, y, w, h, S(12), (a << 24) | (C_CARD & 0xFFFFFF), 0, 0); rr(x + pad, y + pad, iw, iw, iw / 2.0, ((a / 6) << 24) | 0xFFFFFF, 0, 0);
         rr(x + pad, capY + S(4), iw * 0.6, S(10), S(5), 0x18FFFFFF, 0, 0); return;
     }
-    rr(x, y, w, h, S(12), hv ? C_CARDH : C_CARD, c->picked ? C_ACC : hv ? 0xFF4A5060u : C_LINE, c->picked ? S(3) : 1);
+    if (!lookPix) rr(x, y, w, h, S(12), hv ? C_CARDH : C_CARD, c->picked ? C_ACC : hv ? 0xFF4A5060u : C_LINE, c->picked ? S(3) : 1);
+    else if (c->picked) {          /* picked: a teal outline two art pixels thick (with marching ants when textures are on) */
+        px_box(x, y, w, h, 2, C_ACC, 0, 0, 0); px_box(x + PX, y + PX, w - 2 * PX, h - 2 * PX, 2, hv ? C_CARDH : C_CARD, C_ACC, C_BEVH, C_BEVD);
+        if (lookTex) ants(x, y, w, h);
+    } else px_box(x, y, w, h, 2, hv ? C_CARDH : C_CARD, hv ? 0xFF4A5060u : C_EDGE, hv ? C_BEVHH : C_BEVH, C_BEVD);
     if ((c->state == ST_OK || c->state == ST_VARIANT) && c->img3) {          /* built: the 3D picture, with its 2D drawing small in the corner to check one against the other */
         image_fit(c->img3, x + pad, y + pad + iw * 0.12, iw, iw * 0.88);
-        if (c->img) { double d = iw * 0.36; rr(x + pad - 1, y + pad - 1, d + 2, d + 2, d / 2 + 1, C_CARD, C_LINE, 1); image_fit(c->img, x + pad, y + pad, d, d); }
+        if (c->img) { double d = iw * 0.36; if (lookPix) px_box(x + pad - PX, y + pad - PX, d + 2 * PX, d + 2 * PX, 1, C_CARD, C_LINE, 0, 0); else rr(x + pad - 1, y + pad - 1, d + 2, d + 2, d / 2 + 1, C_CARD, C_LINE, 1); image_fit(c->img, x + pad, y + pad, d, d); }
     }
     else if (c->img) image_fit(c->img, x + pad, y + pad, iw, iw);
-    if (c->state == ST_BUILDING) {          /* dimmed, with a turning arc */
+    if (lookPix && lookTex && (c->state == ST_OK || c->state == ST_VARIANT)) ribbon(x, y, w, c->state == ST_OK ? C_ACC : C_GOLD);
+    if (c->state == ST_BUILDING && lookPix) {          /* dimmed, with blocks walking round */
+        px_disc(x + pad + iw / 2.0, y + pad + iw / 2.0, iw / 2.0, 0xA0101216); px_spinner(x + w / 2.0, y + pad + iw / 2.0, S(24));
+    } else if (c->state == ST_BUILDING) {          /* dimmed, with a turning arc */
         GpPen *pn; double cx = x + w / 2.0, cy = y + pad + iw / 2.0, r = S(18);
         rr(x + pad, y + pad, iw, iw, iw / 2.0, 0xA0101216, 0, 0);
         GdipCreatePen1(C_ACC, (REAL)S(4), UnitPixel, &pn); GdipSetPenStartCap(pn, LineCapRound); GdipSetPenEndCap(pn, LineCapRound);
         GdipDrawArc(G, pn, (REAL)(cx - r), (REAL)(cy - r), (REAL)(2 * r), (REAL)(2 * r), (REAL)((anim * 14) % 360), 260); GdipDeletePen(pn);
     }
-    if (c->picked) {          /* the tick */
+    if (c->picked && lookPix) { px_disc(x + w - S(22), y + S(22), S(12), C_ACC); px_tick(x + w - S(22), y + S(22), C_ONACC); }
+    else if (c->picked) {          /* the tick */
         GpSolidFill *bf; GpPen *pn; double cx = x + w - S(22), cy = y + S(22), r = S(12); GpPointF pt[3];
         GdipCreateSolidFill(C_ACC, &bf); GdipFillEllipse(G, (GpBrush *)bf, (REAL)(cx - r), (REAL)(cy - r), (REAL)(2 * r), (REAL)(2 * r)); GdipDeleteBrush((GpBrush *)bf);
         GdipCreatePen1(C_ONACC, (REAL)S(2.6), UnitPixel, &pn); GdipSetPenStartCap(pn, LineCapRound); GdipSetPenEndCap(pn, LineCapRound); GdipSetPenLineJoin(pn, LineJoinRound);
@@ -362,37 +589,74 @@ static void help(int W, int H);
 static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H); WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
-    GdipCreateFromHDC(DC, &G); GdipSetSmoothingMode(G, SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
+    GdipCreateFromHDC(DC, &G); GdipSetSmoothingMode(G, lookPix ? SmoothingModeNone : SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
     nhit = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
+    if (lookPix && lookTex) {          /* textures: stone on the side panel, a navy scanline title bar over it, faint scanlines on the top */
+        int tb = snp(S(66));
+        texfill(0, 0, mx, H, 2, C_STONEL, 0);
+        fillrect(0, 0, mx, tb, C_NAVY); texfill(0, 0, mx, tb, 1, C_NAVYD, 0); fillrect(0, tb - PX, mx, PX, C_TEALD);
+        texfill(mx + 1, 0, mw, S(HEAD_H) - 2 * PX, 1, 0xFF181A20u, 0);
+    }
 
     /* the left side: what to make */
-    txt(L"Balderding's Ballin Base Kit", S(16), S(14), S(SIDE_W - 24), S(26), fTitle, C_TEXT, DT_LEFT | DT_SINGLELINE);
-    txt(L"Save time and money.", S(16), S(40), S(SIDE_W - 32), S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
+    if (lookFont && pick_spec(2, L"Balderding's Ballin Base Kit", S(SIDE_W - 24)) < 3 && pick_spec(2, L"Balderding's Ballin", S(SIDE_W - 24)) >= 3) {          /* the pixel title: on two lines, so it can be big */
+        int sp = pick_spec(2, L"Balderding's Ballin", S(SIDE_W - 24));
+        pf_draw(sp, L"Balderding's Ballin", S(16), S(6), S(SIDE_W - 24), S(22), C_TEXT, DT_LEFT); pf_draw(sp, L"Base Kit", S(16), S(28), S(SIDE_W - 24), S(22), C_TEXT, DT_LEFT);
+        txt(L"Save time and money.", S(16), S(48), S(SIDE_W - 32), S(16), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
+    } else {
+        ltxt(L"Balderding's Ballin Base Kit", S(16), S(14), S(SIDE_W - 24), S(26), fTitle, C_TEXT, DT_LEFT | DT_SINGLELINE, 2, -1);
+        txt(L"Save time and money.", S(16), S(40), S(SIDE_W - 32), S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
+    }
     y = S(68);
-    chips(L"STYLE", STYLES, 19, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM", SIZES, 16, 6, selSize, H_SIZE, &y);
+    chips(L"STYLE", STYLES, 19, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 8, selSize, H_SIZE, &y); y -= S(4); chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, selSize - NROUND, H_OVAL, &y);
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
     chips(L"OBJECTS SIZED FOR FIGURES OF", SCALES, 4, 4, selScale, H_SCALE, &y);
     {          /* how many: a number from 1 to 20. Type it, or use the minus and plus */
         int x0 = S(16), wAll = S(SIDE_W - 32), bh = S(30), bw = S(40), fresh = GetTickCount() - lastDigit < 1500; WCHAR nb[8];
-        txt(L"HOW MANY BASES  (1 TO 20)", x0, y, wAll, S(18), fLabel, C_DIM, DT_LEFT | DT_SINGLELINE); y += S(20);
-        rr(x0, y, bw, bh, S(6), hov(H_COUNT, -1) ? C_CARDH : C_CARD, C_LINE, 1); txt(L"\x2212", x0, y, bw, bh, fBtn, selCount > 1 ? C_TEXT : 0xFF5F6775u, DT_CENTER | DT_VCENTER | DT_SINGLELINE); hit(x0, y, bw, bh, H_COUNT, -1);
-        rr(x0 + wAll - bw, y, bw, bh, S(6), hov(H_COUNT, 1) ? C_CARDH : C_CARD, C_LINE, 1); txt(L"+", x0 + wAll - bw, y, bw, bh, fBtn, selCount < 20 ? C_TEXT : 0xFF5F6775u, DT_CENTER | DT_VCENTER | DT_SINGLELINE); hit(x0 + wAll - bw, y, bw, bh, H_COUNT, 1);
-        rr(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, S(6), C_BG, fresh ? C_ACCH : C_ACC, fresh ? S(2) : 1);
-        swprintf(nb, 8, L"%d", selCount); txt(nb, x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, fBig, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE); hit(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, H_COUNT, 0);
+        section(L"HOW MANY BASES  (1 TO 20)", x0, y, wAll, S(18)); y += S(20);
+        if (lookPix) { pbox(x0, y, bw, bh, 1, 0, hov(H_COUNT, -1)); pbox(x0 + wAll - bw, y, bw, bh, 1, 0, hov(H_COUNT, 1)); pbox(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, 1, 4, fresh); }
+        else { rr(x0, y, bw, bh, S(6), hov(H_COUNT, -1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + wAll - bw, y, bw, bh, S(6), hov(H_COUNT, 1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, S(6), C_BG, fresh ? C_ACCH : C_ACC, fresh ? S(2) : 1); }
+        ltxt(L"\x2212", x0, y, bw, bh, fBtn, selCount > 1 ? C_TEXT : C_OFF, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0, y, bw, bh, H_COUNT, -1);
+        ltxt(L"+", x0 + wAll - bw, y, bw, bh, fBtn, selCount < 20 ? C_TEXT : C_OFF, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + wAll - bw, y, bw, bh, H_COUNT, 1);
+        swprintf(nb, 8, L"%d", selCount); ltxt(nb, x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, fBig, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, H_COUNT, 0);
         y += bh + S(8);
     }
-    chip("Allow overhangs (the print needs supports)", S(16), y, S(SIDE_W - 32), S(24), selSup, H_SUP, 0); y += S(34);
+    chip("Allow overhangs (the print needs supports)", S(16), y, S(SIDE_W - 32), S(24), selSup, H_SUP, 0); y += S(30);
+    {          /* speed: CPU threads, video card */
+        int x0 = S(16), wAll = S(SIDE_W - 32), half = (wAll - S(6)) / 2;
+        section(L"SPEED", x0, y, wAll, S(18)); y += S(20);
+        chip("CPU threads", x0, y, half, S(24), spThr, H_SPEED, 0); chip("Video card", x0 + half + S(6), y, wAll - half - S(6), S(24), spGpu, H_SPEED, 1); y += S(34);
+    }
     swprintf(b, 200, ncell ? L"Show %d new choices" : L"Show %d choices", selCount);
     button(b, S(16), y, S(SIDE_W - 32), S(40), busy ? 3 : (!np ? 1 : 0), H_SHOW); y += S(46);
     swprintf(b, 200, selCount == 1 ? L"Or build 1 straight away" : L"Or build %d straight away", selCount);
     button(b, S(16), y, S(SIDE_W - 32), S(30), busy ? 3 : 0, H_QUICK);
 
     /* the top: what is happening */
-    txt(head, mx + S(22), S(14), mw - S(44) - S(110), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+    {          /* the look switches, left of Help: Pixel (L), Textures (T), Pixel font (F) */
+        static const char *LK[3] = { "Pixel", "Textures", "Pixel font" }; static const int LW[3] = { 58, 78, 86 }; int on[3], lx = W - S(22) - S(96) - S(10), k;
+        on[0] = lookPix; on[1] = lookTex; on[2] = lookFont;
+        for (k = 2; k >= 0; k--) { lx -= S(LW[k]); chip(LK[k], lx, S(14), S(LW[k]), S(22), on[k], H_LOOK, k); lx -= S(4); }
+    }
+    txt(head, mx + S(22), S(14), mw - S(44) - S(110) - S(238), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     txt(sub, mx + S(22), S(42), mw - S(44) - S(110), S(20), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     button(L"Help   ?", W - S(22) - S(96), S(18), S(96), S(34), 0, H_HELP);
-    fillrect(mx + 1, S(HEAD_H) - S(3), mw, S(3), C_LINE);
-    if (busy && wanted) { double f = (doneN + 0.15) / (double)wanted; if (f > 1) f = 1; fillrect(mx + 1, S(HEAD_H) - S(3), (int)(mw * f), S(3), C_ACC); }
+    if (!lookPix) {
+        fillrect(mx + 1, S(HEAD_H) - S(3), mw, S(3), C_LINE);
+        if (busy && wanted) { double f = (doneN + 0.15) / (double)wanted; if (f > 1) f = 1; fillrect(mx + 1, S(HEAD_H) - S(3), (int)(mw * f), S(3), C_ACC); }
+    } else {          /* the line under the top, a whole number of art pixels high: a lit row over a dark one */
+        int ly = S(HEAD_H) - 2 * PX; double f = busy && wanted ? (doneN + 0.15) / (double)wanted : 0;
+        if (f > 1) f = 1;
+        fillrect(mx + 1, ly, mw, PX, C_LINE); fillrect(mx + 1, ly + PX, mw, PX, C_EDGE);
+        if (f > 0 && lookTex) {          /* segmented: blocks of 6 art pixels; the one being worked on blinks green */
+            int seg = 6 * PX, step = seg + PX, n = mw / step, lit = (int)(f * n), k, by = ly - PX;
+            fillrect(mx + 1, by, mw, 3 * PX, C_EDGE);
+            for (k = 0; k < n; k++) {
+                ARGB c = k < lit ? C_ACC : k == lit ? ((anim & 4) ? C_GREEN : C_TEALM) : 0xFF262A33u;
+                fillrect(mx + 1 + k * step, by, seg, 3 * PX, c); if (k < lit) fillrect(mx + 1 + k * step, by, seg, PX, C_ACCH);
+            }
+        } else if (f > 0) { fillrect(mx + 1, ly, snp(mw * f), PX, C_ACCH); fillrect(mx + 1, ly + PX, snp(mw * f), PX, C_TEALD); }
+    }
 
     /* the middle: the choices */
     SetRect(&gridR, mx + 1, S(HEAD_H), W, fy - (showDetails ? S(170) : 0));
@@ -410,8 +674,9 @@ static void paint(HDC out, int W, int H) {
                                           L"Press Build. The kit makes the picked bases, checks that each one will print, and saves them as STL files." };
             int cy0 = gridR.top + vh / 2 - S(90);
             for (i = 0; i < 3; i++) {
-                WCHAR num[4]; swprintf(num, 4, L"%d", i + 1); rr(gridR.left + S(60), cy0 + i * S(60), S(34), S(34), S(17), C_CARD, C_ACC, S(2));
-                txt(num, gridR.left + S(60), cy0 + i * S(60), S(34), S(34), fBtn, C_ACC, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                WCHAR num[4]; swprintf(num, 4, L"%d", i + 1);
+                if (lookPix) px_box(gridR.left + S(60), cy0 + i * S(60), S(34), S(34), 2, C_CARD, C_ACC, C_BEVH, C_BEVD); else rr(gridR.left + S(60), cy0 + i * S(60), S(34), S(34), S(17), C_CARD, C_ACC, S(2));
+                ltxt(num, gridR.left + S(60), cy0 + i * S(60), S(34), S(34), fBtn, C_ACC, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1);
                 txt(st[i], gridR.left + S(110), cy0 + i * S(60) - S(6), gridR.right - gridR.left - S(170), S(46), fBig, C_TEXT, DT_LEFT | DT_WORDBREAK);
             }
         }
@@ -419,22 +684,30 @@ static void paint(HDC out, int W, int H) {
             int cx = gridR.left + pad + (i % cols) * (cw + gap), cy = gridR.top + pad + (i / cols) * (ch + gap) - scrollY;
             if (cy + ch > gridR.top && cy < gridR.bottom) card(i, cx, cy, cw, ch);
         }
-        if (scrollMax) { double th = (double)vh * vh / total, ty = gridR.top + (double)scrollY / scrollMax * (vh - th); rr(gridR.right - S(9), ty + S(3), S(5), th - S(6), S(3), 0xFF4A5060u, 0, 0); }
+        if (scrollMax) { double th = (double)vh * vh / total, ty = gridR.top + (double)scrollY / scrollMax * (vh - th);
+            if (!lookPix) rr(gridR.right - S(9), ty + S(3), S(5), th - S(6), S(3), 0xFF4A5060u, 0, 0);
+            else {          /* a pixel thumb three art pixels wide, on a dithered track when textures are on */
+                int tx = snp(gridR.right - S(10));
+                if (lookTex) texfill(tx, gridR.top, 3 * PX, vh, 0, C_LINE, 20);
+                px_box(tx, ty + S(3), 3 * PX, th - S(6), 1, 0xFF4A5060u, 0, C_OFF, 0xFF353A46u);
+            } }
         GdipResetClip(G); GdipFlush(G, FlushIntentionSync); SelectClipRgn(DC, NULL);
     }
     if (showDetails) {          /* what the kit itself says, for when something goes wrong */
         int dy = gridR.bottom, dh = S(170), lh = S(16), k = (dh - S(34)) / lh, j, from = nlog > k ? nlog - k : 0;
-        fillrect(mx + 1, dy, mw, dh, C_SIDE); fillrect(mx + 1, dy, mw, 1, C_LINE);
-        txt(L"DETAILS: WHAT THE KIT SAYS", mx + S(22), dy + S(8), mw, S(18), fLabel, C_DIM, DT_LEFT | DT_SINGLELINE);
+        fillrect(mx + 1, dy, mw, dh, C_SIDE); if (lookPix && lookTex) texfill(mx + 1, dy, mw, dh, 2, C_STONEL, 0);
+        fillrect(mx + 1, dy, mw, lookPix ? PX : 1, C_LINE);
+        section(L"DETAILS: WHAT THE KIT SAYS", mx + S(22), dy + S(8), S(320), S(18));
         for (j = from; j < nlog; j++) txt(logv[j], mx + S(22), dy + S(28) + (j - from) * lh, mw - S(44), lh, fMono, 0xFFC4CAD4u, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
 
     /* the bottom: what to do with the picks */
-    fillrect(mx + 1, fy, mw, S(FOOT_H), C_SIDE); fillrect(mx + 1, fy, mw, 1, C_LINE);
+    fillrect(mx + 1, fy, mw, S(FOOT_H), C_SIDE); if (lookPix && lookTex) texfill(mx + 1, fy, mw, S(FOOT_H), 2, C_STONEL, 0);
+    fillrect(mx + 1, fy, mw, lookPix ? PX : 1, C_LINE);
     {
         int by = fy + S(15), bh = S(36), x = mx + S(22), rx = W - S(22), btnw = S(220);
         if (busy == 2) swprintf(b, 200, L"%d to go", wanted - doneN); else if (np == 1) wcscpy(b, L"1 picked"); else swprintf(b, 200, L"%d picked", np);
-        txt(b, x, by, S(84), bh, fBtn, np || busy == 2 ? C_ACC : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE); x += S(88);
+        ltxt(b, x, by, S(84), bh, fBtn, np || busy == 2 ? C_ACC : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1, -1); x += S(88);
         button(L"Pick all", x, by, S(84), bh, busy || !ncell ? 3 : 0, H_ALL); x += S(92);
         button(L"Clear", x, by, S(70), bh, busy || !np ? 3 : 0, H_CLEAR); x += S(78);
         button(L"More choices", x, by, S(118), bh, busy || !ncell ? 3 : 0, H_MORE);
@@ -452,15 +725,17 @@ static void paint(HDC out, int W, int H) {
 /* the help page: a panel over the window, opened with ? (Shift+/), F1 or the Help button, closed with Esc or a click */
 static int para(const WCHAR *title, const WCHAR *body, int x, int y, int w) {
     RECT r = { x, y, x + w, y + 2000 };
-    if (title) { txt(title, x, y, w, S(18), fLabel, C_ACC, DT_LEFT | DT_SINGLELINE); y += S(20); r.top = y; }
+    if (title) { ltxt(title, x, y, w, S(18), fLabel, C_ACC, DT_LEFT | DT_SINGLELINE, 1, -1); y += S(20); r.top = y; }
     GdipFlush(G, FlushIntentionSync); SelectObject(DC, fUI); DrawTextW(DC, body, -1, &r, DT_LEFT | DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
     txt(body, x, y, w, r.bottom - r.top, fUI, C_TEXT, DT_LEFT | DT_WORDBREAK);
     return y + (r.bottom - r.top) + S(12);
 }
 static void help(int W, int H) {
     int pw = W - S(80) > S(1040) ? S(1040) : W - S(80), ph = H - S(50) > S(700) ? S(700) : H - S(50), px = (W - pw) / 2, py = (H - ph) / 2, cwid = (pw - S(84)) / 2, x1 = px + S(28), x2 = x1 + cwid + S(28), y;
-    fillrect(0, 0, W, H, 0xB0080A0Du); rr(px, py, pw, ph, S(14), C_SIDE, C_LINE, 1);
-    txt(L"Help", x1, py + S(18), S(300), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE);
+    fillrect(0, 0, W, H, 0xB0080A0Du);
+    if (lookPix) px_box(px, py, pw, ph, 2, C_SIDE, C_EDGE, C_BEVH, C_BEVD); else rr(px, py, pw, ph, S(14), C_SIDE, C_LINE, 1);
+    if (lookPix && lookTex) { int bx = snp(px) + 2 * PX, by = snp(py) + 2 * PX, bw = snp(px + pw) - 2 * PX - bx, bh = snp(S(48)); fillrect(bx, by, bw, bh, C_NAVY); texfill(bx, by, bw, bh, 1, C_NAVYD, 0); fillrect(bx, by + bh - PX, bw, PX, C_TEALD); }          /* its title bar */
+    ltxt(L"Help", x1, py + S(18), S(300), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE, 2, -1);
     txt(L"Esc, ? or a click closes this", px, py + S(22), pw - S(28), S(20), fSmall, C_DIM, DT_RIGHT | DT_SINGLELINE);
     GdipFlush(G, FlushIntentionSync); IntersectClipRect(DC, px, py, px + pw, py + ph - S(10));
     y = py + S(58);
@@ -468,17 +743,17 @@ static void help(int W, int H) {
                               L"2.  Click the designs you like. A teal tick marks a picked one; click again to un-pick.\n"
                               L"3.  Press Build. Each picked base is made as an STL file and checked that it will print.", x1, y, cwid);
     y = para(L"THE OPTIONS ON THE LEFT", L"Style:  the kind of ground and the things on it (mine, swamp, temple ...).\n"
-                              L"Base size:  the width of the round base in millimetres, 20 to 160.\n"
+                              L"Base size:  the width of the round base in millimetres, 20 to 160; or an oval, long x short (60x35.5 to 170x109).\n"
                               L"Detail:  1 is the simplest, 4 has the most on it. Mix gives some of each.\n"
                               L"The miniature it is for:  the kit keeps the spot flat where that kind of model stands. Default takes it from settings.json; none keeps no spot.\n"
-                              L"Objects sized for figures of:  how tall your miniatures are. A barrel, a rail track or a campfire is then the right size beside them, the same on every base: a small base holds a few things or a part of one, a large base holds a whole scene. \"tiny\" is the old look, a small landscape about a third of true size. The spot where the miniature stands is always kept flat and on the base.\n"
+                              L"Objects sized for figures of:  \"classic\" (the default) makes every base a whole small scene, its things about a third of true size beside a 32 mm figure. 32 mm, 28 mm or 15 mm makes the things true to a figure of that height instead: a small base then shows only a part of a scene, a large base gets real ground (rises, gullies, pools), and the picture shows a post as tall as the figure. The spot where the miniature stands is always kept flat and on the base.\n"
                               L"How many bases:  1 to 20. Type the number or use the minus and plus. That many designs are drawn each time.\n"
                               L"Allow overhangs:  things may hang over (rounder barrels, arching ribs). The print then needs supports. Off: every base prints without supports.", x1, y, cwid);
     y = para(L"WHERE THE FILES GO", L"The first time, the kit fetches the free model packs its details are made from (public domain, about 90 MB, once). The top line says so while it does, and Details shows from where. \"models_download\": false in settings.json stops it.\n"
                               L"Every base you build is copied into one folder, out\\picked_<date>_<time> in the kit folder, named by style, size and theme: the STL, its 3D picture (_3d.png), its drawing from above (_2d.png) and its plan. Open folder takes you there.", x1, y, cwid);
     y = py + S(58);
     y = para(L"THE CARDS", L"A flat picture from above is a design that is not built yet.\n"
-                              L"A grey 3D picture is the finished base, with its drawing small in the corner so you can check one against the other.\n"
+                              L"A grey 3D picture is the finished base, with its drawing small in the corner so you can check one against the other. The post standing beside it is a figure of the height you chose, to judge the scale by.\n"
                               L"Teal BUILT:  built, and it passed the print check. Click the card to show its STL file.\n"
                               L"Gold \"built as a new variant\":  the design you picked failed the print check, so the kit built a different one in its place.\n"
                               L"Gold \"not built\":  no good base after four tries. Details says why.\n"
@@ -493,6 +768,9 @@ static void help(int W, int H) {
                               L"Ctrl+A:  pick all.      D:  details.      ? or F1:  this page.\n"
                               L"0 to 9:  how many bases (1 then 5 is 15).      + and -:  one more, one fewer.\n"
                               L"Mouse wheel:  scroll the designs. Drag the window's edge to make it any size; it opens the same way next time.", x2, y, cwid);
+    y = para(L"THE LOOK", L"L:  pixel or smooth look.     T:  textures (pixel look only).     F:  pixel or plain font for the short words.\n"
+                              L"The switches at the top right do the same; the kit remembers them.\n"
+                              L"Pixel font: Silkscreen (The Silkscreen Project Authors), SIL Open Font License 1.1, docs\\fonts\\OFL.txt.", x2, y, cwid);
     (void)y; SelectClipRgn(DC, NULL); nhit = 0; hit(0, 0, W, H, H_HELP, 0);
 }
 static void capture(const WCHAR *path) {
@@ -513,17 +791,23 @@ static void open_folder(void) {
     if (GetFileAttributesW(p) == INVALID_FILE_ATTRIBUTES) wcscpy(p, kit);
     ShellExecuteW(hMain, L"open", p, NULL, NULL, SW_SHOWNORMAL);
 }
-static void act(int kind, int idx) {
+static void act2(int kind, int idx);
+static void act(int kind, int idx) {          /* every click and key: do it, then start or stop the animation timer */
+    act2(kind, idx); anim_tick();
+}
+static void act2(int kind, int idx) {
     int i;
     switch (kind) {
     case H_STYLE: selStyle = idx; break;
     case H_SIZE: selSize = idx; break;
+    case H_OVAL: selSize = NROUND + idx; break;
     case H_DETAIL: selDetail = idx; break;
     case H_MINI: selMini = idx; break;
     case H_SCALE: selScale = idx; break;
     case H_COUNT: selCount += idx; if (selCount < 1) selCount = 1; if (selCount > 20) selCount = 20; break;
     case H_QUICK: if (!busy) { autoBuild = 1; ask_choices(1); if (!busy) autoBuild = 0; } return;
     case H_SUP: selSup = !selSup; break;
+    case H_SPEED: if (idx == 0) spThr = !spThr; else spGpu = !spGpu; speed_env(); break;
     case H_SHOW: ask_choices(1); return;
     case H_MORE: ask_choices(0); return;
     case H_GO: build(); return;
@@ -533,6 +817,7 @@ static void act(int kind, int idx) {
     case H_OPEN: open_folder(); return;
     case H_DETAILS: showDetails = !showDetails; break;
     case H_HELP: showHelp = !showHelp; break;
+    case H_LOOK: if (idx == 0) lookPix = !lookPix; else if (idx == 1) lookTex = !lookTex; else lookFont = !lookFont; break;
     case H_CARD: {
         Cell *c = &cells[idx]; int np;
         if (busy) break;
@@ -550,6 +835,17 @@ static void hover_at(int x, int y) {
     if (k == H_CARD && !PtInRect(&gridR, p)) { k = H_NONE; id = -1; }
     if (k != hovK || id != hovI) {
         hovK = k; hovI = id;
+        if (k == H_LOOK) {          /* say what the switch under the mouse does */
+            static const WCHAR *lt[3] = { L"Pixel look (key L): blocky pixel frames in whole art pixels. Off: the smooth look with round corners.",
+                                          L"Textures (key T): stone on the side panel, scanline bars, a segmented progress bar, marching ants round picked bases. Pixel look only.",
+                                          L"Pixel font (key F): a pixel font for labels, chips, buttons and the title; long text stays plain. Off: the plain font everywhere." };
+            wcscpy(sub, lt[id]);
+        }
+        if (k == H_SPEED) {          /* say what the speed switch under the mouse does */
+            static const WCHAR *st[2] = { L"CPU threads: the height field and the mesh are made on as many CPU threads as the base needs (up to all of them), about 3 times faster for those steps. Off: one core, the proven path.",
+                                          L"Video card: the 3D pictures are drawn by the video card (Direct3D 11), in a fraction of a second. Off: drawn by Python, seconds per base." };
+            wcscpy(sub, st[id]);
+        }
         if (k == H_CARD && !busy && cells[id].state != ST_PENDING) {          /* say what the card under the mouse is */
             Cell *c = &cells[id];
             if (c->why[0]) swprintf(sub, 300, L"%ls", c->why);
@@ -563,10 +859,12 @@ static void hover_at(int x, int y) {
 static void make_fonts(void) {
     HFONT *fs[] = { &fTitle, &fLabel, &fUI, &fSmall, &fBig, &fBtn, &fMono }; int px[] = { 19, 11, 13, 12, 18, 15, 12 }, wt[] = { 700, 600, 400, 400, 600, 600, 400 }, i;
     for (i = 0; i < 7; i++) { if (*fs[i]) DeleteObject(*fs[i]); *fs[i] = CreateFontW(-S(px[i]), 0, 0, 0, wt[i], 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, i == 6 ? L"Consolas" : L"Segoe UI"); }
+    PX = (int)(SC * 2 + 0.25); if (PX < 1) PX = 1;          /* the art pixel and the pixel font's scale follow the monitor's scaling */
+    FS = (int)(SC + 0.25); if (FS < 1) FS = 1;
 }
 static void ini(int save) {
-    WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale }; int lim[] = { 19, 16, 5, 13, 21, 2, 2, 4 }, i;
-    static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"figure" };
+    WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu }; int lim[] = { 19, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2 }, i;
+    static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"look", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
@@ -580,7 +878,7 @@ static void ini(int save) {
         savedR.right = (int)GetPrivateProfileIntW(L"window", L"right", 0, p); savedR.bottom = (int)GetPrivateProfileIntW(L"window", L"bottom", 0, p);
         savedMax = (int)GetPrivateProfileIntW(L"window", L"maximized", 0, p);
     }
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < 13; i++) {
         if (save) { swprintf(v, 16, L"%d", *vals[i]); WritePrivateProfileStringW(L"window", keys[i], v, p); }
         else { int x = (int)GetPrivateProfileIntW(L"window", keys[i], *vals[i], p); if (x >= (i == 4) && x < lim[i]) *vals[i] = x; }
     }
@@ -607,6 +905,9 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == VK_ESCAPE) { if (showHelp) act(H_HELP, 0); else act(H_STOP, 0); }
         else if (w == 'A' && GetKeyState(VK_CONTROL) < 0) act(H_ALL, 0);
         else if (w == 'D') act(H_DETAILS, 0);
+        else if (w == 'L' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 0);          /* the look: L pixel / smooth, T textures, F pixel font */
+        else if (w == 'T' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 1);
+        else if (w == 'F' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 2);
         return 0;
     case WM_CHAR:          /* digits set "how many": 1 then 5 within a moment is 15 */
         if (showHelp) return 0;
@@ -620,7 +921,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
     case WM_SIZE: redraw(); return 0;
-    case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, S(1190), S(860) }; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
+    case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, S(1190), S(890) }; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
     case 0x02E0: { RECT *r = (RECT *)l; SC = HIWORD(w) / 96.0; make_fonts(); SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
     case WM_DESTROY: if (hJob) TerminateJobObject(hJob, 1); if (!selftest) ini(1); PostQuitMessage(0); return 0;
     }
@@ -636,6 +937,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     WNDCLASSW wc; MSG msg; RECT wa, r; WCHAR t[MAX_PATH], e[MAX_PATH], *sl; FILE *f; int cw = 1290, chh = 896; JOBOBJECT_EXTENDED_LIMIT_INFORMATION ji; DWORD ex = 0; BOOL dark = TRUE;
     GdiplusStartupInput gin = { 1, NULL, FALSE, FALSE }; ULONG_PTR gtok; HMODULE u32 = GetModuleHandleW(L"user32.dll"), dwm; HDC sdc;
     (void)hp;
+    if (!strncmp(cmdA, "--core-", 7)) return bbb_core_main(cmdA);          /* the kit's C parts, for the Python builder: no window (cport\core.c) */
     if (!strncmp(cmdA, "--demotest", 10)) { selftest = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); }
     else if (!strncmp(cmdA, "--quicktest", 11)) { selftest = 1; stStep = 2; autoBuild = 1; stSize = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 11 + (cmdA[11] == ' ')); }
     else if (!strncmp(cmdA, "--resizetest", 12)) { selftest = 2; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
@@ -653,12 +955,13 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     hJob = CreateJobObjectW(NULL, NULL);
     if (hJob) { memset(&ji, 0, sizeof ji); ji.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE; SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &ji, sizeof ji); }
     { typedef BOOL(WINAPI *F)(HANDLE); F fn = (F)(void *)GetProcAddress(u32, "SetProcessDpiAwarenessContext"); if (!fn || !fn((HANDLE)-4)) SetProcessDPIAware(); }          /* sharp on every monitor */
-    GdiplusStartup(&gtok, &gin, NULL);
+    GdiplusStartup(&gtok, &gin, NULL); pf_load();
     sdc = GetDC(NULL); SC = GetDeviceCaps(sdc, LOGPIXELSY) / 96.0; ReleaseDC(NULL, sdc);
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
-    if ((chh + 44) * SC > wa.bottom - wa.top) { chh = (int)((wa.bottom - wa.top) / SC) - 44; if (chh < 860) { chh = 860; SC = (wa.bottom - wa.top) / (double)(chh + 44); } }          /* a small screen: a lower window, and only then everything a little smaller */
+    if ((chh + 44) * SC > wa.bottom - wa.top) { chh = (int)((wa.bottom - wa.top) / SC) - 44; if (chh < 890) { chh = 890; SC = (wa.bottom - wa.top) / (double)(chh + 44); } }          /* a small screen: a lower window, and only then everything a little smaller */
     if ((cw + 20) * SC > wa.right - wa.left) cw = (int)((wa.right - wa.left) / SC) - 20;
     if (!selftest) ini(0);
+    speed_env();          /* the speed switches, for every Python job started from here on */
     make_fonts(); wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
     memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIcon(NULL, IDI_APPLICATION); RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
@@ -673,19 +976,25 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         if (savedMax) show = SW_SHOWMAXIMIZED;
     }
     ShowWindow(hMain, selftest ? SW_SHOWNOACTIVATE : show); UpdateWindow(hMain);
+    if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_LOOK", e, sizeof e) >= 3) { lookPix = e[0] == '1'; lookTex = e[1] == '1'; lookFont = e[2] == '1'; } }          /* a test may ask for another look: 3 digits, pixel textures font */
     if (selftest == 2) {          /* --resizetest: make the window larger, then as small as it will go, and write down what it became */
         FILE *o; WCHAR q[MAX_PATH]; RECT a, b2, c2; LONG st = GetWindowLongW(hMain, GWL_STYLE); int i;
         GetClientRect(hMain, &a); SetWindowPos(hMain, NULL, 0, 0, a.right + S(520), a.bottom + S(300), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); GetClientRect(hMain, &b2);
         for (i = 0; i < 26; i++) { memset(&cells[i], 0, sizeof(Cell)); cells[i].state = ST_NONE; cells[i].n = i + 1; cells[i].tier = 4; cells[i].picked = i % 5 == 0; strcpy(cells[i].seed, "test"); swprintf(cells[i].theme, 64, L"sample %d", i + 1); }
         ncell = 26; wcscpy(head, L"Resize test: 26 sample cards"); PostMessageW(hMain, WM_CHAR, '1', 0); PostMessageW(hMain, WM_CHAR, '5', 0);
-        { MSG m2; while (PeekMessageW(&m2, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m2); DispatchMessageW(&m2); } } capture(stShot);
+        { MSG m2; while (PeekMessageW(&m2, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m2); DispatchMessageW(&m2); } }
+        if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* only to look at the drawing: a few cards building, built, failed, waiting, and a half-full progress bar, in the first picture */
+            cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5;
+            capture(stShot); busy = 0; for (i = 1; i < 8; i++) if (i != 5) cells[i].state = ST_NONE;
+        } else capture(stShot);
         SetWindowPos(hMain, NULL, 0, 0, 200, 200, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); GetClientRect(hMain, &c2);
         swprintf(q, MAX_PATH, L"%ls.small.bmp", stShot); capture(q);
         SetWindowPos(hMain, NULL, 0, 0, S(1310), S(850), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); showHelp = 1; swprintf(q, MAX_PATH, L"%ls.help.bmp", stShot); capture(q); showHelp = 0; swprintf(q, MAX_PATH, L"%ls.txt", stShot); o = _wfopen(q, L"w");
         if (o) { fprintf(o, "how_many_after_typing_1_5 %d\n", selCount); fprintf(o, "thick_frame %d\nmaximize_box %d\nstart %ldx%ld\nlarger %ldx%ld\nsmallest %ldx%ld\nscroll_max_small %d\n", !!(st & WS_THICKFRAME), !!(st & WS_MAXIMIZEBOX), a.right, a.bottom, b2.right, b2.bottom, c2.right, c2.bottom, scrollMax); fclose(o); }
         return 0;
     }
-    if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) & 3; }          /* a test may ask for another figure size: 0 = 32 mm ... 3 = tiny */
+    if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) & 3; }          /* a test may ask for another figure size: 0 = 32 mm ... 3 = classic */
+    if (selftest) { char e[16]; int i; if (GetEnvironmentVariableA("BBB_TEST_SIZE", e, sizeof e)) for (i = 0; i < NSIZES; i++) if (!strcmp(e, SIZES[i])) stSize = i; }          /* and another base size, as written on its chip: 60, 90x52 ... */
     if (selftest == 3) { selStyle = 14; selSize = 8; selDetail = 4; selMini = 0; selCount = 8; selSup = 0; ask_choices(1); }
     if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = 0; ask_choices(1); }
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }

@@ -16,7 +16,7 @@ from shapely import affinity
 def _base_mm():
     """base diameter in mm: --size on the command line, else the BASE_MM environment variable, else 30"""
     if "--size" in sys.argv:
-        try: return float(str(sys.argv[sys.argv.index("--size") + 1]).lower().replace("mm", ""))
+        try: return float(str(sys.argv[sys.argv.index("--size") + 1]).lower().replace("mm", "").split("x")[0])          # an oval "90x52" is laid out on its long size
         except (IndexError, ValueError): pass
     try: return float(os.environ.get("BASE_MM", "30"))
     except ValueError: return 30.0
@@ -74,10 +74,13 @@ def fit_for_taper(p, d):
     return None
 
 def stone(cx, cy, r, rng, aspect=None, nv=None, round_=False):
-    if round_:
-        g = unary_union([Point(cx + rng.uniform(-.4, .4) * r, cy + rng.uniform(-.4, .4) * r).buffer(r * rng.uniform(.55, .8), 10)
-                         for _ in range(3)])
-        return g.convex_hull.simplify(0.04)
+    if round_:          # the hull of three overlapping circles (40 points each, as a buffer of 10 quarter-segments), made directly
+        import numpy as np, shapely
+        c3 = []
+        for _ in range(3):
+            x0 = cx + rng.uniform(-.4, .4) * r; y0 = cy + rng.uniform(-.4, .4) * r; c3.append((x0, y0, r * rng.uniform(.55, .8)))
+        pts = np.concatenate([np.column_stack([x0 + rr * _CSX, y0 + rr * _CSY]) for x0, y0, rr in c3])
+        return shapely.convex_hull(shapely.multipoints(pts)).simplify(0.04)
     n = nv or rng.randint(5, 8); aspect = aspect or rng.uniform(.6, .95); rot = rng.uniform(0, math.pi)
     ts = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
     ts = [i * 2 * math.pi / n * 0.6 + t * 0.4 for i, t in enumerate(ts)]
@@ -85,7 +88,24 @@ def stone(cx, cy, r, rng, aspect=None, nv=None, round_=False):
     for t in ts:
         rr = r * rng.uniform(.82, 1.1); x, y = rr * math.cos(t), rr * math.sin(t) * aspect
         pts.append((cx + x * math.cos(rot) - y * math.sin(rot), cy + x * math.sin(rot) + y * math.cos(rot)))
-    return Polygon(pts).convex_hull
+    return Polygon(_hull(pts))
+
+import numpy as _np
+_CSX = _np.cos(_np.arange(40) * (2 * math.pi / 40)); _CSY = _np.sin(_np.arange(40) * (2 * math.pi / 40))
+
+def _hull(pts):
+    """convex hull of a few points (Andrew's monotone chain), counter-clockwise: a rock's outline without two shapely
+    round trips (made tens of thousands of times on a large base)"""
+    P = sorted(set(pts))
+    if len(P) < 3: return P
+    def half(seq):
+        h = []
+        for p in seq:
+            while len(h) >= 2 and (h[-1][0] - h[-2][0]) * (p[1] - h[-2][1]) - (h[-1][1] - h[-2][1]) * (p[0] - h[-2][0]) <= 0: h.pop()
+            h.append(p)
+        return h
+    lo, up = half(P), half(reversed(P))
+    return lo[:-1] + up[:-1]
 
 def star(cx, cy, ro, ri, n, rot):
     return Polygon([(cx + (ro if i % 2 == 0 else ri) * math.cos(rot + i * math.pi / n),
@@ -581,6 +601,49 @@ def magnet_centres(dia=None):
     r = dia * 0.25
     return [(round(r * math.cos(math.pi / 2 + 2 * math.pi * i / n), 4), round(r * math.sin(math.pi / 2 + 2 * math.pi * i / n), 4)) for i in range(n)] + ([(0.0, 0.0)] if dia > 100 else [])
 
+def oval():
+    """the oval base being built, (long mm, short mm), or None for a round one: KIT_OVAL="90x52" (set by run_set.py
+    --size 90x52). The scene is laid out round on the long size; the builder cuts the base to the oval."""
+    v = str(os.environ.get("KIT_OVAL", "") or "").lower().replace("mm", "").strip()
+    if "x" not in v: return None
+    try: a, b = (float(x) for x in v.split("x", 1))
+    except ValueError: return None
+    return (max(a, b), min(a, b)) if a > 0 and b > 0 else None
+
+def oval_magnet_centres(A, B=None):
+    """magnet pockets of an oval base, along its long (x) axis: up to 60 mm long one in the middle; up to 105 mm two;
+    longer three (one in the middle). The outer ones sit a quarter of the length out from the middle (as on a round
+    base), which keeps every pocket well over 8 mm from the rim on every oval size."""
+    n = 1 if A <= 60.5 else 2 if A <= 105.5 else 3
+    x = round(A * 0.25, 4)
+    return [(0.0, 0.0)] if n == 1 else [(-x, 0.0), (x, 0.0)] if n == 2 else [(-x, 0.0), (0.0, 0.0), (x, 0.0)]
+
+def ellipse_ring(a, b, n=480):
+    """n points round the ellipse with half-axes a (x) and b (y), evenly spaced along it, counter-clockwise from
+    (a, 0); the four axis ends are always among them, so the base measures exactly 2a x 2b"""
+    q = max(4, n // 4); M = 4000
+    ts = [0.5 * math.pi * i / M for i in range(M + 1)]
+    L = [0.0]
+    for i in range(1, M + 1):
+        L.append(L[-1] + math.hypot(a * (math.cos(ts[i]) - math.cos(ts[i - 1])), b * (math.sin(ts[i]) - math.sin(ts[i - 1]))))
+    quarter = []; j = 0
+    for k in range(q):
+        want = L[-1] * k / q
+        while L[j + 1] < want: j += 1
+        t = ts[j] + (ts[j + 1] - ts[j]) * ((want - L[j]) / max(L[j + 1] - L[j], 1e-15))
+        quarter.append(t)
+    T = quarter + [math.pi - t for t in [0.5 * math.pi] + quarter[:0:-1]] + [math.pi + t for t in quarter] + [2 * math.pi - t for t in [0.5 * math.pi] + quarter[:0:-1]]
+    return [(a * math.cos(t), b * math.sin(t)) for t in T], T
+
+def ellipse_offset(a, b, T, d):
+    """the points of the ellipse at parameters T moved d mm inwards along its normal: the curve that stays d mm
+    inside the ellipse everywhere (an offset curve, not a smaller ellipse)"""
+    out = []
+    for t in T:
+        x, y = a * math.cos(t), b * math.sin(t); nx, ny = b * math.cos(t), a * math.sin(t); L = math.hypot(nx, ny)
+        out.append((x - d * nx / L, y - d * ny / L))
+    return out
+
 def mag_sketch():
     """one sketch with a true circle per magnet pocket (6.2 mm across; the cut makes them 2.1 mm deep)"""
     return ([{"command": "sketch.create", "params": {"plane": "XY", "offset": 2.1, "name": "Mag"}}]
@@ -732,10 +795,9 @@ def _coincide(a, b, tol=0.005):
     """True if the two outlines share a stretch of edge, or a corner of one sits on the other's outline"""
     bi = a.boundary.intersection(b.boundary)
     if not bi.is_empty and bi.length > 1e-3: return True
-    for p, q in ((a, b), (b, a)):
-        qb = q.boundary
-        for c in p.exterior.coords:
-            if qb.distance(Point(c)) < tol: return True
+    import shapely, numpy as np
+    for p, q in ((a, b), (b, a)):          # every corner of one against the other's outline, in one GEOS call (same answer as one Point at a time)
+        if (shapely.distance(q.boundary, shapely.points(np.asarray(p.exterior.coords))) < tol).any(): return True
     return False
 
 def _separate(s, gap=0.12, touch=0.08, sliver=0.02):

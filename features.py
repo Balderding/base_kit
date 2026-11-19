@@ -80,7 +80,7 @@ def _build(s, z, layers):
             elif t == "steps":      # ("steps", footprint, [(polygon, height), ...], kind[, parent]): nested pieces that together draw a rounded or turned shape
                 par = tops.get(L[4]) if len(L) > 4 and L[4] is not None else None
                 if len(L) > 4 and L[4] is not None and (not par or not par[0]): continue
-                zb = par[0] if par else z; b = HBOOST[0] if max(q[1] for q in L[2]) >= 1.0 else 1.0; best = None; rough = terr(s) and not par; zlow = None
+                zb = par[0] if par else z; b = HBOOST[0] if max((q[1] for q in L[2]), default=0.0) >= 1.0 else 1.0; best = None; rough = terr(s) and not par; zlow = None
                 if rough: zlow, zb = T_zr(s, L[1])                                   # stepped bedrock: lowest and highest ground under the piece
                 for k, pc in enumerate(L[2]):
                     q, h = pc[0], pc[1]; kd = _k(L[3])

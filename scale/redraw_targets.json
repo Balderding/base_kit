@@ -1,0 +1,609 @@
+{
+ "badlands": [
+  {
+   "name": "saguaro",
+   "built_times_drawn": 7.1,
+   "built_mm_long": 45
+  },
+  {
+   "name": "water_trough",
+   "built_times_drawn": 6.4,
+   "built_mm_long": 54
+  },
+  {
+   "name": "hitching_rail",
+   "built_times_drawn": 6.2,
+   "built_mm_long": 45
+  },
+  {
+   "name": "prickly_pear",
+   "built_times_drawn": 4.3,
+   "built_mm_long": 18
+  },
+  {
+   "name": "ox_yoke",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 27
+  },
+  {
+   "name": "bedroll_canteen",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 18
+  },
+  {
+   "name": "saddle",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 29
+  }
+ ],
+ "highland": [
+  {
+   "name": "beacon_pyre",
+   "built_times_drawn": 7.3,
+   "built_mm_long": 54
+  },
+  {
+   "name": "fallen_cross",
+   "built_times_drawn": 6.7,
+   "built_mm_long": 36
+  },
+  {
+   "name": "caber_and_stone",
+   "built_times_drawn": 6.7,
+   "built_mm_long": 54
+  },
+  {
+   "name": "hurdle",
+   "built_times_drawn": 5.7,
+   "built_mm_long": 34
+  },
+  {
+   "name": "burial_kist",
+   "built_times_drawn": 5.7,
+   "built_mm_long": 45
+  },
+  {
+   "name": "pot_still",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 25
+  },
+  {
+   "name": "crook_and_plaid",
+   "built_times_drawn": 3.6,
+   "built_mm_long": 31
+  }
+ ],
+ "maahl": [
+  {
+   "name": "buried_head",
+   "built_times_drawn": 7.7,
+   "built_mm_long": 54
+  },
+  {
+   "name": "obelisk_tip",
+   "built_times_drawn": 7.0,
+   "built_mm_long": 63
+  },
+  {
+   "name": "stele",
+   "built_times_drawn": 6.0,
+   "built_mm_long": 32
+  },
+  {
+   "name": "arch_fragment",
+   "built_times_drawn": 5.7,
+   "built_mm_long": 32
+  },
+  {
+   "name": "sphinx_paw",
+   "built_times_drawn": 5.4,
+   "built_mm_long": 36
+  },
+  {
+   "name": "fallen_capital",
+   "built_times_drawn": 5.1,
+   "built_mm_long": 22
+  },
+  {
+   "name": "mosaic",
+   "built_times_drawn": 4.9,
+   "built_mm_long": 27
+  },
+  {
+   "name": "worm_maw",
+   "built_times_drawn": 4.8,
+   "built_mm_long": 36
+  },
+  {
+   "name": "amphorae",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 29
+  },
+  {
+   "name": "sundial",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 22
+  }
+ ],
+ "corridor": [
+  {
+   "name": "plate_stack",
+   "built_times_drawn": 4.6,
+   "built_mm_long": 18
+  },
+  {
+   "name": "deck_hatch",
+   "built_times_drawn": 4.5,
+   "built_mm_long": 18
+  },
+  {
+   "name": "hover_pallet",
+   "built_times_drawn": 4.1,
+   "built_mm_long": 22
+  },
+  {
+   "name": "welding_set",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 27
+  },
+  {
+   "name": "terminal",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 13
+  },
+  {
+   "name": "gas_cylinder",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 22
+  }
+ ],
+ "infestation": [
+  {
+   "name": "egg_ledge",
+   "built_times_drawn": 5.7,
+   "built_mm_long": 50
+  },
+  {
+   "name": "cocoon",
+   "built_times_drawn": 5.4,
+   "built_mm_long": 36
+  },
+  {
+   "name": "molt",
+   "built_times_drawn": 4.1,
+   "built_mm_long": 29
+  },
+  {
+   "name": "burst_egg",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 22
+  }
+ ],
+ "urban": [
+  {
+   "name": "street_lamp",
+   "built_times_drawn": 6.0,
+   "built_mm_long": 81
+  },
+  {
+   "name": "park_bench",
+   "built_times_drawn": 6.0,
+   "built_mm_long": 32
+  },
+  {
+   "name": "bathtub",
+   "built_times_drawn": 5.7,
+   "built_mm_long": 34
+  },
+  {
+   "name": "post_box",
+   "built_times_drawn": 5.6,
+   "built_mm_long": 41
+  },
+  {
+   "name": "kerbstones",
+   "built_times_drawn": 5.4,
+   "built_mm_long": 36
+  },
+  {
+   "name": "window_frame",
+   "built_times_drawn": 5.2,
+   "built_mm_long": 36
+  },
+  {
+   "name": "crossarm",
+   "built_times_drawn": 5.1,
+   "built_mm_long": 29
+  },
+  {
+   "name": "chalk_outline",
+   "built_times_drawn": 5.1,
+   "built_mm_long": 32
+  },
+  {
+   "name": "road_sign",
+   "built_times_drawn": 4.8,
+   "built_mm_long": 40
+  },
+  {
+   "name": "dustbin",
+   "built_times_drawn": 4.0,
+   "built_mm_long": 27
+  },
+  {
+   "name": "hubcap_and_bumper",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 23
+  },
+  {
+   "name": "suitcase",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 18
+  },
+  {
+   "name": "storm_drain",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 18
+  },
+  {
+   "name": "brick_pallet",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 22
+  }
+ ],
+ "mine": [
+  {
+   "name": "sluice_box",
+   "built_times_drawn": 6.4,
+   "built_mm_long": 43
+  },
+  {
+   "name": "sorting_table",
+   "built_times_drawn": 5.9,
+   "built_mm_long": 27
+  },
+  {
+   "name": "kibble",
+   "built_times_drawn": 4.1,
+   "built_mm_long": 27
+  },
+  {
+   "name": "switch_lever",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 18
+  },
+  {
+   "name": "spilled_ore",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 25
+  },
+  {
+   "name": "fallen_stull",
+   "built_times_drawn": 3.6,
+   "built_mm_long": 36
+  }
+ ],
+ "swamp": [
+  {
+   "name": "dugout",
+   "built_times_drawn": 9.5,
+   "built_mm_long": 72
+  },
+  {
+   "name": "pilings",
+   "built_times_drawn": 5.1,
+   "built_mm_long": 32
+  },
+  {
+   "name": "totem_stake",
+   "built_times_drawn": 4.8,
+   "built_mm_long": 32
+  },
+  {
+   "name": "mossy_log",
+   "built_times_drawn": 4.3,
+   "built_mm_long": 27
+  },
+  {
+   "name": "reed_bundle",
+   "built_times_drawn": 4.2,
+   "built_mm_long": 27
+  },
+  {
+   "name": "fish_trap",
+   "built_times_drawn": 4.1,
+   "built_mm_long": 16
+  },
+  {
+   "name": "shed_skin",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 36
+  }
+ ],
+ "cynder": [
+  {
+   "name": "quench_trough",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 23
+  }
+ ],
+ "targa": [
+  {
+   "name": "pod_lid",
+   "built_times_drawn": 6.5,
+   "built_mm_long": 36
+  },
+  {
+   "name": "sled",
+   "built_times_drawn": 5.6,
+   "built_mm_long": 50
+  },
+  {
+   "name": "ice_blocks",
+   "built_times_drawn": 5.5,
+   "built_mm_long": 36
+  },
+  {
+   "name": "buried_steps",
+   "built_times_drawn": 5.3,
+   "built_mm_long": 36
+  },
+  {
+   "name": "tusk",
+   "built_times_drawn": 5.0,
+   "built_mm_long": 36
+  },
+  {
+   "name": "disc_wreck",
+   "built_times_drawn": 4.7,
+   "built_mm_long": 27
+  },
+  {
+   "name": "supply_drop",
+   "built_times_drawn": 4.2,
+   "built_mm_long": 29
+  },
+  {
+   "name": "pack_and_snowshoes",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 23
+  },
+  {
+   "name": "skis",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 34
+  },
+  {
+   "name": "conduit_node",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 43
+  }
+ ],
+ "trederra": [
+  {
+   "name": "stretcher",
+   "built_times_drawn": 4.9,
+   "built_mm_long": 41
+  },
+  {
+   "name": "sandbags",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 29
+  },
+  {
+   "name": "mortar",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 22
+  },
+  {
+   "name": "duckboard",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 32
+  },
+  {
+   "name": "trench_sign",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 22
+  }
+ ],
+ "fortress": [
+  {
+   "name": "torii_beam",
+   "built_times_drawn": 5.9,
+   "built_mm_long": 54
+  },
+  {
+   "name": "bamboo_fence",
+   "built_times_drawn": 5.4,
+   "built_mm_long": 32
+  },
+  {
+   "name": "rice_bales",
+   "built_times_drawn": 4.0,
+   "built_mm_long": 23
+  }
+ ],
+ "beast": [],
+ "frontier": [
+  {
+   "name": "shop_sign",
+   "built_times_drawn": 4.2,
+   "built_mm_long": 22
+  },
+  {
+   "name": "hay_bale",
+   "built_times_drawn": 4.2,
+   "built_mm_long": 29
+  },
+  {
+   "name": "busted_safe",
+   "built_times_drawn": 4.0,
+   "built_mm_long": 23
+  },
+  {
+   "name": "potbelly_stove",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 27
+  },
+  {
+   "name": "batwing_door",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 18
+  },
+  {
+   "name": "church_bell",
+   "built_times_drawn": 3.6,
+   "built_mm_long": 22
+  }
+ ],
+ "graveyard": [
+  {
+   "name": "fallen_railing",
+   "built_times_drawn": 5.7,
+   "built_mm_long": 32
+  },
+  {
+   "name": "open_coffin",
+   "built_times_drawn": 5.6,
+   "built_mm_long": 36
+  },
+  {
+   "name": "sunken_grave",
+   "built_times_drawn": 5.5,
+   "built_mm_long": 38
+  },
+  {
+   "name": "mortsafe",
+   "built_times_drawn": 5.5,
+   "built_mm_long": 38
+  },
+  {
+   "name": "effigy_slab",
+   "built_times_drawn": 5.5,
+   "built_mm_long": 36
+  },
+  {
+   "name": "broken_obelisk",
+   "built_times_drawn": 5.4,
+   "built_mm_long": 36
+  },
+  {
+   "name": "footstones",
+   "built_times_drawn": 4.7,
+   "built_mm_long": 40
+  },
+  {
+   "name": "wooden_cross",
+   "built_times_drawn": 4.5,
+   "built_mm_long": 16
+  },
+  {
+   "name": "grave_bell",
+   "built_times_drawn": 4.1,
+   "built_mm_long": 18
+  },
+  {
+   "name": "robbers_hole",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 29
+  }
+ ],
+ "forest": [
+  {
+   "name": "hollow_log",
+   "built_times_drawn": 4.4,
+   "built_mm_long": 27
+  },
+  {
+   "name": "fallen_branch",
+   "built_times_drawn": 4.2,
+   "built_mm_long": 36
+  },
+  {
+   "name": "snag",
+   "built_times_drawn": 3.9,
+   "built_mm_long": 13
+  }
+ ],
+ "dungeon": [
+  {
+   "name": "gibbet_cage",
+   "built_times_drawn": 4.9,
+   "built_mm_long": 36
+  },
+  {
+   "name": "pressure_plate",
+   "built_times_drawn": 4.5,
+   "built_mm_long": 27
+  },
+  {
+   "name": "stocks",
+   "built_times_drawn": 4.4,
+   "built_mm_long": 29
+  },
+  {
+   "name": "portcullis_piece",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 22
+  },
+  {
+   "name": "mimic",
+   "built_times_drawn": 3.7,
+   "built_mm_long": 20
+  },
+  {
+   "name": "keystone",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 18
+  }
+ ],
+ "temple": [
+  {
+   "name": "calendar_stone",
+   "built_times_drawn": 4.9,
+   "built_mm_long": 27
+  },
+  {
+   "name": "glyph_lintel",
+   "built_times_drawn": 4.2,
+   "built_mm_long": 40
+  },
+  {
+   "name": "lotus_basin",
+   "built_times_drawn": 4.0,
+   "built_mm_long": 18
+  }
+ ],
+ "coast": [
+  {
+   "name": "oars",
+   "built_times_drawn": 4.9,
+   "built_mm_long": 43
+  },
+  {
+   "name": "cannon",
+   "built_times_drawn": 4.7,
+   "built_mm_long": 36
+  },
+  {
+   "name": "capstan",
+   "built_times_drawn": 4.3,
+   "built_mm_long": 25
+  },
+  {
+   "name": "driftwood",
+   "built_times_drawn": 4.0,
+   "built_mm_long": 40
+  },
+  {
+   "name": "net_floats",
+   "built_times_drawn": 3.8,
+   "built_mm_long": 22
+  },
+  {
+   "name": "lobster_pot",
+   "built_times_drawn": 3.5,
+   "built_mm_long": 27
+  }
+ ]
+}
