@@ -516,7 +516,7 @@ static int lm_clear(Mk *m, Scene *s, double gap) {
             for (i = 0; i < s->ops.n; i++) {
                 Op *o = s->ops.v[i]; GeoList keep = { 0 };
                 for (j = 0; j < o->polys.n; j++) if (!shp_intersects(o->polys.v[j]->g, gb)) gl_push(&keep, o->polys.v[j]);
-                if (keep.n) ol_push_own(&no, o->type == OP_PRISM ? op_prism(&keep, o->n[0], o->n[1], o->kind) : op_taper(&keep, o->n[0], o->n[1], o->n[2], o->kind));
+                if (keep.n) ol_push_own(&no, op_like(o, &keep));
                 gl_free(&keep);
             }
             ol_free(&s->ops); s->ops = no;
@@ -877,20 +877,20 @@ const FtLmSpec FT_LMS[] = {
     { "corridor", 60.0, { 0, "track", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "metal", 0, { 0 }, 0 } } }, 0.35, 0.6, 0 },
     { "corridor", 60.0, { 0, "wall", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "pipe", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "corridor", 60.0, { 0, "dais", 2, { { 0, 's', "plate", 0, { 0 }, 0 }, { 0, 's', "column", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "corridor", 100.0, { 0, "hull", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "metal", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "corridor", 100.0, { 0, "vehicle", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "metal", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "corridor", 100.0, { 0, "ruin", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "plate", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "corridor", 130.0, { 0, "colonnade", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "plate", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "infestation", 60.0, { 0, "tentacles", 2, { { 0, 's', "tendril", 0, { 0 }, 0 }, { 0, 's', "acid", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "infestation", 60.0, { 0, "nest", 2, { { 0, 's', "flesh", 0, { 0 }, 0 }, { 0, 's', "egg", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "infestation", 60.0, { 0, "skeleton", 1, { { 0, 's', "bone", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "infestation", 100.0, { 0, "river", 2, { { 0, 's', "acid", 0, { 0 }, 0 }, { 0, 's', "pustule", 0, { 0 }, 0 } } }, 0.2, 0.6, 1 },
-    { "infestation", 100.0, { 0, "hull", 2, { { 0, 's', "carapace", 0, { 0 }, 0 }, { 0, 's', "spine", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "infestation", 100.0, { 0, "vehicle", 2, { { 0, 's', "carapace", 0, { 0 }, 0 }, { 0, 's', "spine", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "infestation", 130.0, { 0, "spires", 1, { { 0, 's', "spine", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "urban", 60.0, { 0, "wall", 2, { { 0, 's', "brick", 0, { 0 }, 0 }, { 0, 's', "concrete", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "urban", 60.0, { 0, "crater", 2, { { 0, 's', "rubble", 0, { 0 }, 0 }, { 0, 's', "pothole", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "urban", 60.0, { 0, "track", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "concrete", 0, { 0 }, 0 } } }, 0.35, 0.6, 0 },
     { "urban", 100.0, { 0, "ruin", 2, { { 0, 's', "brick", 0, { 0 }, 0 }, { 0, 's', "concrete", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "urban", 100.0, { 0, "hull", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "urban", 100.0, { 0, "vehicle", 2, { { 0, 's', "metal", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "urban", 130.0, { 0, "colonnade", 2, { { 0, 's', "concrete", 0, { 0 }, 0 }, { 0, 's', "concrete", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "mine", 60.0, { 0, "track", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "wood", 0, { 0 }, 0 } } }, 0.35, 0.6, 0 },
     { "mine", 60.0, { 0, "spires", 1, { { 0, 's', "quartz", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
@@ -913,7 +913,7 @@ const FtLmSpec FT_LMS[] = {
     { "targa", 60.0, { 0, "spires", 1, { { 0, 's', "ice", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "targa", 60.0, { 0, "circle", 2, { { 0, 's', "slot", 0, { 0 }, 0 }, { 0, 's', "alien", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "targa", 60.0, { 0, "wall", 2, { { 0, 's', "alien", 0, { 0 }, 0 }, { 0, 's', "crystal", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "targa", 100.0, { 0, "hull", 2, { { 0, 's', "alien", 0, { 0 }, 0 }, { 0, 's', "alien", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "targa", 100.0, { 0, "vehicle", 2, { { 0, 's', "alien", 0, { 0 }, 0 }, { 0, 's', "alien", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "targa", 100.0, { 0, "colonnade", 2, { { 0, 's', "alien", 0, { 0 }, 0 }, { 0, 's', "alien", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "targa", 130.0, { 0, "dais", 2, { { 0, 's', "alien", 0, { 0 }, 0 }, { 0, 's', "column", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "trederra", 60.0, { 0, "crater", 2, { { 0, 's', "mud", 0, { 0 }, 0 }, { 0, 's', "water", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
@@ -921,7 +921,7 @@ const FtLmSpec FT_LMS[] = {
     { "trederra", 60.0, { 0, "wall", 1, { { 0, 's', "sandbag", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "trederra", 100.0, { 0, "track", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "wood", 0, { 0 }, 0 } } }, 0.35, 0.6, 0 },
     { "trederra", 100.0, { 0, "ruin", 2, { { 0, 's', "brick", 0, { 0 }, 0 }, { 0, 's', "duck", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "trederra", 130.0, { 0, "hull", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "trederra", 130.0, { 0, "vehicle", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "fortress", 60.0, { 0, "dais", 4, { { 0, 's', "plank", 0, { 0 }, 0 }, { 0, 's', "brazier", 0, { 0 }, 0 }, { 0, 's', "fire", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "fortress", 60.0, { 0, "pool", 2, { { 0, 's', "garden", 0, { 0 }, 0 }, { 0, 's', "water", 0, { 0 }, 0 } } }, 0.55, 0.6, 1 },
     { "fortress", 60.0, { 0, "wall", 1, { { 0, 's', "garden", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },

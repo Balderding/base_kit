@@ -83,7 +83,11 @@ void kind_unref(Kind *k) { if (k && k->lk && --k->rc == 0) { free(k->s); free(k)
 int kind_eq(const Kind *a, const Kind *b) { if (a->lk && b->lk) return a == b; return strcmp(a->s, b->s) == 0; }
 
 /* ======================= ops and the other entries ======================= */
-static Op *op_new(int type, const GeoList *polys, Kind *kind) { Op *o = (Op *)calloc(1, sizeof *o); o->rc = 1; o->type = type; gl_copy(&o->polys, polys); o->kind = kind_ref(kind); return o; }
+int sc_feat; const char *sc_fname; static int feat_n, feat_depth;
+int sc_feat_push(const char *name) { int saved = sc_feat; if (feat_depth++ == 0) { sc_feat = ++feat_n; sc_fname = name; } return saved; }
+void sc_feat_pop(int saved) { if (--feat_depth == 0) { sc_feat = saved; if (!saved) sc_fname = NULL; } }
+static Op *op_new(int type, const GeoList *polys, Kind *kind) { Op *o = (Op *)calloc(1, sizeof *o); o->rc = 1; o->type = type; gl_copy(&o->polys, polys); o->kind = kind_ref(kind); o->feat = sc_feat; o->fname = sc_fname; return o; }
+Op *op_like(const Op *o, const GeoList *ps) { Op *n = o->type == OP_PRISM ? op_prism(ps, o->n[0], o->n[1], o->kind) : op_taper(ps, o->n[0], o->n[1], o->n[2], o->kind); n->feat = o->feat; n->fname = o->fname; return n; }
 Op *op_prism(const GeoList *polys, Num z0, Num top, Kind *kind) { Op *o = op_new(OP_PRISM, polys, kind); o->n[0] = z0; o->n[1] = top; o->n[2] = num_none(); return o; }
 Op *op_taper(const GeoList *polys, Num z, Num h, Num angle, Kind *kind) { Op *o = op_new(OP_TAPER, polys, kind); o->n[0] = z; o->n[1] = h; o->n[2] = angle; return o; }
 Op *op_ref(Op *o) { if (o) o->rc++; return o; }
@@ -171,8 +175,10 @@ int sc_cclip(Scene *s, const GeoList *polys, GeoList *out) { return clip_to(poly
 void (*sc_piece_hook)(char kind, const GeoList *polys);          /* live.hook_layout (scene.h) */
 
 /* gg.Scene.gcut: s.gcuts.append((s.clip(polys), depth, kind)); gg2: s.cclip */
+static void widen_cuts(GeoList *ps);
 static int sc_gcut_(Scene *s, const GeoList *polys, Num depth, Kind *kind) {
     GeoList ps = { 0 }; int r = s->gg2 ? sc_cclip(s, polys, &ps) : sc_clip(s, polys, &ps);
+    if (r >= 0 && kind && !(kd_wet_hook_fn && kd_wet_hook_fn(kind))) widen_cuts(&ps);          /* water, tar, lava: as they are */
     if (r >= 0) gcl_push(&s->gcuts, &ps, depth, kind);
     gl_free(&ps);
     return r;
@@ -186,15 +192,54 @@ static int sc_tcut_(Scene *s, const GeoList *polys, Num z0, Num z1, Kind *kind) 
         if (!shp_is_empty(b)) gl_push(&ps, cl.v[i]);
         shp_free(b);
     }
-    if (r >= 0 && ps.n) tcl_push(&s->tcuts, &ps, z0, z1, kind);
+    if (r >= 0 && ps.n) { widen_cuts(&ps); tcl_push(&s->tcuts, &ps, z0, z1, kind); }
     gl_free(&cl); gl_free(&ps);
     return r < 0 ? SC_ERR : 0;
 }
 
+int (*kd_wet_hook_fn)(const Kind *k);
+double sc_uncovered(const GEOSGeometry *g, const GEOSGeometry *const *plates, int n) {
+    GEOSGeometry *u = n ? shp_union_all(plates, n) : NULL, *d = u ? shp_difference(g, u) : shp_clone(g), *a, *b; double r;
+    shp_free(u); if (!d) return 0.0;
+    a = shp_buffer(d, -0.35, 8, 2, 2, 5.0, 0); b = a ? shp_buffer(a, 0.35, 8, 2, 2, 5.0, 0) : NULL;          /* a joint is gone after this */
+    r = b ? shp_area(b) : 0.0; shp_free(a); shp_free(b); shp_free(d); return r;
+}
+double sc_min_part = 0.5, sc_min_cut = 0.3;          /* readable: no detail part thinner, no cut narrower (mm; 0 = off) */
+static GEOSGeometry *mitre(const GEOSGeometry *g, double d) { return shp_buffer(g, d, 8, 2, 2, 5.0, 0); }          /* flat caps, mitred joins: corners stay sharp */
+/* a detail piece with its parts thinner than sc_min_part trimmed off; the piece itself when that would take most of it */
+static void push_readable(GeoList *out, Geo *p) {
+    GEOSGeometry *a, *b; double a0, a1;
+    if (!sc_feat || sc_min_part <= 0) { gl_push(out, p); return; }
+    a = mitre(p->g, -sc_min_part / 2); b = a ? mitre(a, sc_min_part / 2) : NULL; shp_free(a);
+    a0 = shp_area(p->g); a1 = b ? shp_area(b) : 0.0;
+    if (b && a0 - a1 >= 0.02 && a1 < 0.6 * a0) {          /* thin all over (a spiky shrub, a root, a rope): thickened a little, then trimmed */
+        GEOSGeometry *w = mitre(p->g, 0.15), *c = w ? mitre(w, -sc_min_part / 2) : NULL, *d = c ? mitre(c, sc_min_part / 2) : NULL; double aw = w ? shp_area(w) : 0.0;
+        shp_free(c);
+        if (d && shp_area(d) >= 0.6 * aw) {
+            GeoList ps = { 0 }; int j; shp_free(b); shp_free(w);
+            lf_polys_of_new(d, &ps); for (j = 0; j < ps.n; j++) if (shp_area(ps.v[j]->g) > 0.05) gl_push(out, ps.v[j]); gl_free(&ps); return;
+        }
+        shp_free(w); shp_free(d);
+    }
+    if (!b || a0 - a1 < 0.02 || a1 < 0.6 * a0) { shp_free(b); gl_push(out, p); return; }          /* nothing thin (or nothing to be done): as it was */
+    { GEOSGeometry *c = shp_intersection(b, p->g); GeoList ps = { 0 }; int j; shp_free(b); if (!c) { gl_push(out, p); return; }
+      lf_polys_of_new(c, &ps); for (j = 0; j < ps.n; j++) if (shp_area(ps.v[j]->g) > 0.05) gl_push(out, ps.v[j]); gl_free(&ps); }
+}
+/* a cut narrower than sc_min_cut, widened to it */
+static void widen_cuts(GeoList *ps) {
+    int i;
+    if (sc_min_cut <= 0) return;
+    for (i = 0; i < ps->n; i++) {
+        GEOSGeometry *a = mitre(ps->v[i]->g, -sc_min_cut / 2), *w; double a0 = shp_area(ps->v[i]->g), a1 = a ? shp_area(a) : 0.0; shp_free(a);
+        if (a1 > 0.3 * a0) continue;          /* wide enough */
+        w = mitre(ps->v[i]->g, 0.1); if (!w) continue;          /* a 0.2 mm joint becomes 0.4 */
+        geo_unref(ps->v[i]); ps->v[i] = geo_new(w);
+    }
+}
 /* [p for p in s.clip(polys) if wide_enough(p, w)] */
 static int clip_wide(Scene *s, const GeoList *polys, double w, GeoList *out) {
     GeoList cl = { 0 }; int i, r = sc_clip(s, polys, &cl);
-    for (i = 0; r >= 0 && i < cl.n; i++) { int k = lf_wide_enough(cl.v[i], w); if (k < 0) r = SC_ERR; else if (k) gl_push(out, cl.v[i]); }
+    for (i = 0; r >= 0 && i < cl.n; i++) { int k = lf_wide_enough(cl.v[i], w); if (k < 0) r = SC_ERR; else if (k) push_readable(out, cl.v[i]); }
     gl_free(&cl);
     return r < 0 ? SC_ERR : 0;
 }

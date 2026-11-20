@@ -24,6 +24,7 @@ typedef struct {
     int crocks;                           /* cstone.enabled(): rock clusters made by scatter.c */
     Geo *disc;                            /* gg3.DISC = Point(0, 0).buffer(R0 - 0.7, 128) */
     double csx[40], csy[40];              /* gg._CSX / _CSY (for the rock clusters) */
+    double cover, step, cover_big;          /* cover_big: the same for the centrepiece and second features */                   /* a detail on a floor plate must be on it for at least `cover` of its area (else it straddles: not placed there); on terrain at most `step` mm of step under it */
 } PlCfg;
 extern PlCfg PL;
 /* call after scene_config (DISC follows SC.R0); csx / csy = gg._CSX / _CSY, handed over from Python. 1 = ready */
@@ -31,7 +32,10 @@ int pl_config(double hboost, int notch, int crocks, const double *csx, const dou
 
 typedef struct { int n; const char *const *v; } PlAllow;          /* allow=("wash", ...): a tuple of str; NULL = () */
 
-int pl_terr(const Scene *s);                                       /* gg3.terr: hasattr(s, "terr") */
+int pl_terr(const Scene *s);
+int pl_is_wet(const Kind *k);
+int pl_is_terrk(const Kind *k);
+extern int (*pl_terrk_fn)(const Kind *k);                                       /* gg3.terr: hasattr(s, "terr") */
 
 /* gg3._Hits(polys): a search tree over polys (none when polys is empty) */
 typedef struct { GeoList polys; const GEOSGeometry **gs; ShpTree *tree; } PlHits;

@@ -389,7 +389,7 @@ static int sf_anchors(Scene *s, const char *style, PyRandom *rng, int t) {
     if (!pool || !pool->n) return 0;
     return dt_anchors_run(s, pool, rng) < 0 ? SC_ERR : 0;
 }
-static int apply_one(void *ctx, int i, Scene *s, PyRandom *rng, int t) { ScFn *f = ((ScFnList *)ctx)->v[i]; return f->run(f, s, rng, t); }
+static int apply_one(void *ctx, int i, Scene *s, PyRandom *rng, int t) { ScFn *f = ((ScFnList *)ctx)->v[i]; int sv = sc_feat_push(cp_fn_label(f)), r = f->run(f, s, rng, t); sc_feat_pop(sv); return r; }
 static int sf_apply(Scene *s, const char *style, PyRandom *rng, int t) {
     ScFnList pool = { 0 }; int r = 0;
     if (base_pool(style, &pool)) {          /* DETAILS[style] as the kit has it then (extended) */

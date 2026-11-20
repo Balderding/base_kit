@@ -27,6 +27,7 @@
 #define CP_EXIT (-2)
 
 /* ---------------- detail functions ---------------- */
+const char *cp_fn_label(const struct ScFn *f);
 struct ScFn {
     int rc;
     const char *qualname;                 /* fn.__qualname__ (a log line names it; TAGS is looked up by its first part) */

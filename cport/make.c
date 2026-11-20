@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "make.h"
+#include "audit.h"
 #include "pyexact.h"
 
 MkCfg MKC;
@@ -86,6 +87,9 @@ Scene *mk_make(const char *style, int n, CpOut *out, int *err) {
         lf_focus = NULL; lf_aimfn = NULL; PL.hboost = 1.0; cp_release(s);          /* finally: */
         cp_fnl_free(&fns); mk_style_fns_free(&F);
         if (r < 0) { *err = r; scene_free(s); return NULL; }
+        {   const char *af = getenv("BBB_AUDIT");          /* the check: one JSON line per laid-out base (audit.h) */
+            if (af && *af) { FILE *f = fopen(af, "a"); if (f) { au_scene(s, style, n, SC.base_mm, out ? out->theme : NULL, f); fclose(f); } }
+        }
         return s;
     }
     /* scenes off: the old way */

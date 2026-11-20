@@ -67,7 +67,10 @@ static int setup(const char *mode) {
     ft_set_env(KSCALE, FINAL, NOREAL);
     /* gg3: HBOOST, DISC, NOTCH, cstone.enabled() (the C rocks: c_rocks and KIT_CROCKS) */
     { const char *cr = getenv("KIT_CROCKS"); int crocks = runner_cfg_bool("c_rocks", 1) && !(cr && !strcmp(cr, "0"));
-      if (!pl_config(1.0, getenv("NOTCH") && *getenv("NOTCH"), crocks, CSX, CSY)) return 0; }
+      if (!pl_config(1.0, getenv("NOTCH") && *getenv("NOTCH"), crocks, CSX, CSY)) return 0;
+      PL.cover = runner_cfg_num("plate_cover", 0.97); PL.step = runner_cfg_num("max_step_mm", 0.3); PL.cover_big = runner_cfg_num("plate_cover_big", 0.9);
+      sc_min_part = runner_cfg_num("min_part_mm", 0.5); sc_min_cut = runner_cfg_num("min_cut_mm", 0.3); kd_wet_hook_fn = pl_is_wet; pl_terrk_fn = pl_is_terrk;
+      { extern int cp_cart_on_track; cp_cart_on_track = runner_cfg_bool("cart_on_track", 1); } }          /* readable details */          /* one level under each detail */
     if (!solids_init(cfg_supports(), ft_true_scale(), SC.ts, SC.MINW, SC.R0, SC.H, 12.0)) return 0;
     { const char *e = getenv("KIT_DETAIL_STEP"); SO.step = e && *e ? strtod(e, NULL) : runner_cfg_num("detail_step_mm", 0.1); }          /* finer steps for rounded objects (0 = the Python kit's) */
     { const char *e = getenv("KIT_SMOOTH"); SO.smooth = e && (!strcmp(e, "0") || !strcmp(e, "1")) ? e[0] == '1' : runner_cfg_bool("smooth_details", 0); }          /* smooth details (smooth3d.c) */

@@ -57,7 +57,7 @@ static int in_ids(Geo *const *v, int n, const Geo *g) { int i; for (i = 0; i < n
 typedef struct { Geo **v; int n, cap; } Ids;
 static void ids_add(Ids *x, Geo *g) { if (x->n >= x->cap) { x->cap = x->cap ? 2 * x->cap : 64; x->v = (Geo **)realloc(x->v, sizeof(Geo *) * (size_t)x->cap); } x->v[x->n++] = g; }
 static Op *op_with(const Op *o, const GeoList *ps) {          /* (op[0], ps) + tuple(op[2:]) */
-    return o->type == OP_PRISM ? op_prism(ps, o->n[0], o->n[1], o->kind) : op_taper(ps, o->n[0], o->n[1], o->n[2], o->kind);
+    return op_like(o, ps);
 }
 static void chop_drop(Chop *c) { if (c && --c->rc == 0) { kind_unref(c->kind); geo_unref(c->poly); ol_free(&c->ops); free(c); } }
 static void set_ops(Scene *s, OpList *ops) { ol_free(&s->ops); s->ops = *ops; }

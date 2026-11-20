@@ -64,7 +64,14 @@ int kind_eq(const Kind *a, const Kind *b);                /* a == b as Python co
 /* ---------------- ops, cuts, chops, terrain ---------------- */
 enum { OP_PRISM = 0, OP_TAPER = 1 };
 /* ("prism", [P], z0, top, kind) or ("taper", [P], z, h, angle, kind); a tuple: never changed after it is made */
-typedef struct Op { int rc; int type; GeoList polys; Num n[3]; Kind *kind; } Op;
+typedef struct Op { int rc; int type; GeoList polys; Num n[3]; Kind *kind; int feat; const char *fname; } Op;          /* feat / fname: the detail that made it (audit.c); 0 = none */
+extern int sc_feat; extern const char *sc_fname;          /* the detail being placed now: new ops get it */
+double sc_uncovered(const GEOSGeometry *g, const GEOSGeometry *const *plates, int n);          /* the area of g off the plates, joints between them (up to 0.7 mm) not counted */
+extern double sc_min_part, sc_min_cut;          /* readable details (scene.c): thinnest detail part, narrowest cut, mm */
+extern int (*kd_wet_hook_fn)(const Kind *k);
+int sc_feat_push(const char *name);                       /* a new detail starts (only at the outermost call); returns what to give sc_feat_pop */
+void sc_feat_pop(int saved);
+Op *op_like(const Op *o, const GeoList *ps);              /* the same op on other polygons, its tag kept */
 Op *op_prism(const GeoList *polys, Num z0, Num top, Kind *kind);           /* copies the list, refs the kind */
 Op *op_taper(const GeoList *polys, Num z, Num h, Num angle, Kind *kind);
 Op *op_ref(Op *o);

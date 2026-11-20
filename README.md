@@ -42,7 +42,27 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
-## What is new in 2.1: tanks and trucks, supports joined into one solid
+## Since 2.1.0 (not released yet): bases that make sense
+
+- **One level under every object.** A small object on a floor plate stands fully on it, never half over a lower
+  surface; on rough ground it has no more than 0.3 mm of step under it (was 1 mm). A centrepiece or second feature
+  that is only partly on the plates or on raised ground (bedrock, dunes) gets the plates cut back round it, so it
+  stands on one level (the tank across Ferrum's plate edge, the statue across two pavings). Joints between tiles do
+  not count as a step.
+- **The mine cart stands on its rails**, along the track, wherever a theme puts a cart by a track (mine, Cynder,
+  Corridor, Ferrum, Badlands).
+- **Readable details.** Parts of an object thinner than 0.5 mm are trimmed off (corners stay sharp); objects that are
+  thin all over (spiky shrubs, roots, rope) are thickened a little first. Cuts narrower than 0.3 mm (plate seams,
+  paving joints) are widened.
+- **Themes that fit their style.** No more wooden boats in the grim-dark sci-fi styles: Targa's crashed pod,
+  Infestation's cocooned wreck and Beast's swallowed wreck are a wrecked tank or truck (no anchor or chest in the
+  flesh world), and so is the big-base wreck in Corridor, Urban, Targa, Trederra and Infestation. Vehicles are always
+  metal. Swamp's hunters' hide no longer gets a rowboat.
+- **A check of every base** (`BBB_AUDIT=<file>` in the environment): one line per laid-out base counting objects that
+  straddle two levels, cut into each other, are too thin or too low, cuts too narrow, objects in water and very tall
+  ones. Over 25 styles x 4 sizes x 2 seeds it took straddles from 448 to about 150, thin parts from 1124 to 10 and
+  narrow cuts from 2600 to about 430.
+
 
 - **Wrecked tanks and trucks.** The grim-dark sci-fi styles no longer show a wrecked boat. Ashveil's *buried
   transport*, Ferrum's *fallen work-machine* and Thornwild's *overgrown wreck*, and the big-base wreck landmark in
@@ -579,6 +599,12 @@ Everything is optional.
 | `detail_step_mm` | 0.1 | The highest step on a rounded object (barrel, dome, log), in mm: smaller is smoother. 0 = the Python kit's steps (up to 18 per object) |
 | `smaller_files` | true | Each STL simplified by Manifold (flat parts in fewer triangles, the shape moves no more than `smaller_files_mm`, 0.005). The window's Smaller files switch wins |
 | `strict_check` | true | The print check also runs Manifold's own test of a valid closed solid. The window's Strict check switch wins |
+| `plate_cover` | 0.97 | A small object on floor plates must be on them for at least this share of its area (else it is not placed there). 0 = off |
+| `plate_cover_big` | 0.9 | The same for a centrepiece or second feature: below it, the plates are cut back round it. 0 = off |
+| `max_step_mm` | 0.3 | The most step allowed under an object on rough ground (was 1.0) |
+| `min_part_mm` | 0.5 | Object parts thinner than this are trimmed (or the object thickened first). 0 = off |
+| `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
+| `cart_on_track` | true | A cart by a track stands on its rails |
 | `supports_join` | true | With supports on, the objects are joined into the base as one solid (Manifold), pieces in the air left out. false = each object its own shell. The window's Join switch wins |
 | `video_card` | true | 3D pictures drawn by the video card (Direct3D 11; Windows' software renderer if there is no card). false = Python draws them. The window's Video card switch wins |
 | `max_attempts` | 4 | Tries per base before it is flagged |

@@ -15,7 +15,7 @@
 #define TRY(x) do { if ((x) < 0) return SC_ERR; } while (0)
 static Num NF(double v) { return num_f(v); }
 
-PlCfg PL = { 1.0, 0, 1, NULL };
+PlCfg PL = { 1.0, 0, 1, NULL, { 0 }, { 0 }, 0.97, 0.3, 0.9 };
 
 int pl_config(double hboost, int notch, int crocks, const double *csx, const double *csy) {
     PL.hboost = hboost; PL.notch = notch; PL.crocks = crocks;
@@ -35,6 +35,7 @@ static int allowed(const PlAllow *a, const Kind *k) { int i; if (!a) return 0; f
 static int is_bridge_z(Num z) { return z.t == NUM_Z && z.bridge; }          /* getattr(z, "bridge", False) */
 
 int pl_terr(const Scene *s) { return s->has_terr; }
+int (*pl_terrk_fn)(const Kind *k);          /* the raised ground kinds (scenes.TERRK: bedrock, dune), set by pipeline.c */
 
 /* ---------------- small list helpers ---------------- */
 static void grow(void **v, int *cap, int n, size_t sz) { if (n >= *cap) { *cap = *cap ? *cap * 2 : 8; *v = realloc(*v, sz * (size_t)*cap); } }
@@ -47,7 +48,7 @@ static GEOSGeometry *union_list(const GeoList *l) { const GEOSGeometry **v = raw
 static void tcl_free(TcutList *l) { int i; for (i = 0; i < l->n; i++) { gl_free(&l->v[i].polys); kind_unref(l->v[i].kind); } free(l->v); l->v = NULL; l->n = l->cap = 0; }
 static void gcl_free(GcutList *l) { int i; for (i = 0; i < l->n; i++) { gl_free(&l->v[i].polys); kind_unref(l->v[i].kind); } free(l->v); l->v = NULL; l->n = l->cap = 0; }
 /* (op[0], ps) + tuple(op[2:]): a new op with other pieces */
-static Op *op_with(const Op *o, const GeoList *ps) { return o->type == OP_PRISM ? op_prism(ps, o->n[0], o->n[1], o->kind) : op_taper(ps, o->n[0], o->n[1], o->n[2], o->kind); }
+static Op *op_with(const Op *o, const GeoList *ps) { return op_like(o, ps); }
 
 /* a set of ids: sorted pointers */
 typedef struct { const void **v; int n, cap; } PSet;
@@ -208,12 +209,22 @@ int pl_evict(Scene *s, Geo *g) {
 
 /* ---------------- surf ---------------- */
 int pl_surf(Scene *s, Geo *g, Num *z) {
-    Num zz = NF(SC.H); int br = 0, i, j;
+    Num zz = NF(SC.H); int br = 0, i, j, nb = 0; double ba[256], bt[256], ga = shp_area(g->g), cov = 0.0; const GEOSGeometry *bp[256];          /* the plates under g: area, top */
     *z = num_none();
     if (pl_terr(s)) {          /* lo, hi = T_zr(s, g); hi if hi - lo <= 1.0 else None */
         Num lo, hi;
         TRY(T_zr(s, g, &lo, &hi));
-        if (num_sub(hi, lo).v <= 1.0) *z = hi;
+        if (num_sub(hi, lo).v > PL.step) return 0;          /* was 1.0: a detail across a step of up to 1 mm */
+        if (pl_terrk_fn && PL.cover > 0) {          /* a raised slab of the ground (bedrock, dune): all on it or all off it */
+            double ga = shp_area(g->g), cov = 0.0, top = hi.v; const GEOSGeometry *sl[256]; int ns = 0;
+            for (i = 0; i < s->ops.n; i++) { Op *o = s->ops.v[i]; if (o->type != OP_PRISM || !o->kind || !pl_terrk_fn(o->kind)) continue;
+                for (j = 0; j < o->polys.n; j++) { const GEOSGeometry *p = o->polys.v[j]->g; GEOSGeometry *q; double a; int x = shp_intersects(p, g->g); TRY(x); if (!x) continue;
+                    q = shp_intersection(p, g->g); if (!q) return SC_ERR; a = shp_area(q); shp_free(q); if (a < 1e-3) continue;
+                    cov += a; if (ns < 256) sl[ns++] = p; if (o->n[1].v > top) top = o->n[1].v; } }
+            if (cov > 0.03 * ga && cov < PL.cover * ga && sc_uncovered(g->g, sl, ns) > (1.0 - PL.cover) * ga) return 0;          /* None: across a slab's edge */
+            if (cov >= PL.cover * ga && top > hi.v) { *z = num_f(top); return 0; }          /* on the slab */
+        }
+        *z = hi;
         return 0;
     }
     for (i = 0; i < s->ops.n; i++) {
@@ -232,9 +243,14 @@ int pl_surf(Scene *s, Geo *g, Num *z) {
                 c = shp_contains(b, g->g); shp_free(b); TRY(c);
                 if (c) { zz = num_max2(zz, o->n[1]); continue; }
             }
-            if (o->type == OP_PRISM && is_bridge(o->kind)) { zz = num_max2(zz, o->n[1]); br = 1; }
+            if (o->type == OP_PRISM && is_bridge(o->kind)) { zz = num_max2(zz, o->n[1]); br = 1; if (nb < 256) { ba[nb] = a; bt[nb] = o->n[1].v; bp[nb] = p; nb++; } }
             else return 0;          /* None */
         }
+    }
+    if (br) {          /* it must stand on the plates at that level, not hang over a lower surface */
+        const GEOSGeometry *lv[256]; int nl = 0;
+        for (i = 0; i < nb; i++) if (bt[i] > zz.v - 0.1) { cov += ba[i]; lv[nl++] = bp[i]; }
+        if (cov < PL.cover * ga && sc_uncovered(g->g, lv, nl) > (1.0 - PL.cover) * ga) return 0;          /* None: it straddles a plate's edge (a joint between tiles is fine) */
     }
     *z = num_z(zz.v, br);          /* z = Z(z); z.bridge = br */
     return 0;

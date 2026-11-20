@@ -1025,7 +1025,11 @@ static BsBuild subject_(const char *name, const ScPal *p) {
     if (IS("crater")) return FEAT2("L_crater", OR2(p->rock, p->stone), p->pit);
     if (IS("colonnade")) { const char *st = KF(p->stone); return W1(W_turn, FEAT2("L_colonnade", st, fl), PI / 2); }
     if (IS("hull")) { const char *w1 = KF(p->wood), *w2 = KF(p->wood); return W1(W_turn, FEAT2("L_hull", w1, w2), PI / 2); }
-    if (IS("vehicle")) { const char *b = KF(OR2(p->wood, "iron")), *t = KF(OR2(p->iron, "iron")); return W1(W_turn, FEAT2("L_vehicle", b, t), PI / 2); }          /* a wrecked tank or truck */
+    if (IS("vehicle")) {          /* a wrecked tank or truck: in the theme's metal (its "wood" when that is no real wood: hullplate, carapace, rust...) */
+        static const char *WOODEN[] = { "wood", "log", "board", "plank", "drift", "fence", "post", "slate", NULL }; const char *w = OR2(p->wood, "iron"); int i;
+        for (i = 0; WOODEN[i]; i++) if (!strcmp(w, WOODEN[i])) { w = OR2(p->iron, "iron"); break; }
+        { const char *b = KF(w), *t = KF(OR2(p->iron, "iron")); return W1(W_turn, FEAT2("L_vehicle", b, t), PI / 2); }
+    }          /* a wrecked tank or truck */
     if (IS("tree")) return FEAT2("L_tree", "stump", "root");
     if (IS("circle")) return FEAT2("L_circle", "glyph", KF(p->stone));
     if (IS("ruin")) return W1(W_worn, SB(S_ruin, KF(p->stone), fl, NULL), 0);

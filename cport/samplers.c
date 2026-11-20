@@ -57,7 +57,7 @@ static void gcl_free_(GcutList *l) { int i; for (i = 0; i < l->n; i++) { gl_free
 static void trl_free_(TerrList *l) { int i; for (i = 0; i < l->n; i++) { geo_unref(l->v[i].fp); geo_unref(l->v[i].top); } free(l->v); l->v = NULL; l->n = l->cap = 0; }
 static void chop_unref_(Chop *c) { if (c && --c->rc == 0) { kind_unref(c->kind); geo_unref(c->poly); ol_free(&c->ops); free(c); } }
 static Op *op_with(const Op *o, const GeoList *ps) {          /* (op[0], ps) + tuple(op[2:]) */
-    return o->type == OP_PRISM ? op_prism(ps, o->n[0], o->n[1], o->kind) : op_taper(ps, o->n[0], o->n[1], o->n[2], o->kind);
+    return op_like(o, ps);
 }
 static int is_empty(const Geo *g) { return shp_is_empty(g->g); }
 static double area(const Geo *g) { return shp_area(g->g); }

@@ -8,6 +8,7 @@
 #include <setjmp.h>
 #include "compose.h"
 #include "layouts.h"
+#include "bld_features.h"
 #include "pyexact.h"
 #include "pyx.h"
 
@@ -90,6 +91,8 @@ static int in_bridge(const Kind *k) { return kd_kind_in(KD.bridge, k); }
 static int in_soft(const Kind *k) { return kd_kind_in(KD.soft, k); }
 static int in_terrk(const Kind *k) { return kd_kind_in(KD.terrk, k); }
 static int in_wetk(const Kind *k) { return kd_kind_in(KD.wetk, k); }
+int pl_is_wet(const Kind *k) { return kd_kind_in(KD.wetk, k); }
+int pl_is_terrk(const Kind *k) { return kd_kind_in(KD.terrk, k); }          /* water / tar / lava (scene.c leaves those cuts as they are) */
 static double share(void);
 static void cp_log(Sc *sc, const char *where) {          /* sc.log.append(kitlog.caught(where, e)) */
     const char *line = CPH.caught ? CPH.caught(CPH.u, where) : NULL; char buf[600];
@@ -697,15 +700,17 @@ static Num surf(Scene *s, Geo *g) {          /* _surf(s, g) */
     return num_z(z.v, br);
 }
 static FtS3dList *S3D;                   /* s.solids3d of the scene compose makes */
+static void uncover(Sc *sc, Geo *foot);
 static int place_(Sc *sc, Geo *foot, const SoLayers *layers0, double height) {          /* _place(sc, foot, layers, height) */
     SoLayers lay = { 0 }; Scene *s = sc->s; Geo *solid; Num z; int r; double boost = sc->mm >= 59.9 ? CPC.big_base_height_factor : 1.0;
     taller(layers0, height, boost, &lay);
     solid = LIn(solid_of(&lay, 0.0), sc->wide);
-    if (terr(s)) R_(sm_clear_terrain(s, LIn(g_buf(foot, 0.8), sc->wide)));
+    if (terr(s)) R_(sm_clear_terrain(s, LIn(g_buf(g_uu2(foot, solid), 0.8), sc->wide)));          /* under every part of it (a skeleton's bones reach past its footprint) */
     R_(sm_clear_small(s, g_buf(solid, 0.4))); R_(pl_evict(s, solid));
+    uncover(sc, LIn(g_uu2(foot, solid), sc->disc));          /* the footprint and every part that reaches past it */          /* partly on the floor plates: the plates are cut back round it, so it stands on one level */
     z = terr(s) ? num_f(H_) : surf(s, LIn(foot, sc->disc));
     PL.hboost = boost;
-    r = ft_build(s, z, &lay, S3D);
+    { int sv = sc_feat_push(sc->subj ? "feature" : "subject"); r = ft_build(s, z, &lay, S3D); sc_feat_pop(sv); }
     PL.hboost = 1.0;
     lyl_free(&lay);
     return R_(r);
@@ -721,12 +726,21 @@ static int fits(Sc *sc, Geo *foot, Geo *solid, int edge, int force) {          /
     if (s->has_objs) for (i = 0; i < s->keepout.n; i++) if (intersects(s->keepout.v[i], test)) return 0;
     if (sc->wet && (area(LIn(sc->wet, solid)) > 0.15 * area(solid) || area(LIn(sc->wet, inside)) > 0.2 * area(inside))) return 0;
     for (i = 0; i < sc->taken.n; i++) if (intersects(sc->taken.v[i], foot)) return 0;
+    if (!force) {          /* one level: on the floor plates for (nearly) all of it, or off them (a tank across the plate edge and the dust reads wrong) */
+        SmPlate *pl = NULL; int npl = 0; double cov = 0.0, ia = area(inside);
+        R_(sm_plates(s, &pl, &npl));
+        const GEOSGeometry **pg = (const GEOSGeometry **)malloc(sizeof *pg * (size_t)(npl ? npl : 1)); int np2 = 0, bad;
+        for (i = 0; i < npl; i++) { Geo *x = geo_new(shp_intersection(pl[i].g->g, inside->g)); if (x) { double xa = area(x); cov += xa; if (xa > 1e-3) pg[np2++] = pl[i].g->g; geo_unref(x); } }
+        bad = ia > 0 && cov > 0.05 * ia && cov < PL.cover_big * ia && sc_uncovered(inside->g, pg, np2) > (1.0 - PL.cover_big) * ia;          /* a joint between tiles is fine */
+        free(pg); sm_plates_free(pl, npl);
+        (void)bad;          /* not refused any more: place_ cuts the plates back round it (uncover), so it still stands on one level; refusing made crowded plate floors force the subject in, which carved the floor's own pipes away */
+    }
     return 1;
 }
 
 /* (op[0], ps) + op[2:]: a new op with other pieces */
 static Op *op_with(const Op *o, const GeoList *ps) {
-    return o->type == OP_PRISM ? op_prism(ps, o->n[0], o->n[1], o->kind) : op_taper(ps, o->n[0], o->n[1], o->n[2], o->kind);
+    return op_like(o, ps);
 }
 /* swap: id(p) -> [x ...]: the C keeps (p, list) pairs */
 typedef struct { const Geo *p; GeoList *xs; } Swap;
@@ -757,6 +771,52 @@ static void apply_swap(Scene *s, const SwapMap *sw) {
 }
 static void gcuts_replace(Scene *s, GcutList *nw) { int i; for (i = 0; i < s->gcuts.n; i++) gl_free(&s->gcuts.v[i].polys); free(s->gcuts.v); s->gcuts = *nw; }
 static void tcuts_replace(Scene *s, TcutList *nw) { int i; for (i = 0; i < s->tcuts.n; i++) gl_free(&s->tcuts.v[i].polys); free(s->tcuts.v); s->tcuts = *nw; }
+
+/* a big feature only partly on the floor plates (or raised ground slabs): the plates are cut back round it (0.3 mm
+   clear), slivers dropped, the cuts in their tops trimmed to what is left; it then stands on the ground, one level */
+static void uncover(Sc *sc, Geo *foot) {
+    Scene *s = sc->s; Geo *gb; SwapMap sw = { 0 }; int i, j, k; double fa = area(foot), cov = 0.0;
+    SmPlate *pl = NULL; int npl = 0;
+    if (PL.cover_big <= 0 || fa <= 0) return;
+    (void)pl; (void)npl;
+    {   GeoList pg0 = { 0 }; const GEOSGeometry **pg; int n2 = 0, part;          /* the raised plates and ground slabs (dunes, bedrock) under it */
+        for (i = 0; i < s->ops.n; i++) { Op *op = s->ops.v[i]; if (!(in_bridge(op->kind) || in_terrk(op->kind)) || (op->type == OP_PRISM ? op->n[1].v : op->n[0].v + op->n[1].v) <= H_ + 0.05) continue;          /* prisms and tapered slabs (dunes) */
+            for (j = 0; j < op->polys.n; j++) if (intersects(op->polys.v[j], foot)) gl_push(&pg0, op->polys.v[j]); }
+        pg = (const GEOSGeometry **)malloc(sizeof *pg * (size_t)(pg0.n ? pg0.n : 1));
+        for (i = 0; i < pg0.n; i++) { Geo *x = geo_new(shp_intersection(pg0.v[i]->g, foot->g)); if (x) { double xa = area(x); cov += xa; if (xa > 1e-3) pg[n2++] = pg0.v[i]->g; geo_unref(x); } }
+        if (n2) { GEOSGeometry *uu = shp_union_all(pg, n2), *xx = uu ? shp_intersection(uu, foot->g) : NULL; cov = xx ? shp_area(xx) : 0.0; shp_free(uu); shp_free(xx); }          /* stacked tiers (a dune) count once */
+        part = cov > 0.05 * fa && cov < PL.cover_big * fa && sc_uncovered(foot->g, pg, n2) > (1.0 - PL.cover_big) * fa;
+        free(pg); gl_free(&pg0);
+        if (!part) return;
+    }
+    gb = g_buf(foot, 0.3);
+    for (i = 0; i < s->ops.n; i++) {
+        Op *op = s->ops.v[i];
+        if (!(in_bridge(op->kind) || in_terrk(op->kind))) continue;
+        for (j = 0; j < op->polys.n; j++) {
+            Geo *p = op->polys.v[j]; GeoList *xs, *ps;
+            if (!intersects(p, gb)) continue;
+            xs = LL(); ps = g_polys(g_diff(p, gb));
+            for (k = 0; k < ps->n; k++) if (area(ps->v[k]) > 0.6 && g_wide(ps->v[k], SC.MINW)) gl_push(xs, ps->v[k]);
+            swap_put(&sw, p, xs);
+        }
+    }
+    if (!sw.n) return;
+    apply_swap(s, &sw);
+    {   TcutList tc = { 0 };
+        for (i = 0; i < s->tcuts.n; i++) {
+            Tcut *t = &s->tcuts.v[i]; GeoList ps2 = { 0 };
+            for (j = 0; j < t->polys.n; j++) {
+                Geo *p = t->polys.v[j]; GeoList *qs;
+                if (t->z1.v > H_ + 0.05 && intersects(p, gb)) qs = g_polys(g_diff(p, gb)); else qs = L1(p);
+                for (k = 0; k < qs->n; k++) if (!E(g_buf(qs->v[k], -0.1))) gl_push(&ps2, qs->v[k]);
+            }
+            if (ps2.n) tcl_push(&tc, &ps2, t->z0, t->z1, t->kind);
+            gl_free(&ps2);
+        }
+        tcuts_replace(s, &tc);
+    }
+}
 
 static void carve(Scene *s, Geo *g) {          /* _carve(s, g) */
     Geo *gb = g_buf(g, 0.5); SmIdSet cells; GeoList *dead = LL(); SwapMap sw = { 0 }; int i, j;
@@ -850,7 +910,12 @@ static int call_build(FtBuildFn fn, void *ctx, double cx, double cy, double a, P
     return t < 0 ? SC_ERR : b.r;
 }
 typedef struct { ScFn *f; Scene *s; PyRandom *rng; int lvl; int r; } FCall;
-static void fcall_(void *p) { FCall *c = (FCall *)p; c->r = c->f->run(c->f, c->s, c->rng, c->lvl); }
+const char *cp_fn_label(const ScFn *f) {          /* the audit's name for a detail: its shape or template when its qualname is a wrapper */
+    static char buf[64][96]; static int k; const char *q = f->qualname ? f->qualname : "detail", *t = f->tag.shape ? f->tag.shape : f->tag.tmpl ? f->tag.tmpl : f->tag.cls; char *b;
+    if (!t) return q;
+    b = buf[k++ & 63]; snprintf(b, 96, "%s:%s", t, f->tag.kind ? f->tag.kind : ""); return so_intern(b);
+}
+static void fcall_(void *p) { FCall *c = (FCall *)p; int sv = sc_feat_push(cp_fn_label(c->f)); c->r = c->f->run(c->f, c->s, c->rng, c->lvl); sc_feat_pop(sv); }
 static int call_fn(ScFn *f, Scene *s, PyRandom *rng, int lvl) {          /* fn(s, rng, lvl): 0, SC_ERR = raised */
     FCall c; int t;
     c.f = f; c.s = s; c.rng = rng; c.lvl = lvl; c.r = SC_ERR;
@@ -1627,10 +1692,34 @@ static void rim_dressing(Sc *sc, KVal *plan) {          /* rim_dressing(sc, plan
     }
 }
 
+int cp_cart_on_track = 1;          /* settings.json "cart_on_track": a cart by a track stands on it */
+static int cart_on_track(Sc *sc) {          /* the cart on its track: on the rails, along them, clear of everything else */
+    double L, u, x, y, a; int t, i;
+    if (!sc->line || E(sc->line)) return 0;
+    L = g_len(sc->line);
+    for (t = 0; t < 24; t++) {
+        Geo *foot = NULL, *test; SoLayers lay = { 0 }; int ok = 1;
+        u = py_uniform(sc->mixr, 0.2 * L, 0.8 * L); at_(sc->line, u, &x, &y, &a);
+        if (x * x + y * y > (sc->R - 4.0) * (sc->R - 4.0)) continue;
+        if (ft_track_cart(x, y, a, sc->rng, 1.15, sc->pal.wood ? sc->pal.wood : "wood", sc->pal.iron ? sc->pal.iron : "iron", &foot, &lay) < 0 || !foot) { lyl_free(&lay); continue; }
+        test = g_buf(foot, 0.3);
+        if (area(LIn(foot, sc->disc)) < 0.995 * area(foot)) ok = 0;
+        for (i = 0; ok && i < sc->bigs.n; i++) if (intersects(sc->bigs.v[i], test)) ok = 0;
+        for (i = 0; ok && i < sc->taken.n; i++) if (sc->taken.v[i] != sc->pathg && intersects(sc->taken.v[i], test)) ok = 0;
+        if (ok) { int sv = sc_feat_push("cart on track"), r = place_(sc, foot, &lay, 1.0); sc_feat_pop(sv); if (r >= 0) gl_push(&sc->taken, test); geo_unref(foot); lyl_free(&lay); return r >= 0; }
+        geo_unref(foot); lyl_free(&lay);
+    }
+    return 0;
+}
+
 static int place_props(Sc *sc, KVal *plan) {          /* place_props(sc, plan) */
     KVal *props = KG(plan, "props"); int placed = 0, i, k;
     for (i = 0; i < props->n; i++) {
         KVal *pr = props->v[i]; ScFn *fn = NULL; SmAt *at; SmAim *aim; int n;
+        if (!strcmp(KS_(pr, "what"), "cart") && (!strcmp(KS_(pr, "where"), "path") || !strcmp(KS_(pr, "where"), "start")) && cp_cart_on_track && !strcmp(KS_(KG(plan, "path"), "kind"), "track") && sc->line) {
+            n = count_(sc, KN(KG(pr, "count"))); for (k = 0; k < n; k++) placed += cart_on_track(sc);          /* the cart stands on its rails */
+            continue;
+        }
         cp_prop_fn(KS_(pr, "what"), &sc->pal, &fn);
         if (!fn) continue;
         keep_fn(fn);
@@ -1968,7 +2057,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
     }
     sc->plan = (ScPlan *)plan;
     if (scene) {
-        place_also(sc, plan); rim_dressing(sc, plan); place_props(sc, plan);
+        place_also(sc, plan); { int sv = sc_feat_push("rim backdrop"); rim_dressing(sc, plan); sc_feat_pop(sv); } place_props(sc, plan);          /* the backdrop: one detail, however many blocks */
         style_made(sc, plan);
         tier_features(sc, plan, fns, &late);
         clutter(sc, plan, !big, (1 + t) * sc->K * sc->K);

@@ -1080,6 +1080,21 @@ FAC(F_L_nest) { MK(L_nest, 2); b->s[0] = as_s(call, 0, "rim", "twig"); b->s[1] =
 FAC(F_L_spires) { MK(L_spires, 1); b->s[0] = as_s(call, 0, "kind", "crystal"); return 0; }
 FAC(F_L_tentacles) { MK(L_tentacles, 2); b->s[0] = as_s(call, 0, "kind", "tendril"); b->s[1] = as_s(call, 1, "pit", "pit"); return 0; }
 
+/* a cart standing on a track (compose.c puts it there): the body over the rails, a wheel on each rail at `gauge`
+   from the track's middle (P_track's rails), the hopper open on top */
+int ft_track_cart(double cx, double cy, double a, PyRandom *rng, double gauge, const char *body, const char *wheel, Geo **foot, SoLayers *L) {
+    Ar AR = { 0 }, *A = &AR; GL u = { 0 }; GEOSGeometry *box_, *wh, *d; double Ln, W; Frame ff; int R_ = SC_ERR;
+    *foot = NULL;
+    Ln = py_uniform(rng, 3.8, 4.6); W = 2 * gauge - 0.2; ff = lf_frame(cx, cy, a); CK(box_ = Rect(A, cx, cy, Ln, W, a));
+    for (int su = -1; su <= 1; su += 2) for (int sv = -1; sv <= 1; sv += 2) { CK(d = RectF(A, &ff, su * (Ln / 2 - 0.9), sv * gauge, 1.3, 0.95, a)); gp(&u, d); }
+    CK(wh = U(A, &u));
+    CK(d = Rect(A, cx, cy, Ln, 2 * gauge + 1.0, a)); put_foot(foot, d);
+    L_up(L, wh, 1.3, wheel); L_up(L, box_, py_uniform(rng, 2.0, 2.4), body);
+    CK(d = Inset(A, box_, 0.5)); L_tcut(L, d, 1, 0.92);
+    R_ = 0;
+fail: gfree(&u); ar_free(A); if (R_ < 0) { lyl_free(L); geo_unref(*foot); *foot = NULL; } return R_;
+}
+
 /* b_skull / b_ribs / L_skeleton: features.py returns scenes.py's rounded builders */
 static int delegate(const FtCall *call, const char *name, FtBuildFn *fn, void **ctx) {
     BldFactory f = bld_get("scenes", name); FtCall c2;
