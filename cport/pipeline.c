@@ -15,6 +15,8 @@
 #include "meshglue.h"
 #include "models.h"
 #include "solids3d.h"
+#include "smooth3d.h"
+#include "rocks3d.h"
 /* from the builder parts (their own headers are for their files only) */
 void bsdde_config(const char *models_root, double max_height);          /* bld_sdde.h */
 extern FtS3dList *ns_s3d;          /* bld_ns.h */
@@ -67,6 +69,11 @@ static int setup(const char *mode) {
     { const char *cr = getenv("KIT_CROCKS"); int crocks = runner_cfg_bool("c_rocks", 1) && !(cr && !strcmp(cr, "0"));
       if (!pl_config(1.0, getenv("NOTCH") && *getenv("NOTCH"), crocks, CSX, CSY)) return 0; }
     if (!solids_init(cfg_supports(), ft_true_scale(), SC.ts, SC.MINW, SC.R0, SC.H, 12.0)) return 0;
+    { const char *e = getenv("KIT_DETAIL_STEP"); SO.step = e && *e ? strtod(e, NULL) : runner_cfg_num("detail_step_mm", 0.1); }          /* finer steps for rounded objects (0 = the Python kit's) */
+    { const char *e = getenv("KIT_SMOOTH"); SO.smooth = e && (!strcmp(e, "0") || !strcmp(e, "1")) ? e[0] == '1' : runner_cfg_bool("smooth_details", 0); }          /* smooth details (smooth3d.c) */
+    sm_shell_grid_mm = runner_cfg_num("smooth_grid_mm", 0.08); if (!(sm_shell_grid_mm >= 0.02)) sm_shell_grid_mm = 0.08;
+    { const char *e = getenv("KIT_ROCKS"); ork_on = e && (!strcmp(e, "0") || !strcmp(e, "1")) ? e[0] == '1' : runner_cfg_bool("organic_rocks", 0); }          /* organic rocks (rocks3d.c) */
+    if (ork_on) { bc_organic_kind = ork_kind; bc_organic_take = ork_take; }
     ly_config(runner_cfg_bool("random_mix", 1), cfg_scenes(), runner_cfg_bool("outcrop_cracks", 0));
     kinds_init();
     ly_col_get = col_get; ly_col_put = col_put; ft_col_setdefault = col_pad;
@@ -393,6 +400,8 @@ static int req_i(const KVal *r, const char *k, int d) { KVal *v = kv_get(r, k); 
 static void finish_base(Scene *s, CpOut *out) {
     if (s) scene_free(s);
     cp_out_free(out); ft_steps_release(); sf_s3d = NULL; bs_s3d = NULL; ns_s3d = NULL;
+    so_true3d_clear();          /* the shells of this base are built: TRUE3D / TOP3 / the smooth chains start empty for the next */
+    ork_clear();                /* and the rock pieces build_cmds handed over */
     if (getenv("PIPE_SETS")) {          /* debugging: the kind sets as this base leaves them */
         const SmStrSet *S[4] = { KD.terrk, KD.chamfer, SM.terrk, SM.chamfer }; const char *N[4] = { "KD.terrk", "KD.chamfer", "SM.terrk", "SM.chamfer" };
         for (int k = 0; k < 4; k++) { fprintf(stderr, "%s (%d):", N[k], S[k] ? S[k]->n : -1); for (int i = 0; S[k] && i < S[k]->n; i++) fprintf(stderr, " %s", S[k]->v[i]); fprintf(stderr, "\n"); }
@@ -448,6 +457,7 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
     if (NAME_B[0]) { free(s->name); s->name = _strdup(NAME_B); }
     to_bc(s, &b);
     np = stand_pads(&out, &pads);
+    ork_clear();
     r = mg_build_input(&b, style, &ENV, pads, np, runner_cfg_num("sketch_tolerance_mm", 0.03), runner_cfg_num("touching_tolerance_mm", 0.005), &bt);
     if (r != 0) {
         snprintf(t, sizeof t, "crash: %.100s", mg_err[0] ? mg_err : "RuntimeError: no base in the command groups"); why(o, 1, t);
@@ -459,6 +469,29 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
             s3_add_solids(&out.s3d, alive, na, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3);
             free(alive);
         }
+        SmShellXf xf; memset(&xf, 0, sizeof xf);          /* smooth details / organic rocks: the scaled base's map (mesher.rescale) */
+        if (bt.has_plan && !(ENV.has_oval && fabs(bt.plan.sc - 1) < 1e-6 && !bt.plan.tx && !bt.plan.ty)) { xf.on = 1; xf.f = bt.plan.sc; xf.tx = bt.plan.tx; xf.ty = bt.plan.ty; xf.H = bt.H; xf.cap = 25.0; xf.floor_ = 2.9; }
+        for (int i = 0; SO.smooth && i < out.s3d.n; i++) if (out.s3d.v[i].zlo > bt.H) out.s3d.v[i].zlo = bt.H;          /* every shell goes down below the deck (inside the base's solid), also one standing on something: nothing under it can be air */
+        if (out.s3d.n && SO.smooth) {          /* smooth details: the smooth shells (smooth3d.c), scaled bases too */
+            int64_t *alive = (int64_t *)malloc(sizeof(int64_t) * (size_t)(s->ops.n + 1)); GEOSGeometry **reg = (GEOSGeometry **)calloc((size_t)(s->ops.n + 1), sizeof(GEOSGeometry *)); int na = 0;
+            for (int i = 0; i < s->ops.n; i++) {          /* each smooth chain once, with the union of its ghost ops' outlines */
+                const Op *op = s->ops.v[i]; const Kind *k = op->kind; int64_t c; int j;
+                if (!k || !k->has_ghost || k->ghost.t == NUM_NONE) continue;
+                c = (int64_t)k->ghost.v;
+                for (j = 0; j < na && alive[j] != c; j++) {}
+                if (j == na) { alive[na] = c; reg[na] = NULL; na++; }
+                for (int p = 0; p < op->polys.n; p++) {
+                    const GEOSGeometry *g = op->polys.v[p]->g; GEOSGeometry *u;
+                    if (!g) continue;
+                    u = reg[j] ? shp_union(reg[j], g) : shp_clone(g);
+                    if (u) { shp_free(reg[j]); reg[j] = u; }
+                }
+            }
+            sm_shell_add_all(&out.s3d, alive, (const GEOSGeometry *const *)reg, na, &xf, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3);
+            for (int j = 0; j < na; j++) shp_free(reg[j]);
+            free(alive); free(reg);
+        }
+        if (ork_on) { int nr = 0; ork_build(&xf, bt.H, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3, &nr); ork_clear(); }          /* organic rocks (rocks3d.c) */
         s3_blob(&sh, &bbs);
         scene_blob(&b, s->ground ? s->ground : "", bt.has_plan, &bt.plan, 0, &bbd, &bad);
         h = mgj_dict();

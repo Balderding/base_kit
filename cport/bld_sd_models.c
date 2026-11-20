@@ -378,6 +378,7 @@ static const MRow ROWS[] = {
 /* sd_mesh.solid(...)[0] as a solid: sect(z) = the model's outline above z */
 static int msect(void *ctx, double z, GEOSGeometry **out) { int e = MDL_OK; *out = mdl_sect((MdlSolid *)ctx, z, &e); return e == MDL_OK ? SO_OK : SO_ERR; }
 static void mfree(void *ctx) { mdl_solid_free((MdlSolid *)ctx); }
+static int mhr(void *ctx, double x0, double y0, double g, int nx, int ny, double *H) { return mdl_hraster((MdlSolid *)ctx, x0, y0, g, nx, ny, H) == 0 ? SO_OK : SO_ERR; }   /* smooth details */
 /* sol, foot, top = sd_mesh.solid(rel, mm, cx, cy, yaw, pose, sink, mirror, tilt, tilt_dir, cap): sol into *sol */
 static int msolid(const char *rel, double mm, double cx, double cy, double yaw, char pose, double sink, int mirror, double tilt, double tdir, double cap, SoSolids *sol, GG **foot, double *top) {
     int err = 0; const MdlMesh *VF; MdlSolid *ms = NULL; GEOSGeometry *f = NULL;
@@ -386,6 +387,7 @@ static int msolid(const char *rel, double mm, double cx, double cy, double yaw, 
     if (mdl_solid(VF, mm, cx, cy, yaw, pose, sink, mirror, tilt, tdir, cap, &ms, &f, top) != MDL_OK) { if (ms) mdl_solid_free(ms); shp_free(f); fail(); return SO_ERR; }
     *foot = gk(f);
     sol_push(sol, sol_custom(msect, ms, mfree, *top)); sol_unref(sol->v[sol->n - 1]);          /* the list holds the one reference */
+    sol_custom_hraster(sol->v[sol->n - 1], mhr);
     return SO_OK;
 }
 static _Thread_local const MRow *CUR;

@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include "runner.h"
+#include "mfjoin.h"
 #include "draw2d.h"
 #include "pyx.h"
 #include "meshglue.h"
@@ -178,7 +179,8 @@ static const char DEFAULT_SETTINGS[] =
     " \"max_attempts\": 4, \"merge_joins\": true, \"group_pieces\": true, \"min_difference_pct\": 15, \"compare_last\": 10, \"merge_chunk\": 12,"
     " \"join_on_parent\": true, \"engine\": \"mesh\", \"mesh_keep_running\": true, \"big_base_height_factor\": 1.5, \"scenes\": true,"
     " \"scenery_scale\": 1, \"drawing_2d\": true, \"models_download\": true, \"no_bare_ground\": true, \"style_details\": true,"
-    " \"style_details_amount\": 0.5, \"objects_amount\": 1, \"cpu_threads\": true, \"video_card\": true, \"max_slenderness\": 3.0, \"miniature\": \"biped\"}";
+    " \"style_details_amount\": 0.5, \"objects_amount\": 1, \"cpu_threads\": true, \"video_card\": true, \"max_slenderness\": 3.0, \"miniature\": \"biped\","
+    " \"smooth_details\": false, \"organic_rocks\": false}";
 static JV CFG_DEF;
 static void load_cfg(void) {
     static int done; if (done) return; done = 1;
@@ -194,6 +196,18 @@ static const char *cfg_str(const char *k, const char *d) { JV *v = cfg_get(k); r
 /* run_set.py --supports on|off: CFG["allow_supports"] = a.supports == "on" for this run's checks (-1: not given, settings.json decides) */
 static int SUP_CLI = -1;
 static int allow_supports(void) { return SUP_CLI >= 0 ? SUP_CLI : cfg_bool("allow_supports", 0); }
+static int JOIN_CLI = -1;          /* --join on|off: supports on, the shells joined into the base as one solid (mfjoin.h, Manifold) */
+static int supports_join(void) { return JOIN_CLI >= 0 ? JOIN_CLI : cfg_bool("supports_join", 1); }
+static int SMALL_CLI = -1, STRICT_CLI = -1;          /* --smaller on|off, --strict on|off (mfjoin.h, Manifold) */
+static int smaller_files(void) { return SMALL_CLI >= 0 ? SMALL_CLI : cfg_bool("smaller_files", 1); }
+static int strict_check(void) { return STRICT_CLI >= 0 ? STRICT_CLI : cfg_bool("strict_check", 1); }
+static int on_off(const char *v) { return !strcmp(v, "on") ? 1 : !strcmp(v, "off") ? 0 : -1; }
+static int SMOOTH_CLI = -1;          /* --smooth on|off: smooth details (cport\smooth3d.c), settings "smooth_details" */
+static int smooth_details(void) { return SMOOTH_CLI >= 0 ? SMOOTH_CLI : cfg_bool("smooth_details", 0); }
+static int ROCKS_CLI = -1;          /* --rocks on|off: organic rocks (cport\rocks3d.c), settings "organic_rocks" */
+static int organic_rocks(void) { return ROCKS_CLI >= 0 ? ROCKS_CLI : cfg_bool("organic_rocks", 0); }
+/* shells to join into the base: supports on (with its join switch), or smooth details / organic rocks with supports off */
+static int join_shells(void) { return allow_supports() ? supports_join() : (smooth_details() || organic_rocks()); }
 
 /* the same for the other C parts (runner.h) */
 void runner_cfg_init(void) { set_kit(); load_cfg(); }
@@ -434,6 +448,8 @@ static int job_choices(Args *a, const char *style) {
     es[ne++] = (EnvSet){ "KIT_OVAL", oval ? ov : NULL };
     if (mini[0]) es[ne++] = (EnvSet){ "KIT_MINI", mini };
     if (!strcmp(sup, "on") || !strcmp(sup, "off")) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
+    { const char *sm = opt(a, "--smooth", ""); if (on_off(sm) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(sm) ? "1" : "0" }; }          /* smooth details: the same layout as the build */
+    { const char *rk = opt(a, "--rocks", ""); if (on_off(rk) >= 0) es[ne++] = (EnvSet){ "KIT_ROCKS", on_off(rk) ? "1" : "0" }; }          /* organic rocks: the same */
     dbg("choices: out %s seed %s lay %s jobs %d\n", outdir, seed, bm, jobs);
     WCHAR *env = env_block(es, ne);
     dbg("env ok\n");
@@ -570,6 +586,30 @@ static int stl_read(const char *path, Mesh *m) {
     m->nt = (int)nt; m->nv = 3 * (int)nt; m->v = malloc(sizeof(double) * 9 * (nt ? nt : 1)); m->f = malloc(sizeof(int) * 3 * (nt ? nt : 1));
     for (uint32_t i = 0; i < nt; i++) { float c[9]; memcpy(c, b + 84 + 50 * (size_t)i + 12, 36); for (int k = 0; k < 9; k++) m->v[9 * (size_t)i + k] = c[k]; for (int k = 0; k < 3; k++) m->f[3 * i + k] = 3 * (int)i + k; }
     free(b); return 1;
+}
+/* smooth details: the base's seams closed in memory before the shells are joined to it (run_set.close_seams runs on the
+   written STL later; Manifold needs a closed base first). The mesh as stl_write would write it, close_seams, read back,
+   corners merged. */
+static void seams_now(Mesh *m) {
+    size_t n = 84 + 50 * (size_t)m->nt; unsigned char *b = calloc(n, 1); MgBuf o = { 0 }; int rep = 0; uint32_t nt = (uint32_t)m->nt;
+    memcpy(b + 80, &nt, 4);
+    for (int i = 0; i < m->nt; i++) {
+        const double *a = m->v + 3 * m->f[3 * i], *p = m->v + 3 * m->f[3 * i + 1], *c = m->v + 3 * m->f[3 * i + 2];
+        double u0 = p[0] - a[0], u1 = p[1] - a[1], u2 = p[2] - a[2], w0 = c[0] - p[0], w1 = c[1] - p[1], w2 = c[2] - p[2];
+        double cx = u1 * w2 - u2 * w1, cy = u2 * w0 - u0 * w2, cz = u0 * w1 - u1 * w0, nn = sqrt(cx * cx + cy * cy + cz * cz); float q[12];
+        if (nn > 1e-13) { double r = 1.0 / nn; q[0] = (float)(cx * r); q[1] = (float)(cy * r); q[2] = (float)(cz * r); } else q[0] = q[1] = q[2] = 0;
+        for (int k = 0; k < 3; k++) { q[3 + k] = (float)a[k]; q[6 + k] = (float)p[k]; q[9 + k] = (float)c[k]; }
+        memcpy(b + 84 + 50 * (size_t)i, q, 48);
+    }
+    if (mg_close_seams(b, n, &o, &rep) == 0 && rep && o.n >= 84) {
+        uint32_t k; memcpy(&k, o.b + 80, 4);
+        if (84 + 50 * (size_t)k <= o.n) {
+            Mesh r; r.nt = (int)k; r.nv = 3 * (int)k; r.v = malloc(sizeof(double) * 9 * (k ? k : 1)); r.f = malloc(sizeof(int) * 3 * (k ? k : 1));
+            for (uint32_t i = 0; i < k; i++) { float c[9]; memcpy(c, o.b + 84 + 50 * (size_t)i + 12, 36); for (int j = 0; j < 9; j++) r.v[9 * (size_t)i + j] = c[j]; for (int j = 0; j < 3; j++) r.f[3 * i + j] = 3 * (int)i + j; }
+            mesh_merge(&r); free(m->v); free(m->f); *m = r;
+        }
+    }
+    free(b); free(o.b);
 }
 typedef struct { int64_t key; int dir, face; } Ed;          /* an edge: min * nv + max, 1 if it runs min -> max, its face */
 static int ed_cmp(const void *a, const void *b) { const Ed *x = a, *y = b; return x->key < y->key ? -1 : x->key > y->key ? 1 : x->face - y->face; }
@@ -915,6 +955,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         for (int i = 0; sk3 && i < sk3->n; i++) { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, sk3->a[i].s); }
         if (nb > 2 && ln[2] >= 8 && !memcmp(bl[2], "BBS1", 4)) {
             const unsigned char *p = bl[2] + 8, *end = bl[2] + ln[2]; uint32_t ns; memcpy(&ns, bl[2] + 4, 4);
+            if (ns && !allow_supports() && join_shells()) seams_now(&m);          /* smooth details: a closed base to join to */
             for (uint32_t k = 0; k < ns && p + 8 <= end; k++) {
                 uint32_t sv, st; memcpy(&sv, p, 4); memcpy(&st, p + 4, 4); p += 8;
                 if (p + 24 * (size_t)sv + 12 * (size_t)st > end) break;
@@ -924,6 +965,18 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
                 p += 12 * (size_t)st; m.nv += (int)sv; m.nt += (int)st;
             }
         }
+    }
+    if (join_shells()) {          /* supports join / smooth details: the base and the shells one solid (Manifold); pieces left in the air dropped */
+        MfJoin jr; char je[200];
+        if (mf_join(&m.v, &m.nv, &m.f, &m.nt, &jr, je, sizeof je) == 0) {
+            char t2[120]; t2[0] = 0;
+            if (jr.floating) snprintf(t2, sizeof t2, "%d piece%s in the air", jr.floating, jr.floating > 1 ? "s" : "");
+            if (jr.not_closed) snprintf(t2 + strlen(t2), sizeof t2 - strlen(t2), "%s%d piece%s not closed", t2[0] ? ", " : "", jr.not_closed, jr.not_closed > 1 ? "s" : "");
+            if (t2[0]) { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, t2); }
+        } else { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, je); mg_log_caught("join", "RuntimeError", je, "cport/mfjoin.c"); }
+    }
+    if (smaller_files() && (!allow_supports() || supports_join())) {          /* smaller files: flat areas in fewer triangles (Manifold), the shape moves no more than 0.005 mm */
+        char se[200]; if (mf_simplify(&m.v, &m.nv, &m.f, &m.nt, cfg_num("smaller_files_mm", 0.005), se, sizeof se) != 0) mg_log_caught("smaller files", "RuntimeError", se, "cport/mfjoin.c");
     }
     int odd, pin; edge_counts(&m, &odd, &pin, &B->watertight); B->tris = tris_field;
     double mn[3], mx[3]; mesh_bounds(&m, mn, mx); B->top_mm = py_round(mx[2] - jget(&B->head, "H")->d, 1);
@@ -965,7 +1018,10 @@ static void print_check(RunSet *rs, const char *stl, Sb *probs, int *specks, flo
     int parts = 0; for (int k = 0; k < nc; k++) if (fabs(vol[k]) > 0.05) parts++;
     double mn[3], mx[3]; mesh_bounds(&m, mn, mx); double w = mx[0] - mn[0], top = mx[2], dy = mx[1] - mn[1];
     char t[200];
-    if (parts != 1 && !allow_supports()) { snprintf(t, sizeof t, "%d loose pieces", parts); if (probs->n) sb_puts(probs, ", "); sb_puts(probs, t); }
+    if (strict_check() && (!allow_supports() || supports_join())) {          /* the strict check: Manifold's own test of a valid solid */
+        int st = mf_check(m.v, m.nv, m.f, m.nt); if (st) { snprintf(t, sizeof t, "not a valid solid (%s)", mf_status_text(st)); if (probs->n) sb_puts(probs, ", "); sb_puts(probs, t); }
+    }
+    if (parts != 1 && (!allow_supports() || supports_join())) {          /* joined: one solid again */ snprintf(t, sizeof t, "%d loose pieces", parts); if (probs->n) sb_puts(probs, ", "); sb_puts(probs, t); }
     if (rs->oval) {
         if (fabs(w - rs->OVAL[0]) > 0.05 || fabs(dy - rs->OVAL[1]) > 0.05) { char a[32], b[32]; fmt_g(a, sizeof a, rs->OVAL[0]); fmt_g(b, sizeof b, rs->OVAL[1]); snprintf(t, sizeof t, "%.2f x %.2f mm, not %s x %s", w, dy, a, b); if (probs->n) sb_puts(probs, ", "); sb_puts(probs, t); }
     } else if (fabs(w - rs->SIZE) > 0.05) { char a[32]; fmt_g(a, sizeof a, rs->SIZE); snprintf(t, sizeof t, "%.2f mm wide, not %s", w, a); if (probs->n) sb_puts(probs, ", "); sb_puts(probs, t); }
@@ -1237,7 +1293,8 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
     }
 }
 static int job_build(Args *a, const char *style) {
-    const char *size = opt(a, "--size", "30"), *mini = opt(a, "--mini", ""), *sup = opt(a, "--supports", ""), *picks = opt(a, "--picks", ""), *scale_s = opt(a, "--scale", "");
+    const char *size = opt(a, "--size", "30"), *mini = opt(a, "--mini", ""), *sup = opt(a, "--supports", ""), *join = opt(a, "--join", ""), *smaller = opt(a, "--smaller", ""), *strict = opt(a, "--strict", ""), *picks = opt(a, "--picks", ""), *scale_s = opt(a, "--scale", "");
+    const char *smooth = opt(a, "--smooth", ""), *rocks = opt(a, "--rocks", "");          /* smooth details, organic rocks on|off */
     /* the picks: seed:number, grouped by seed in the order they first come */
     char *seeds[256]; int *nums[256], nn[256], ng = 0; char *pk = xstrdup(picks);
     for (char *part = strtok(pk, ","); part; part = strtok(NULL, ",")) {
@@ -1291,8 +1348,11 @@ static int job_build(Args *a, const char *style) {
         if (rs.SCALE != 1.0) { es[ne++] = (EnvSet){ "KIT_FINAL_MM", fin }; es[ne++] = (EnvSet){ "KIT_SCALE", skl }; }
         if (mini[0]) es[ne++] = (EnvSet){ "KIT_MINI", mini };
         if (sup[0]) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
+        if (on_off(smooth) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(smooth) ? "1" : "0" };
+        if (on_off(rocks) >= 0) es[ne++] = (EnvSet){ "KIT_ROCKS", on_off(rocks) ? "1" : "0" };
         rs.envw = env_block(es, ne);
         SUP_CLI = !strcmp(sup, "on") ? 1 : !strcmp(sup, "off") ? 0 : -1;          /* --supports: CFG allow_supports for the checks */
+        JOIN_CLI = on_off(join); SMALL_CLI = on_off(smaller); STRICT_CLI = on_off(strict); SMOOTH_CLI = on_off(smooth); ROCKS_CLI = on_off(rocks);
         int *seen = calloc(100000, sizeof(int)); PickCtx P = { style, size, rs.salt, dest, rs.SCALE, seen, 0, 0 };
         if (scale_s[0]) P.scale = strtod(scale_s, NULL); else P.scale = cfg_num("scenery_scale", 1.0);
         rs.done = picked_done; rs.done_ctx = &P;

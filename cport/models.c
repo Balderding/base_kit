@@ -1189,6 +1189,30 @@ void mdl_solid_free(MdlSolid *s) {
     free(s->v); free(s->tri); free(s->t_); free(s->zmax_); free(s->zmin_); free(s);
 }
 void mdl_solid_arrays(const MdlSolid *s, const double **v, int *nv, const double **tri, int *nt) { *v = s->v; *nv = s->nv; *tri = s->tri; *nt = s->nt; }
+/* smooth details (2.1, not in the Python kit): the top of the posed model above each grid node, a z-buffer of the
+   triangles seen from above (the ones sect cuts) */
+int mdl_hraster(const MdlSolid *s, double x0, double y0, double g, int nx, int ny, double *H) {
+    for (int k = 0; k < s->ns; k++) {
+        const double *t = s->t_ + k * 9;
+        double ax = t[0], ay = t[1], az = t[2], bx = t[3], by = t[4], bz = t[5], cx = t[6], cy = t[7], cz = t[8];
+        double d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy), mnx, mxx, mny, mxy;
+        int i0, i1, j0, j1;
+        if (fabs(d) < 1e-12) continue;
+        mnx = ax < bx ? ax : bx; if (cx < mnx) mnx = cx; mxx = ax > bx ? ax : bx; if (cx > mxx) mxx = cx;
+        mny = ay < by ? ay : by; if (cy < mny) mny = cy; mxy = ay > by ? ay : by; if (cy > mxy) mxy = cy;
+        i0 = (int)ceil((mnx - x0) / g - 1e-9); i1 = (int)floor((mxx - x0) / g + 1e-9);
+        j0 = (int)ceil((mny - y0) / g - 1e-9); j1 = (int)floor((mxy - y0) / g + 1e-9);
+        if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0; if (i1 > nx - 1) i1 = nx - 1; if (j1 > ny - 1) j1 = ny - 1;
+        for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) {
+            double px = x0 + i * g, py = y0 + j * g;
+            double l1 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d, l2 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d, l3 = 1 - l1 - l2, z;
+            if (l1 < -1e-9 || l2 < -1e-9 || l3 < -1e-9) continue;
+            z = l1 * az + l2 * bz + l3 * cz;
+            if (z > H[(size_t)j * nx + i]) H[(size_t)j * nx + i] = z;
+        }
+    }
+    return 0;
+}
 
 static double col_max(const double *v, int n, int c) { double m = v[c]; for (int i = 1; i < n; i++) if (v[i * 3 + c] > m) m = v[i * 3 + c]; return m; }
 static double col_min(const double *v, int n, int c) { double m = v[c]; for (int i = 1; i < n; i++) if (v[i * 3 + c] < m) m = v[i * 3 + c]; return m; }

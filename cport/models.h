@@ -53,6 +53,8 @@ GEOSGeometry *mdl_sect(MdlSolid *s, double z, int *err);
 void mdl_solid_free(MdlSolid *s);
 /* the posed arrays, for proofs: v (nv x 3) after the last shift, tri (nf x 3 x 3) */
 void mdl_solid_arrays(const MdlSolid *s, const double **v, int *nv, const double **tri, int *nt);
+/* smooth details: H[j * nx + i] = max(H, the model's top above (x0 + i g, y0 + j g)); 0 */
+int mdl_hraster(const MdlSolid *s, double x0, double y0, double g, int nx, int ny, double *H);
 /* sd_mesh._above(t, z): the part of triangle t above z, as xy points into out (up to 4 points); returns the count */
 int mdl_above(const double t[9], double z, double out[8]);
 

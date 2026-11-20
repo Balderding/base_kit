@@ -934,6 +934,17 @@ static int build_cmds_trim_last(BcScene *s, BcGroups *Gs, int true_circle_rim) {
 }
 
 /* ======================= gg.build_cmds ======================= */
+/* organic rocks (rocks3d.c, 2.1): the pieces of these kinds are handed over (after pruning, clipped as raised) instead
+   of raised in the height field. NULL: off. */
+int (*bc_organic_kind)(const char *kind) = NULL;
+void (*bc_organic_take)(double z0, double top, GEOSGeometry *const *polys, int np) = NULL;
+static int organic_take(const BcCfg *c, const BcOp *op) {
+    ShpList pp = { 0 };
+    if (op_clip(c, op, &pp) < 0) { shp_list_free(&pp); return BC_ERR; }
+    if (bc_organic_take && pp.n) bc_organic_take(op->n[0].v, op->type == BC_PRISM ? op->n[1].v : op->n[0].v + op->n[1].v, pp.g, pp.n);
+    shp_list_free(&pp);
+    return 0;
+}
 int bc_build_cmds(BcScene *s, BcGroups *Gs) {
     const BcCfg *c = &s->cfg; BcGcut *fg = NULL; int nfg = 0; char nm[64], fnm[64];
     BcNum H = F(c->H), mR = F(-c->RIM);
@@ -975,6 +986,7 @@ int bc_build_cmds(BcScene *s, BcGroups *Gs) {
         const BcOp *op = s->ops[i]; const BcKind *kd = op->kind; ShpList polys = { 0 }; BcNum z0; BcVal e;
         if (kind_is(kd, "rockc")) continue;
         if (kd->has_ghost) continue;
+        if (bc_organic_kind && !kd->has_loft && bc_organic_kind(kd->s)) { if (organic_take(c, op) < 0) return BC_ERR; continue; }          /* organic rocks */
         if (op->type == BC_PRISM && !kd->has_loft && in_chamfer(c, kd) && c->chamfer_rocks) {
             if (prism_groups(Gs, c, i, op) < 0) return BC_ERR;
             continue;
@@ -1017,6 +1029,10 @@ int bc_build_cmds(BcScene *s, BcGroups *Gs) {
     /* chamfered pieces */
     for (int i = 0; i < s->nchops; i++) {
         const BcChop *ch = s->chops[i]; ShpList q = { 0 }; BcGroup *fb = NULL; int nfb = 0, capfb = 0;
+        if (bc_organic_kind && bc_organic_kind(ch->kind->s)) {          /* organic rocks: its pieces handed over */
+            for (int j = 0; j < ch->nops; j++) if (organic_take(c, ch->ops[j]) < 0) return BC_ERR;
+            continue;
+        }
         if (clip(c, &ch->poly, 1, d_max(ch->top.v, c->H), 0.0, 0, &q) < 0) { shp_list_free(&q); return BC_ERR; }
         for (int j = 0; j < ch->nops; j++) {
             const BcOp *op = ch->ops[j]; ShpList pp = { 0 }; BcVal e = v_dict(), x; BcNum t;

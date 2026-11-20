@@ -1009,7 +1009,7 @@ static BsBuild BMK(const char *name, const char *s0, const char *s1) {          
 }
 
 /* ================================================================ SUBJECTS */
-const char *const BS_SUBJECTS[] = { "wall", "dais_brazier", "dais_column", "dais_altar", "skeleton", "crater", "colonnade", "hull", "tree", "circle",
+const char *const BS_SUBJECTS[] = { "wall", "dais_brazier", "dais_column", "dais_altar", "skeleton", "crater", "colonnade", "hull", "vehicle", "tree", "circle",
     "ruin", "pool", "nest", "spires", "tentacles", "portal", "shaft", "camp", "depot", "graves", "wagon", "corral", "machine", "emplacement", "tent",
     "log", "well", "statue", "organ" };
 const int BS_NSUBJECTS = (int)(sizeof BS_SUBJECTS / sizeof BS_SUBJECTS[0]);
@@ -1025,6 +1025,7 @@ static BsBuild subject_(const char *name, const ScPal *p) {
     if (IS("crater")) return FEAT2("L_crater", OR2(p->rock, p->stone), p->pit);
     if (IS("colonnade")) { const char *st = KF(p->stone); return W1(W_turn, FEAT2("L_colonnade", st, fl), PI / 2); }
     if (IS("hull")) { const char *w1 = KF(p->wood), *w2 = KF(p->wood); return W1(W_turn, FEAT2("L_hull", w1, w2), PI / 2); }
+    if (IS("vehicle")) { const char *b = KF(OR2(p->wood, "iron")), *t = KF(OR2(p->iron, "iron")); return W1(W_turn, FEAT2("L_vehicle", b, t), PI / 2); }          /* a wrecked tank or truck */
     if (IS("tree")) return FEAT2("L_tree", "stump", "root");
     if (IS("circle")) return FEAT2("L_circle", "glyph", KF(p->stone));
     if (IS("ruin")) return W1(W_worn, SB(S_ruin, KF(p->stone), fl, NULL), 0);

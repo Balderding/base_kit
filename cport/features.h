@@ -58,7 +58,7 @@ int ft_is_later(const SoVal *v);              /* hasattr(L[2], "_make"): a _Late
 extern int (*ft_top3)(int64_t c, double *top3);
 
 /* s.solids3d (--supports on): what ft_build appends to it */
-typedef struct { int64_t c; double zb, zs; } FtS3d;
+typedef struct { int64_t c; double zb, zs; double zlo; double bb[4]; int hasbb; } FtS3d;   /* zlo: the lowest ground under it; bb: its marker's bounds as laid (smooth details) */
 typedef struct { FtS3d *v; int n, cap; } FtS3dList;
 void ft_s3d_free(FtS3dList *l);
 

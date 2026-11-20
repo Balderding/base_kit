@@ -17,7 +17,7 @@
 #define PI 3.141592653589793          /* math.pi */
 #define NEST 0.015                     /* scenes.NEST */
 
-SolidsCfg SO = { 0, 1.0, 1.0, 0.88, 15.0, 3.0, 12.0 };
+SolidsCfg SO = { 0, 1.0, 1.0, 0.88, 15.0, 3.0, 12.0, 0.0 };
 int64_t so_chain_counter = 0;
 
 int solids_init(int supports, double true_scale, double ts, double minw, double R0, double H, double rim) {
@@ -158,6 +158,7 @@ struct Solid {
     SoFrame ff; int m; double *us, *rs, hk;                           /* loft */
     GEOSGeometry **P; double *R, arch;                                /* tube */
     SoSectFn fn; void *ctx; void (*ctx_free)(void *);                 /* custom */
+    SoHRasterFn hr;                                                   /* custom: its height raster (smooth details), or NULL */
 };
 static Solid *sol_new(int type) { Solid *s = (Solid *)calloc(1, sizeof(Solid)); s->rc = 1; s->type = type; return s; }
 Solid *sol_ref(Solid *s) { if (s) s->rc++; return s; }
@@ -393,6 +394,289 @@ int sol_sect(const Solid *s, double z, GEOSGeometry **out) {
     return SO_ERR;
 }
 
+/* ================================================================== smooth details: the envelope heights */
+int so_smooth_block = 0;
+void sol_custom_hraster(Solid *s, SoHRasterFn fn) { if (s && s->type == S_CUSTOM) s->hr = fn; }
+int so_rounded(const Solid *s) {
+    if (!s) return 0;
+    switch (s->type) {
+    case S_LATHE: case S_LOFT: case S_TUBE: return 1;
+    case S_VAULT: return s->prof != PROF_OTHER && s->h != 0.0;
+    case S_CUSTOM: return s->hr != NULL;
+    }
+    return 0;
+}
+#define HPUT(i, j, h) do { double *q_ = &H[(size_t)(j) * (size_t)nx + (size_t)(i)]; if ((h) > *q_) *q_ = (h); } while (0)
+/* lathe: the region at height z is r <= rr(z) = the widest profile radius above z (sect_lathe), so the top above a spot
+   at radius r is the highest profile point at radius >= max(r, 0.2) (the profile's segments interpolated) */
+static int hr_lathe(const Solid *s, double x0, double y0, double g, int nx, int ny, double *H) {
+    double rmax = 0.0, dr = 0.01, ca = py_cos(s->a), sa = py_sin(s->a), sq = s->squash != 0.0 ? s->squash : 1.0, *T; int M;
+    for (int i = 0; i < s->nsm; i++) rmax = pmax(rmax, s->sm[2 * i]);
+    if (rmax < 0.2) return SO_OK;
+    M = (int)(rmax / dr) + 2; T = (double *)malloc(sizeof(double) * (size_t)(M + 1));
+    for (int j = 0; j <= M; j++) {
+        double r = pmax(j * dr, 0.2), t = -1e30;
+        if (r > rmax) r = rmax;
+        for (int i = 0; i < s->nsm; i++) {
+            double ri = s->sm[2 * i], zi = s->sm[2 * i + 1];
+            if (ri >= r) t = pmax(t, zi);
+            if (i + 1 < s->nsm) {
+                double r1 = s->sm[2 * i + 2], z1 = s->sm[2 * i + 3];
+                if ((ri - r) * (r1 - r) < 0) t = pmax(t, zi + (z1 - zi) * (r - ri) / (r1 - ri));
+            }
+        }
+        T[j] = t;
+    }
+    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
+        double dx = x0 + i * g - s->cx, dy = y0 + j * g - s->cy, u = dx * ca + dy * sa, v = (-dx * sa + dy * ca) / sq, r = sqrt(u * u + v * v), f, t;
+        int k;
+        if (r > rmax) continue;
+        f = r / dr; k = (int)f; if (k >= M) k = M - 1;
+        t = T[k] < -1e29 ? T[k + 1] : T[k + 1] < -1e29 ? T[k] : T[k] + (T[k + 1] - T[k]) * (f - k);
+        if (t < -1e29) continue;
+        HPUT(i, j, s->lift + t);
+    }
+    free(T); return SO_OK;
+}
+/* vault: a rect L x 2 w(t) along a; w = W / 2 * sqrt(1 - t^2) (round), (1 - t) (ridge), (1 - t^2) ** 0.25 (loaf) */
+static int hr_vault(const Solid *s, double x0, double y0, double g, int nx, int ny, double *H) {
+    double hw = s->W / 2, ca = py_cos(s->a), sa = py_sin(s->a);
+    if (hw < 0.2) return SO_OK;
+    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
+        double dx = x0 + i * g - s->cx, dy = y0 + j * g - s->cy, u = dx * ca + dy * sa, v = fabs(-dx * sa + dy * ca), q, t;
+        if (fabs(u) > s->L / 2 || v > hw) continue;
+        q = pmax(v, 0.2) / hw; if (q > 1) q = 1;
+        if (s->prof == PROF_ROUND) t = sqrt(1 - q * q);
+        else if (s->prof == PROF_RIDGE) t = 1 - q;
+        else t = sqrt(1 - q * q * q * q);
+        HPUT(i, j, s->lift + s->h * t);
+    }
+    return SO_OK;
+}
+/* loft: across the axis a half ellipse (round) or a ridge of half width rs(u) and height rs(u) * hk */
+static int hr_loft(const Solid *s, double x0, double y0, double g, int nx, int ny, double *H) {
+    double L = s->us[s->m] - s->us[0], du = L / s->m;
+    if (!(du > 0)) return SO_OK;
+    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
+        double dx = x0 + i * g - s->ff.cx, dy = y0 + j * g - s->ff.cy, u = dx * s->ff.c + dy * s->ff.s, v = fabs(-dx * s->ff.s + dy * s->ff.c), f, r, ve, h;
+        int k;
+        if (u < s->us[0] || u > s->us[s->m]) continue;
+        f = (u - s->us[0]) / du; k = (int)f; if (k >= s->m) k = s->m - 1; if (k < 0) k = 0;
+        r = s->rs[k] + (s->rs[k + 1] - s->rs[k]) * (f - k);
+        if (r < 0.2 || v > r) continue;
+        ve = pmax(v, 0.2) / r; if (ve > 1) ve = 1;
+        h = s->prof == PROF_ROUND ? r * s->hk * sqrt(1 - ve * ve) : r * s->hk * (1 - ve);
+        HPUT(i, j, s->lift + h);
+    }
+    return SO_OK;
+}
+/* tube: along each segment a round bar of radius R (interpolated), height R * hk */
+static int hr_tube(const Solid *s, double x0, double y0, double g, int nx, int ny, double *H) {
+    int m = s->m; double *P = (double *)malloc(sizeof(double) * 2 * (size_t)(m + 1));
+    for (int i = 0; i <= m; i++) { P[2 * i] = shp_x(s->P[i]); P[2 * i + 1] = shp_y(s->P[i]); }
+    for (int k = 0; k < m; k++) {
+        double ax = P[2 * k], ay = P[2 * k + 1], bx = P[2 * k + 2], by = P[2 * k + 3], ra = s->R[k], rb = s->R[k + 1], rm = pmax(ra, rb);
+        double ex = bx - ax, ey = by - ay, ll = ex * ex + ey * ey;
+        int i0, i1, j0, j1;
+        if (rm < 0.2) continue;
+        i0 = (int)floor((pmin(ax, bx) - rm - x0) / g); i1 = (int)ceil((pmax(ax, bx) + rm - x0) / g);
+        j0 = (int)floor((pmin(ay, by) - rm - y0) / g); j1 = (int)ceil((pmax(ay, by) + rm - y0) / g);
+        if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0; if (i1 > nx - 1) i1 = nx - 1; if (j1 > ny - 1) j1 = ny - 1;
+        for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) {
+            double px = x0 + i * g, py = y0 + j * g, t = ll > 0 ? ((px - ax) * ex + (py - ay) * ey) / ll : 0.0, qx, qy, d, r, ve;
+            if (t < 0) t = 0; if (t > 1) t = 1;
+            qx = ax + t * ex - px; qy = ay + t * ey - py; d = sqrt(qx * qx + qy * qy); r = ra + (rb - ra) * t;
+            if (r < 0.2 || d > r) continue;
+            ve = pmax(d, 0.2) / r; if (ve > 1) ve = 1;
+            HPUT(i, j, s->lift + r * s->hk * sqrt(1 - ve * ve));
+        }
+    }
+    free(P); return SO_OK;
+}
+#undef HPUT
+
+/* ---- the exact shells (so_envelope) ---- */
+typedef struct { double *v; int nv, cv; int *f; int nt, ct; } EnvM;
+static int env_v(EnvM *m, double x, double y, double z) {
+    if (m->nv == m->cv) { m->cv = m->cv ? 2 * m->cv : 256; m->v = (double *)realloc(m->v, sizeof(double) * 3 * (size_t)m->cv); }
+    m->v[3 * m->nv] = x; m->v[3 * m->nv + 1] = y; m->v[3 * m->nv + 2] = z; return m->nv++;
+}
+static void env_t(EnvM *m, int a, int b, int c) {
+    if (a == b || b == c || a == c) return;
+    if (m->nt == m->ct) { m->ct = m->ct ? 2 * m->ct : 512; m->f = (int *)realloc(m->f, sizeof(int) * 3 * (size_t)m->ct); }
+    m->f[3 * m->nt] = a; m->f[3 * m->nt + 1] = b; m->f[3 * m->nt + 2] = c; m->nt++;
+}
+/* hand the piece over, faces turned outwards if its volume came out negative */
+static void env_emit(EnvM *m, SoEmitFn emit, void *u) {
+    double vol = 0;
+    for (int t = 0; t < m->nt; t++) {
+        const double *a = m->v + 3 * m->f[3 * t], *b = m->v + 3 * m->f[3 * t + 1], *c = m->v + 3 * m->f[3 * t + 2];
+        vol += a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+    }
+    if (vol < 0) for (int t = 0; t < m->nt; t++) { int x = m->f[3 * t]; m->f[3 * t] = m->f[3 * t + 2]; m->f[3 * t + 2] = x; }
+    if (m->nt >= 4 && fabs(vol) > 1e-9) emit(u, m->v, m->nv, m->f, m->nt);
+    free(m->v); free(m->f); memset(m, 0, sizeof *m);
+}
+/* a turned shell: rings (R[k], Z[k]), k < n, Z rising, R not growing; the first ring is the bottom. Each ring nseg
+   points (cx, cy) + rot(a) (R cos p, R sin p * squash); flat caps at both ends */
+static void env_revolve(double cx, double cy, double a, double squash, const double *R, const double *Z, int n, int nseg, SoEmitFn emit, void *u) {
+    EnvM m = { 0 }; double ca = py_cos(a), sa = py_sin(a); int bot, top;
+    if (n < 2 || nseg < 3) return;
+    for (int k = 0; k < n; k++) for (int j = 0; j < nseg; j++) {
+        double p = 2 * PI * j / nseg, x = R[k] * cos(p), y = R[k] * sin(p) * squash;
+        env_v(&m, cx + x * ca - y * sa, cy + x * sa + y * ca, Z[k]);
+    }
+    bot = env_v(&m, cx, cy, Z[0]); top = env_v(&m, cx, cy, Z[n - 1]);
+    for (int k = 0; k + 1 < n; k++) for (int j = 0; j < nseg; j++) {
+        int a0 = k * nseg + j, b0 = k * nseg + (j + 1) % nseg, c0 = (k + 1) * nseg + (j + 1) % nseg, d0 = (k + 1) * nseg + j;
+        env_t(&m, a0, b0, c0); env_t(&m, a0, c0, d0);
+    }
+    for (int j = 0; j < nseg; j++) { env_t(&m, bot, (j + 1) % nseg, j); env_t(&m, top, (n - 1) * nseg + j, (n - 1) * nseg + (j + 1) % nseg); }
+    env_emit(&m, emit, u);
+}
+/* sections of the same number of points (P[i]: np points (v, z), counter-clockwise seen from +u) at u[i] along the
+   frame (cx, cy, angle a): joined side by side, flat caps at the two ends */
+static void env_sections(double cx, double cy, double a, const double *U, const double *P, int ns, int np, SoEmitFn emit, void *u) {
+    EnvM m = { 0 }; double ca = py_cos(a), sa = py_sin(a); int c0, c1;
+    if (ns < 2 || np < 3) return;
+    for (int i = 0; i < ns; i++) for (int k = 0; k < np; k++) {
+        double v = P[2 * ((size_t)i * np + k)], z = P[2 * ((size_t)i * np + k) + 1];
+        env_v(&m, cx + U[i] * ca - v * sa, cy + U[i] * sa + v * ca, z);
+    }
+    for (int i = 0; i + 1 < ns; i++) for (int k = 0; k < np; k++) {
+        int A0 = i * np + k, A1 = i * np + (k + 1) % np, B0 = (i + 1) * np + k, B1 = (i + 1) * np + (k + 1) % np;
+        env_t(&m, A0, A1, B1); env_t(&m, A0, B1, B0);
+    }
+    {   /* the caps: fans from each end's mid point */
+        double vm = 0, zm = 0, vn = 0, zn = 0;
+        for (int k = 0; k < np; k++) { vm += P[2 * k]; zm += P[2 * k + 1]; vn += P[2 * ((size_t)(ns - 1) * np + k)]; zn += P[2 * ((size_t)(ns - 1) * np + k) + 1]; }
+        vm /= np; zm /= np; vn /= np; zn /= np;
+        c0 = env_v(&m, cx + U[0] * ca - vm * sa, cy + U[0] * sa + vm * ca, zm);
+        c1 = env_v(&m, cx + U[ns - 1] * ca - vn * sa, cy + U[ns - 1] * sa + vn * ca, zn);
+        for (int k = 0; k < np; k++) { env_t(&m, c0, (k + 1) % np, k); env_t(&m, c1, (ns - 1) * np + k, (ns - 1) * np + (k + 1) % np); }
+    }
+    env_emit(&m, emit, u);
+}
+/* the cross-section of a round bar / vault seen along its axis: half width r, height hh above zl, down to zbot.
+   kind 0: round (half ellipse, w = r sqrt(1 - t^2)), 1: ridge (w = r (1 - t)), 2: loaf (w = r (1 - t^2) ** 0.25).
+   The top is flat where it would be narrower than 0.2 each side (sculpt drops such thin sections). K + 4 points. */
+static void env_cross(double r, double hh, double zl, double zbot, int kind, int K, double *P) {
+    int n = 0; double q = 0.2 / r; if (q > 1) q = 1;
+    P[2 * n] = r; P[2 * n + 1] = zbot; n++;
+    for (int k = 0; k <= K; k++) {          /* the right side going up: t from 0 to the top */
+        double t, w, f = (double)k / K;
+        if (kind == 0) { double th = f * acos(q); w = r * cos(th); t = sin(th); }
+        else if (kind == 1) { w = r - (r - 0.2 < 0 ? 0 : r - 0.2) * f; t = 1 - w / r; }
+        else { double th = f * acos(q); w = r * cos(th); t = sqrt(1 - pow(w / r, 4)); }
+        P[2 * n] = w; P[2 * n + 1] = zl + hh * t; n++;
+    }
+    for (int k = K; k >= 0; k--) { P[2 * n] = -P[2 * (k + 1)]; P[2 * n + 1] = P[2 * (k + 1) + 1]; n++; }
+    P[2 * n] = -r; P[2 * n + 1] = zbot; n++;
+}
+int so_envelope(const Solid *s, double zb, double zs, double zbot, double res, SoEmitFn emit, void *u) {
+    if (!(res > 0)) res = 0.06;
+    switch (s->type) {
+    case S_LATHE: {          /* R(z) = the widest profile point at or above z (segments interpolated), down to the ground */
+        double rmax = 0, zmin = 1e30, zmax = -1e30; int nz = 0, cz, nr = 0;
+        for (int i = 0; i < s->nsm; i++) { rmax = pmax(rmax, s->sm[2 * i]); zmin = pmin(zmin, s->sm[2 * i + 1]); zmax = pmax(zmax, s->sm[2 * i + 1]); }
+        if (rmax < 0.2 || !(zmax > zmin)) return SO_OK;
+        cz = s->nsm + (int)((zmax - zmin) / res) + 4;
+        double *zl = (double *)malloc(sizeof(double) * (size_t)cz), *R = (double *)malloc(sizeof(double) * (size_t)(cz + 2)), *Z = (double *)malloc(sizeof(double) * (size_t)(cz + 2));
+        for (int i = 0; i < s->nsm; i++) zl[nz++] = s->sm[2 * i + 1];
+        for (double z = zmin; z < zmax && nz < cz; z += res) zl[nz++] = z;
+        qsort(zl, (size_t)nz, sizeof(double), cmp_dbl);
+        R[nr] = rmax; Z[nr] = zbot; nr++;
+        for (int k = 0; k < nz; k++) {
+            double z = zl[k], r = 0; int any = 0;
+            if (k && z - zl[k - 1] < 1e-6) continue;
+            for (int i = 0; i < s->nsm; i++) {
+                double ri = s->sm[2 * i], zi = s->sm[2 * i + 1];
+                if (zi >= z - 1e-12) { if (!any || ri > r) r = ri; any = 1; }
+                if (i + 1 < s->nsm) {
+                    double r1 = s->sm[2 * i + 2], z1 = s->sm[2 * i + 3];
+                    if ((zi - z) * (z1 - z) < 0) { double x = ri + (r1 - ri) * (z - zi) / (z1 - zi); if (!any || x > r) r = x; any = 1; }
+                }
+            }
+            if (!any || r < 0.2) break;
+            if (r > R[nr - 1]) r = R[nr - 1];
+            {   /* drop the middle of three points on one line */
+                double zz = zb + (s->lift + z) * zs;
+                if (nr >= 2 && fabs((R[nr - 1] - R[nr - 2]) * (zz - Z[nr - 2]) - (r - R[nr - 2]) * (Z[nr - 1] - Z[nr - 2])) < 1e-7 && Z[nr - 2] > zbot) { R[nr - 1] = r; Z[nr - 1] = zz; }
+                else { R[nr] = r; Z[nr] = zz; nr++; }
+            }
+        }
+        if (nr >= 2) {
+            int nseg = (int)ceil(2 * PI * rmax * pmax(1.0, s->squash) / res);
+            nseg = nseg < 32 ? 32 : nseg > 192 ? 192 : nseg;
+            env_revolve(s->cx, s->cy, s->a, s->squash > 0 ? s->squash : 1.0, R, Z, nr, nseg, emit, u);
+        }
+        free(zl); free(R); free(Z);
+        return SO_OK;
+    }
+    case S_VAULT: {
+        double hw = s->W / 2, U[2] = { -s->L / 2, s->L / 2 }; int K, kind = s->prof == PROF_ROUND ? 0 : s->prof == PROF_RIDGE ? 1 : 2; double *P;
+        if (hw < 0.2 || s->prof == PROF_OTHER || !(s->L > 0)) return SO_OK;
+        K = (int)ceil(1.6 * (hw + s->h * zs) / res); K = K < 8 ? 8 : K > 96 ? 96 : K;
+        P = (double *)malloc(sizeof(double) * 2 * (size_t)(2 * (K + 4)) * 2);
+        env_cross(hw, s->h * zs, zb + s->lift * zs, zbot, kind, K, P);
+        memcpy(P + 2 * (2 * K + 4), P, sizeof(double) * 2 * (size_t)(2 * K + 4));
+        env_sections(s->cx, s->cy, s->a, U, P, 2, 2 * K + 4, emit, u);
+        free(P);
+        return SO_OK;
+    }
+    case S_LOFT: {          /* the runs of sections at least 0.2 wide, each joined section to section */
+        int m = s->m, K, np, kind = s->prof == PROF_ROUND ? 0 : 1; double rmax = 0, *U, *P;
+        for (int i = 0; i <= m; i++) rmax = pmax(rmax, s->rs[i]);
+        K = (int)ceil(1.6 * rmax * (1 + s->hk * zs) / res); K = K < 8 ? 8 : K > 64 ? 64 : K; np = 2 * K + 4;
+        U = (double *)malloc(sizeof(double) * (size_t)(m + 1)); P = (double *)malloc(sizeof(double) * 2 * (size_t)np * (size_t)(m + 1));
+        for (int i = 0; i <= m;) {
+            int ns = 0;
+            while (i <= m && s->rs[i] < 0.2) i++;
+            while (i <= m && s->rs[i] >= 0.2) {
+                U[ns] = s->us[i]; env_cross(s->rs[i], s->rs[i] * s->hk * zs, zb + s->lift * zs, zbot, kind, K, P + 2 * (size_t)np * ns); ns++; i++;
+            }
+            if (ns >= 2) env_sections(s->ff.cx, s->ff.cy, atan2(s->ff.s, s->ff.c), U, P, ns, np, emit, u);
+        }
+        free(U); free(P);
+        return SO_OK;
+    }
+    case S_TUBE: {          /* each segment a bar from one radius to the next, a dome at every point (the bends) */
+        int m = s->m, K = 12, np = 2 * K + 4; double *P = (double *)malloc(sizeof(double) * 2 * (size_t)np * 2), U[2];
+        for (int i = 0; i <= m; i++) {
+            double ri = s->R[i], px = shp_x(s->P[i]), py = shp_y(s->P[i]);
+            if (ri < 0.2) continue;
+            {   /* the dome: a quarter ellipse turned, flat where narrower than 0.2 */
+                int n = 0, kk = 10; double Rr[16], Zz[16], q = 0.2 / ri;
+                Rr[n] = ri; Zz[n] = zbot; n++;
+                for (int k = 0; k <= kk; k++) { double th = (double)k / kk * acos(q > 1 ? 1 : q); Rr[n] = ri * cos(th); Zz[n] = zb + (s->lift + ri * s->hk * sin(th)) * zs; n++; }
+                env_revolve(px, py, 0.0, 1.0, Rr, Zz, n, 32, emit, u);
+            }
+            if (i < m && s->R[i + 1] >= 0.2) {
+                double qx = shp_x(s->P[i + 1]), qy = shp_y(s->P[i + 1]), L = sqrt((qx - px) * (qx - px) + (qy - py) * (qy - py));
+                if (L < 1e-6) continue;
+                U[0] = 0; U[1] = L;
+                env_cross(ri, ri * s->hk * zs, zb + s->lift * zs, zbot, 0, K, P);
+                env_cross(s->R[i + 1], s->R[i + 1] * s->hk * zs, zb + s->lift * zs, zbot, 0, K, P + 2 * (size_t)np);
+                env_sections(px, py, atan2(qy - py, qx - px), U, P, 2, np, emit, u);
+            }
+        }
+        free(P);
+        return SO_OK;
+    }
+    }
+    return SO_ERR;
+}
+int so_hraster(const Solid *s, double x0, double y0, double g, int nx, int ny, double *H) {
+    switch (s->type) {
+    case S_LATHE: return hr_lathe(s, x0, y0, g, nx, ny, H);
+    case S_VAULT: return hr_vault(s, x0, y0, g, nx, ny, H);
+    case S_LOFT: return hr_loft(s, x0, y0, g, nx, ny, H);
+    case S_TUBE: return hr_tube(s, x0, y0, g, nx, ny, H);
+    case S_CUSTOM: return s->hr ? s->hr(s->ctx, x0, y0, g, nx, ny, H) : SO_ERR;
+    }
+    return SO_ERR;
+}
+
 /* curve(r0, r1, z0, z1, n=6, out=True): t = k / n * math.pi / 2 */
 int so_curve(double r0, double r1, double z0, double z1, int n, int out_, double *prof) {
     if (n == 0) return SO_ERR;                         /* k / n: ZeroDivisionError */
@@ -405,20 +689,27 @@ int so_curve(double r0, double r1, double z0, double z1, int n, int out_, double
 }
 
 /* ================================================================== TRUE3D / TOP3 */
-typedef struct { int64_t c; SoSolids s; double top3; } T3;
+typedef struct { int64_t c; SoSolids s; double top3; int smooth; GEOSGeometry *foot; } T3;
 static T3 *t3v; static int t3n, t3cap;
 static T3 *t3_find(int64_t c) { for (int i = t3n - 1; i >= 0; i--) if (t3v[i].c == c) return &t3v[i]; return NULL; }
-const SoSolids *so_true3d(int64_t c) { T3 *t = t3_find(c); return t ? &t->s : NULL; }
+const SoSolids *so_true3d(int64_t c) { T3 *t = t3_find(c); return t && !t->smooth ? &t->s : NULL; }
 int so_top3(int64_t c, double *top3) { T3 *t = t3_find(c); if (t) *top3 = t->top3; return t != NULL; }
-void so_true3d_clear(void) { for (int i = 0; i < t3n; i++) sol_free(&t3v[i].s); t3n = 0; }
+void so_true3d_clear(void) { for (int i = 0; i < t3n; i++) { sol_free(&t3v[i].s); shp_free(t3v[i].foot); t3v[i].foot = NULL; } t3n = 0; }
+int so_smooth3d(int64_t c, const SoSolids **sol, const GEOSGeometry **foot) {
+    T3 *t = t3_find(c);
+    if (!t || !t->smooth || !t->foot) return 0;
+    *sol = &t->s; *foot = t->foot; return 1;
+}
 static void t3_set(int64_t c, const SoSolids *s, double top3) {          /* TRUE3D[c] = ...; TOP3[c] = ... (a dict: a key set again is replaced) */
     T3 *t = t3_find(c);
     if (!t) {
         if (t3n == t3cap) { t3cap = t3cap ? 2 * t3cap : 16; t3v = (T3 *)realloc(t3v, sizeof(T3) * (size_t)t3cap); }
         t = &t3v[t3n++]; memset(t, 0, sizeof(*t)); t->c = c;
-    } else sol_free(&t->s);
+    } else { sol_free(&t->s); shp_free(t->foot); t->foot = NULL; t->smooth = 0; }
     sol_extend(&t->s, s); t->top3 = top3;
 }
+/* smooth details: chain c is a smooth shell with this footprint */
+static void t3_smooth(int64_t c, const GEOSGeometry *foot) { T3 *t = t3_find(c); if (t) { shp_free(t->foot); t->foot = shp_clone(foot); t->smooth = 1; } }
 
 /* ================================================================== sculpt */
 void sop_free(SoPieces *p) { for (int i = 0; i < p->n; i++) shp_free(p->v[i].g); free(p->v); p->v = NULL; p->n = p->cap = 0; }
@@ -435,11 +726,27 @@ static GEOSGeometry *u_polys_over(const GEOSGeometry *g, double amin) {
     return u_list(&k);
 }
 
+/* smooth details: a column hidden inside the shell, its own chain, so a layer standing on this one finds a top there
+   (the outline 0.15 below the top, a little inside; its top 0.02 under the shell) */
+static void smooth_column(const SoSolids *t3, double top3, SoPieces *out) {
+    double z = top3 - 0.15; SoGeoms f = { 0 }; GEOSGeometry *U, *b;
+    if (z < 0.1) return;
+    for (int i = 0; i < t3->n; i++) { GEOSGeometry *g; if (sol_sect(t3->v[i], z, &g) != SO_OK) { gfree(&f); return; } if (g) gpush(&f, g); }
+    if (!f.n || !(U = u_list(&f))) return;
+    b = shp_buffer_q(U, -0.08, 4); shp_free(U);
+    if (!b) return;
+    U = u_polys_over(b, 0.12); shp_free(b);
+    if (!U) return;
+    if (shp_is_empty(U) != 0) { shp_free(U); return; }
+    sop_push(out, U, z - 0.02, so_chain(), z - 0.02, 0);
+}
 /* sculpt(solids, cuts=(), n=None) */
 int so_sculpt(const SoSolids *solids, const SoCut *cuts, int ncuts, int n, SoPieces *out) {
     SoSolids t3 = { 0 }, sol = { 0 }; int64_t c = 0; GEOSGeometry *foot3 = NULL, *prev = NULL, *raw = NULL; double top3 = 0, top, *zs = NULL, dz; int ok = SO_ERR, nz;
+    int smooth = SO.smooth && !SO.supports && !so_smooth_block && ncuts == 0;          /* smooth details: the rounded solids as one smooth shell */
+#define SO_IS3(x) ((x)->has3d || (smooth && so_rounded(x)))
     out->n = 0;
-    for (int i = 0; i < solids->n; i++) if (solids->v[i]->has3d) sol_push(&t3, solids->v[i]);
+    for (int i = 0; i < solids->n; i++) if (SO_IS3(solids->v[i])) sol_push(&t3, solids->v[i]);
     if (t3.n) {          /* --supports on: true solids, a flat marker of their footprint stays in the layout */
         SoGeoms f = { 0 };
         c = so_chain(); top3 = t3.v[0]->top;
@@ -447,19 +754,25 @@ int so_sculpt(const SoSolids *solids, const SoCut *cuts, int ncuts, int n, SoPie
         t3_set(c, &t3, top3);          /* TRUE3D[c] = [x[2] for x in t3]; TOP3[c] = max(x[1] for x in t3) */
         for (int i = 0; i < t3.n; i++) { GEOSGeometry *g; if (sol_sect(t3.v[i], 0.0, &g) != SO_OK) { gfree(&f); goto done; } if (g) gpush(&f, g); }
         if (!(foot3 = u_list(&f))) goto done;
-        for (int i = 0; i < solids->n; i++) if (!solids->v[i]->has3d) sol_push(&sol, solids->v[i]);
-        if (!sol.n) { sop_push(out, foot3, top3, c, 0.0, 1); foot3 = NULL; ok = SO_OK; goto done; }
+        if (smooth) t3_smooth(c, foot3);
+        for (int i = 0; i < solids->n; i++) if (!SO_IS3(solids->v[i])) sol_push(&sol, solids->v[i]);
+        if (!sol.n) { sop_push(out, foot3, top3, c, 0.0, 1); foot3 = NULL; if (smooth) smooth_column(&t3, top3, out); ok = SO_OK; goto done; }
     } else sol_extend(&sol, solids);
+#undef SO_IS3
     if (!sol.n) goto done;                              /* max() of nothing: ValueError */
     top = sol.v[0]->top;
     for (int i = 1; i < sol.n; i++) top = pmax(top, sol.v[i]->top);
     if (!n) {          /* n or (max(6, min(18, int(top / 0.15))) if _ts == 1.0 else max(8, min(40, int(top * _ts / 0.15)))) */
         int64_t k;
-        if (SO.true_scale == 1.0) { if (px_int(top / 0.15, &k) != PX_OK) goto done; k = k < 18 ? k : 18; n = (int)(k > 6 ? k : 6); }
+        if (SO.step > 0) {          /* finer steps (2.1): no higher than SO.step mm each, so they are finer than a print layer: 6..60 (figure scale 8..80) */
+            double kk = (SO.true_scale == 1.0 ? top : top * SO.true_scale) / SO.step; int lo = SO.true_scale == 1.0 ? 6 : 8, hi = SO.true_scale == 1.0 ? 60 : 80;
+            n = kk < lo ? lo : kk > hi ? hi : (int)kk;
+        }
+        else if (SO.true_scale == 1.0) { if (px_int(top / 0.15, &k) != PX_OK) goto done; k = k < 18 ? k : 18; n = (int)(k > 6 ? k : 6); }
         else { if (px_int(top * SO.true_scale / 0.15, &k) != PX_OK) goto done; k = k < 40 ? k : 40; n = (int)(k > 8 ? k : 8); }
     }
     if (!t3.n) c = so_chain();
-    if (t3.n) { sop_push(out, foot3, top3, c, 0.0, 1); foot3 = NULL; }
+    if (t3.n) { sop_push(out, foot3, top3, c, 0.0, 1); foot3 = NULL; if (smooth) smooth_column(&t3, top3, out); }
     if (n < 0) n = 0;
     zs = (double *)malloc(sizeof(double) * (size_t)(n + 3));
     for (int j = 0; j < n; j++) zs[j] = top * (double)j / (double)n;

@@ -35,6 +35,8 @@ typedef struct {
     double ts;             /* gg._TS = max(1, KIT_SCALE) (wide_enough in _weather) */
     double minw;           /* gg.MINW (0.88): wide_enough's default, bound when gg was imported */
     double R0, H, rim;     /* gg.R0, gg.H, getattr(gg, "RIM", 12): slab's 3D build only */
+    double step;           /* sculpt's step height, mm (settings "detail_step_mm"): 0 = the Python kit's (top / 0.15, 6..18 steps) */
+    int smooth;            /* smooth details (settings "smooth_details", --smooth; KIT_SMOOTH): rounded solids become smooth shells */
 } SolidsCfg;
 extern SolidsCfg SO;
 int solids_init(int supports, double true_scale, double ts, double minw, double R0, double H, double rim);   /* 1 = ready */
@@ -101,6 +103,29 @@ typedef struct {
     GEOSGeometry *const *P; const double *R; double arch;     /* tube */
 } So3dView;
 int so_view3d(const Solid *s, So3dView *v);              /* SO_OK; SO_ERR when s has no 3D build */
+
+/* ---------------- smooth details (2.1, not in the Python kit) ----------------
+   With SO.smooth on (and supports off) sculpt takes the rounded solids of a group (lathe, vault, loft, tube and the
+   custom solids that can raster their height: the model details) out of the steps: it registers them for chain c
+   (so_smooth3d), leaves the ghost marker of their footprint in the layout (as supports on does) and a hidden column
+   inside them (its own chain) so what stands on them still finds a top. smooth3d.c builds the shell: the envelope
+   height of the group (the highest point above each spot, so nothing overhangs) with vertical sides down into the
+   ground. A group with cuts (sculpt's cuts, or a layer whose top is cut: so_smooth_block) stays as steps. */
+extern int so_smooth_block;                               /* 1 while features.c fills a layer whose top gets cut */
+/* a custom solid's height raster: for every node (x0 + i g, y0 + j g), i < nx, j < ny, H[j * nx + i] = max(H, the
+   solid's top above that spot); nodes it does not cover are left alone. SO_OK / SO_ERR */
+typedef int (*SoHRasterFn)(void *ctx, double x0, double y0, double g, int nx, int ny, double *H);
+void sol_custom_hraster(Solid *s, SoHRasterFn fn);       /* a custom solid that can (sd_mesh models) */
+int so_rounded(const Solid *s);                           /* 1 = smooth details takes it */
+int so_hraster(const Solid *s, double x0, double y0, double g, int nx, int ny, double *H);   /* as SoHRasterFn, any rounded solid */
+/* the exact no-overhang shell of one rounded solid standing at zb, heights times zs, down to zbot, curves sampled about
+   every res mm: each closed piece handed to emit (v: nv x 3, f: nt x 3, faces outwards). SO_OK, or SO_ERR when the
+   solid has no exact shell (a custom one: then its height raster is used) */
+typedef void (*SoEmitFn)(void *u, const double *v, int nv, const int *f, int nt);
+int so_envelope(const Solid *s, double zb, double zs, double zbot, double res, SoEmitFn emit, void *u);
+/* what sculpt registered for chain c with smooth details on: the rounded solids and their footprint (union of sect(0));
+   0 when c is not a smooth chain */
+int so_smooth3d(int64_t c, const SoSolids **sol, const GEOSGeometry **foot);
 
 /* sd_r_models._Later: the pieces of a "steps" layer, cut the first time anything looks at them */
 typedef struct SoLater SoLater;

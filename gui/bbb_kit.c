@@ -73,7 +73,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_STONED 0xFF16181Eu
 enum { SIDE_W = 300, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -83,8 +83,10 @@ static Hit hits[400]; static int nhit, hovK, hovI = -1;
 static WCHAR *logv[MAXLOG]; static int nlog;
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
-static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1"; static int curSup, selScale = 3;
-static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, showDetails = 0;          /* selCount: how many bases, 1 to 20 */
+static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1"; static int curSup, curJoin = 1, selScale = 3;
+static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, selJoin = 1, showDetails = 0;
+static int mfOn[4] = { 1, 1, 0, 0 };          /* the MANIFOLD switches: Smaller files, Strict check, Smooth details, Organic rocks */
+static const char *MFN[4] = { "Smaller files", "Strict check", "Smooth details", "Organic rocks" }, *MFA[4] = { "smaller", "strict", "smooth", "rocks" }; static int MF_N = 2;          /* 2.1.0: Smooth details and Organic rocks not shown yet (still being checked; --smooth / --rocks work) */          /* selCount: how many bases, 1 to 20 */
 static int busy, wanted, doneN, nOK, nBad, scrollY, scrollMax, anim, selftest, stStep; static WCHAR stShot[MAX_PATH];
 static HANDLE hJob;
 static int stSize = 8, demoShot; static RECT gridR, savedR; static int savedMax, showHelp, autoBuild; static DWORD lastDigit;
@@ -288,18 +290,19 @@ static void drop_pending(void) {
 }
 
 static void ask_choices(int fresh) {
-    WCHAR cmd[1200], extra[80] = L""; int i, cnt = selCount;
+    WCHAR cmd[1200], extra[200] = L""; int i, cnt = selCount;
     if (busy) return;
     if (fresh || !ncell) {
         for (i = 0; i < ncell; i++) free_cell(&cells[i]);
         ncell = 0; scrollY = 0; outFolder[0] = 0;
-        strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; strcpy(curScale, SCALEV[selScale]);
+        strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; strcpy(curScale, SCALEV[selScale]);
     }
     if (ncell + cnt > MAXC) cnt = MAXC - ncell;
     if (cnt <= 0) { wcscpy(sub, L"That is as many choices as fit. Build some, or press Show new choices to start over."); redraw(); return; }
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
+    for (i = 2; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* smooth details / organic rocks change the layout: the choices are drawn the same way */
     swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
         for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); cells[ncell++].state = ST_PENDING; }
@@ -308,14 +311,15 @@ static void ask_choices(int fresh) {
     redraw();
 }
 static void build(void) {
-    static WCHAR cmd[2600], picks[1800]; WCHAR extra[80] = L""; int i, k = 0;
+    static WCHAR cmd[2600], picks[1800]; WCHAR extra[200] = L""; int i, k = 0;
     if (busy) return;
     picks[0] = 0;
     for (i = 0; i < ncell; i++) if (cells[i].picked && cells[i].state == ST_NONE) { swprintf(picks + wcslen(picks), 40, L"%ls%hs:%d", k++ ? L"," : L"", cells[i].seed, cells[i].n); }
     if (!k) return;
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
-    if (curSup) wcscat(extra, L" --supports on");
+    if (curSup) wcscat(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
     swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
+    for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
     jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
     for (i = 0; i < ncell; i++) { live_free(cells[i].lv); cells[i].lv = NULL; }
@@ -936,6 +940,13 @@ static void paint(HDC out, int W, int H) {
         y += bh + S(8);
     }
     chip("Allow overhangs (the print needs supports)", S(16), y, S(SIDE_W - 32), S(24), selSup, H_SUP, 0); y += S(30);
+    if (selSup) { chip("Join into one solid (Manifold)", S(16), y, S(SIDE_W - 32), S(24), selJoin, H_JOIN, 0); y += S(30); }          /* only with overhangs allowed */
+    {          /* MANIFOLD: what the Manifold library does to each base, one switch each */
+        int x0 = S(16), wAll = S(SIDE_W - 32), half = (wAll - S(6)) / 2, k;
+        section(L"MANIFOLD", x0, y, wAll, S(18)); y += S(20);
+        for (k = 0; k < MF_N; k++) { int cx = k % 2 ? x0 + half + S(6) : x0, cw = k % 2 ? wAll - half - S(6) : half; chip(MFN[k], cx, y, cw, S(24), mfOn[k], H_MF, k); if (k % 2 || k == MF_N - 1) y += S(30); }
+        y += S(4);
+    }
     {          /* speed: CPU threads, video card */
         int x0 = S(16), wAll = S(SIDE_W - 32), half = (wAll - S(6)) / 2;
         section(L"SPEED", x0, y, wAll, S(18)); y += S(20);
@@ -1100,7 +1111,7 @@ static void help(int W, int H) {
                               L"The miniature it is for:  the kit keeps the spot flat where that kind of model stands. Default takes it from settings.json; none keeps no spot.\n"
                               L"Objects sized for figures of:  \"classic\" (the default) makes every base a whole small scene, its things about a third of true size beside a 32 mm figure. 32 mm, 28 mm or 15 mm makes the things true to a figure of that height instead: a small base then shows only a part of a scene, a large base gets real ground (rises, gullies, pools), and the picture shows a post as tall as the figure. The spot where the miniature stands is always kept flat and on the base.\n"
                               L"How many bases:  1 to 20. Type the number or use the minus and plus. That many designs are drawn each time.\n"
-                              L"Allow overhangs:  things may hang over (rounder barrels, arching ribs). The print then needs supports. Off: every base prints without supports.", x1, y, cwid);
+                              L"Allow overhangs:  things may hang over (rounder barrels, arching ribs). The print then needs supports. Off: every base prints without supports.  Join into one solid (shown with overhangs on): the objects are joined into the base as one clean solid (Manifold); a piece that would hang in the air is left out.", x1, y, cwid);
     y = para(L"WHERE THE FILES GO", L"Everything the kit needs is inside bbb_kit.exe, the free public-domain models its details are made from too: nothing is downloaded and nothing needs installing. It runs from any folder.\n"
                               L"Every base you build is copied into one folder, out\\picked_<date>_<time> beside bbb_kit.exe, named by style, size and theme: the STL, its 3D picture (_3d.png, and in colour _3d_color.png), its drawing from above (_2d.png) and its plan. Open folder takes you there.", x1, y, cwid);
     y = para(L"WATCHING IT BUILD", L"The strip at the top: a bar for each of the kit's own working threads (only ours, idle ones hidden) and the video card. Small:  words and a time-left bar.  "
@@ -1162,6 +1173,8 @@ static void act2(int kind, int idx) {
     case H_COUNT: selCount += idx; if (selCount < 1) selCount = 1; if (selCount > 20) selCount = 20; break;
     case H_QUICK: if (!busy) { autoBuild = 1; ask_choices(1); if (!busy) autoBuild = 0; } return;
     case H_SUP: selSup = !selSup; break;
+    case H_JOIN: selJoin = !selJoin; break;
+    case H_MF: if (idx >= 0 && idx < MF_N) mfOn[idx] = !mfOn[idx]; break;
     case H_SPEED: if (idx == 0) spThr = !spThr; else spGpu = !spGpu; speed_env(); break;
     case H_VIEW: lvView = idx; lvParts = 0; break;
     case H_PARTS: if (idx >= 1 && idx <= 5) *part_v(idx - 1) = !*part_v(idx - 1); else lvParts = !lvParts; break;
@@ -1221,6 +1234,14 @@ static void hover_at(int x, int y) {
             else if (id == 11) wcscpy(sub, L"The kit's own working threads, one bar each, busiest first (other programs are not counted). Idle threads are not shown.");
             else if (id == 12) wcscpy(sub, gpuV < 0 ? L"The video card meter: Windows does not report the video card's use on this PC." : L"How much of the video card's 3D engine is in use (all programs). The kit draws its 3D pictures there.");
         }
+        if (k == H_MF) {          /* say what the Manifold switch under the mouse does */
+            static const WCHAR *mt[4] = { L"Smaller files: Manifold draws the flat parts of each base with fewer, bigger triangles (the shape moves no more than 0.005 mm), so the STL is smaller and loads faster. Off: the mesh as it is made.",
+                                          L"Strict check: the print check also asks Manifold whether the base is a valid closed solid, and builds a fresh variant if not. Off: the kit's own checks only.",
+                                          L"Smooth details: objects keep their true rounded shape instead of stacked slices.",
+                                          L"Organic rocks: rocks and stones grown as smooth lumpy shapes." };
+            if (id >= 0 && id < 4) wcscpy(sub, mt[id]);
+        }
+        if (k == H_JOIN) wcscpy(sub, L"Join into one solid: the objects that may overhang are joined into the base as one clean solid (Manifold), and a piece that would hang in the air is left out. Off: each object is its own shell sunk into the base, for the slicer to join.");
         if (k == H_COL) wcscpy(sub, L"Colour view: the finished 3D base coloured as its 2D drawing (the same colours), to check each part is where it should be. Click again for the plain grey picture.");
         if (k == H_CARD && !busy && cells[id].state != ST_PENDING) {          /* say what the card under the mouse is */
             Cell *c = &cells[id];
@@ -1240,9 +1261,9 @@ static void make_fonts(void) {
 }
 static void ini(int save) {
     WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu,
-                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows }; int lim[] = { NSTYLES, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2 }, i;
+                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &selJoin, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3] }; int lim[] = { NSTYLES, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 }, i;
     static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"look", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard",
-                                   L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
+                                   L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows", L"joinsolid", L"mfsmaller", L"mfstrict", L"mfsmooth", L"mfrocks" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
@@ -1256,7 +1277,7 @@ static void ini(int save) {
         savedR.right = (int)GetPrivateProfileIntW(L"window", L"right", 0, p); savedR.bottom = (int)GetPrivateProfileIntW(L"window", L"bottom", 0, p);
         savedMax = (int)GetPrivateProfileIntW(L"window", L"maximized", 0, p);
     }
-    for (i = 0; i < 19; i++) {
+    for (i = 0; i < 24; i++) {
         if (save) { swprintf(v, 16, L"%d", *vals[i]); WritePrivateProfileStringW(L"window", keys[i], v, p); }
         else { int x = (int)GetPrivateProfileIntW(L"window", keys[i], *vals[i], p); if (x >= (i == 4) && x < lim[i]) *vals[i] = x; }
     }
@@ -1390,7 +1411,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) & 3; }          /* a test may ask for another figure size: 0 = 32 mm ... 3 = classic */
     if (selftest) { char e[16]; int i; if (GetEnvironmentVariableA("BBB_TEST_SIZE", e, sizeof e)) for (i = 0; i < NSIZES; i++) if (!strcmp(e, SIZES[i])) stSize = i; }          /* and another base size, as written on its chip: 60, 90x52 ... */
     if (selftest == 3) { selStyle = 14; selSize = 8; selDetail = 4; selMini = 0; selCount = 8; selSup = 0; ask_choices(1); }
-    if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = 0; ask_choices(1); }
+    if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = GetEnvironmentVariableA("BBB_TEST_OVERHANGS", NULL, 0) ? 1 : 0; ask_choices(1); }          /* a test of overhangs + join: BBB_TEST_OVERHANGS set */
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     GdiplusShutdown(gtok); return 0;
 }

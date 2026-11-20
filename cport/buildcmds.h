@@ -101,6 +101,9 @@ void bc_groups_free(BcGroups *gs);
 /* gg.build_cmds(s): the groups go to out (which starts empty). 0 = done, BC_ERR = Python raises (out and s are then
    as far as Python got). */
 int bc_build_cmds(BcScene *s, BcGroups *out);
+/* organic rocks (rocks3d.c): kinds bc_organic_kind says yes to are handed to bc_organic_take instead of raised */
+extern int (*bc_organic_kind)(const char *kind);
+extern void (*bc_organic_take)(double z0, double top, GEOSGeometry *const *polys, int np);
 /* s.final_gcuts() (gg.Scene / gg2.Scene) of the scene as it stands: a new list (owned; bc_gcuts_free). For the 2D drawing. */
 int bc_final_gcuts(const BcScene *s, BcGcut **out, int *nout);
 void bc_gcuts_free(BcGcut *g, int n);

@@ -138,10 +138,12 @@ int ft_is_later(const SoVal *v) { return v->t == LV_LATER || (v->t == LV_PTR && 
 
 int (*ft_top3)(int64_t c, double *top3) = so_top3;
 void ft_s3d_free(FtS3dList *l) { free(l->v); l->v = NULL; l->n = l->cap = 0; }
-static void s3d_push(FtS3dList *l, int64_t c, double zb, double zs) {
+static void s3d_push(FtS3dList *l, int64_t c, double zb, double zs, double zlo, const GEOSGeometry *g) {
     if (!l) return;
     if (l->n == l->cap) { l->cap = l->cap ? 2 * l->cap : 8; l->v = (FtS3d *)realloc(l->v, sizeof(FtS3d) * (size_t)l->cap); }
-    l->v[l->n].c = c; l->v[l->n].zb = zb; l->v[l->n].zs = zs; l->n++;
+    l->v[l->n].c = c; l->v[l->n].zb = zb; l->v[l->n].zs = zs; l->v[l->n].zlo = zlo; l->v[l->n].hasbb = 0;
+    if (g && !shp_is_empty(g)) { shp_bounds(g, l->v[l->n].bb); l->v[l->n].hasbb = 1; }
+    l->n++;
 }
 
 /* ================================================================== values of a layer tuple */
@@ -254,7 +256,13 @@ static int layer_steps(Bd *B, int i, const SoLayer *L) {
     has_parent = L->n > 4 && L->v[4].t != LV_NONE;
     if (has_parent) { par = top_get(B, &L->v[4]); if (!par || !truthy(par->top)) return 0; }          /* continue */
     zb = par ? par->top : B->z;
-    P = ft_pieces(&L->v[2]);
+    {   /* smooth details: a layer whose top gets cut (a pot's mouth, a groove) stays as steps */
+        int cut = 0, j; int64_t pk;
+        for (j = 0; j < B->n && !cut; j++) { const SoLayer *T = B->L->v[j]; if (T && T->n >= 3 && T->v[0].t == LV_STR && !strcmp(T->v[0].s, "tcut") && vkey(&T->v[2], &pk) && pk == i) cut = 1; }
+        so_smooth_block = cut;
+        P = ft_pieces(&L->v[2]);
+        so_smooth_block = 0;
+    }
     if (!P) goto fail;
     /* max((q[1] for q in L[2]), default=0.0) */
     if (P->n) { hmax = P->v[0].ztop; for (k = 1; k < P->n; k++) if (P->v[k].ztop > hmax) hmax = P->v[k].ztop; } else hmax = 0.0;
@@ -275,7 +283,7 @@ static int layer_steps(Bd *B, int i, const SoLayer *L) {
             double t3;
             kd->has_ghost = 1; kd->ghost = num_i((double)pc->c);
             if (!ft_top3 || !ft_top3(pc->c, &t3)) t3 = pc->ztop;
-            s3d_push(B->s3d, pc->c, zb.v, b * pc->ztop / (t3 > 0.01 ? t3 : 0.01));
+            s3d_push(B->s3d, pc->c, zb.v, b * pc->ztop / (t3 > 0.01 ? t3 : 0.01), rough ? zlow.v : zb.v, pc->g);
         }
         if (par) e = cut_in(pc->g, par->g, 0.12, &all);
         else if (pc->g) lf_polys_of_new(shp_clone(pc->g), &all);
@@ -962,7 +970,7 @@ const FtLmSpec FT_LMS[] = {
     { "coast", 100.0, { 0, "skeleton", 1, { { 0, 's', "bone", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "coast", 100.0, { 0, "river", 2, { { 0, 's', "water", 0, { 0 }, 0 }, { 0, 's', "shelf", 0, { 0 }, 0 } } }, 0.2, 0.6, 1 },
     { "coast", 130.0, { 0, "tentacles", 2, { { 0, 's', "weed", 0, { 0 }, 0 }, { 0, 's', "water", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "ashveil", 60.0, { 0, "hull", 2, { { 0, 's', "ashhull", 0, { 0 }, 0 }, { 0, 's', "ashscrap", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "ashveil", 60.0, { 0, "vehicle", 2, { { 0, 's', "ashhull", 0, { 0 }, 0 }, { 0, 's', "ashscrap", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "ashveil", 60.0, { 0, "crater", 2, { { 0, 's', "ashcinder", 0, { 0 }, 0 }, { 0, 's', "pit", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "ashveil", 60.0, { 0, "skeleton", 1, { { 0, 's', "bone", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "ashveil", 100.0, { 0, "dais", 2, { { 0, 's', "ashstone", 0, { 0 }, 0 }, { 0, 's', "column", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
@@ -977,7 +985,7 @@ const FtLmSpec FT_LMS[] = {
     { "ferrum", 60.0, { 0, "track", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "rust", 0, { 0 }, 0 } } }, 0.35, 0.6, 0 },
     { "ferrum", 60.0, { 0, "wall", 2, { { 0, 's', "girder", 0, { 0 }, 0 }, { 0, 's', "pipe", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "ferrum", 60.0, { 0, "crater", 2, { { 0, 's', "slag", 0, { 0 }, 0 }, { 0, 's', "tar", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "ferrum", 100.0, { 0, "hull", 2, { { 0, 's', "rust", 0, { 0 }, 0 }, { 0, 's', "rust", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "ferrum", 100.0, { 0, "vehicle", 2, { { 0, 's', "rust", 0, { 0 }, 0 }, { 0, 's', "rust", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "ferrum", 100.0, { 0, "spires", 1, { { 0, 's', "slag", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "ferrum", 130.0, { 0, "ruin", 2, { { 0, 's', "girder", 0, { 0 }, 0 }, { 0, 's', "plate", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "obelis", 60.0, { "style_obelis", "obelisk", 0, { { 0 } } }, 0.55, 0.6, 0 },
@@ -991,12 +999,12 @@ const FtLmSpec FT_LMS[] = {
     { "sundered", 60.0, { 0, "colonnade", 2, { { 0, 's', "ashlar", 0, { 0 }, 0 }, { 0, 's', "flag", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "sundered", 100.0, { 0, "ruin", 2, { { 0, 's', "ashlar", 0, { 0 }, 0 }, { 0, 's', "flag", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "sundered", 100.0, { 0, "dais", 2, { { 0, 's', "flag", 0, { 0 }, 0 }, { 0, 's', "column", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "sundered", 130.0, { 0, "hull", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "sundered", 130.0, { 0, "vehicle", 2, { { 0, 's', "iron", 0, { 0 }, 0 }, { 0, 's', "iron", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "thornwild", 60.0, { 0, "tree", 2, { { 0, 's', "stump", 0, { 0 }, 0 }, { 0, 's', "root", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "thornwild", 60.0, { 0, "tentacles", 2, { { 0, 's', "creeper", 0, { 0 }, 0 }, { 0, 's', "bile", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "thornwild", 60.0, { 0, "nest", 2, { { 0, 's', "root", 0, { 0 }, 0 }, { 0, 's', "sporepod", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "thornwild", 100.0, { 0, "circle", 2, { { 0, 's', "glyph", 0, { 0 }, 0 }, { 0, 's', "glowcap", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
-    { "thornwild", 100.0, { 0, "hull", 2, { { 0, 's', "hullplate", 0, { 0 }, 0 }, { 0, 's', "hullplate", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
+    { "thornwild", 100.0, { 0, "vehicle", 2, { { 0, 's', "hullplate", 0, { 0 }, 0 }, { 0, 's', "hullplate", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
     { "thornwild", 130.0, { 0, "spires", 1, { { 0, 's', "spikethorn", 0, { 0 }, 0 } } }, 0.55, 0.6, 0 },
 };
 const int FT_NLMS = 150;

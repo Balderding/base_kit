@@ -42,6 +42,34 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## What is new in 2.1: tanks and trucks, supports joined into one solid
+
+- **Wrecked tanks and trucks.** The grim-dark sci-fi styles no longer show a wrecked boat. Ashveil's *buried
+  transport*, Ferrum's *fallen work-machine* and Thornwild's *overgrown wreck*, and the big-base wreck landmark in
+  Ashveil, Ferrum, Sundered and Thornwild, are now a wrecked tank or truck. A tank has track runs with cut links,
+  one track broken, an engine grille and a turret that is still on or blown off beside it. A truck has tyres, a
+  bonnet, a cab and a flatbed with torn rails. All metal, with no overhangs.
+- **Join into one solid (Manifold).** With *Allow overhangs* on, a second switch appears: *Join into one solid*
+  (on by default). The objects that may overhang are then joined into the base with the Manifold library, so the
+  STL is one clean solid instead of the base with each object as its own shell sunk into it. Any piece that would
+  hang in the air, touching nothing, is left out, and the thin slivers a join can leave are cleaned off. The print
+  check expects one solid again. Off: the old way, each object its own shell for the slicer to join.
+  Command line: `bbb_kit.exe --job build ... --supports on --join on|off`; `settings.json`: `"supports_join"`.
+- **A MANIFOLD row in the window**, one switch per job Manifold does for each base:
+  - **Smaller files** (on): the flat parts of each base are drawn with fewer, bigger triangles; the shape moves no
+    more than 0.005 mm. STLs come out 20 to 38% smaller and load faster; it costs about 0.1 s a base.
+  - **Strict check** (on): the print check also asks Manifold whether the base is a valid closed solid, and builds a
+    fresh variant if it is not.
+  Command line: `--smaller on|off`, `--strict on|off`; `settings.json`: `"smaller_files"`, `"strict_check"`.
+- **Finer steps on tall rounded objects.** A barrel, dome or log is built as stacked slices; the exe now makes them
+  0.1 mm high at most (up to 60 per object, was 18), finer than a print layer. `settings.json`:
+  `"detail_step_mm"` (0 = the old steps). Bases cost no more time and about 1 to 13% more triangles.
+- From 2.1 the exe's bases are no longer the same byte for byte as the Python kit's (the finer steps, the join and the
+  vehicles); the Python kit is unchanged and still has the boat.
+- Still being tested, so not in the window yet: *smooth details* (rounded objects as true smooth shapes) and *organic
+  rocks* (rocks as lumpy natural shapes), both joined into the base. They are off unless you ask for them on the command
+  line: `--smooth on`, `--rocks on`.
+
 ## What is new in 2.0.1
 
 - **Supports on keeps every round bar.** About 7% of ribs, bones, roots and horns were dropped from bases built with
@@ -251,8 +279,9 @@ Good to know:
 - Keys: Enter = the teal button, Esc = stop, Ctrl+A = pick all, D = details, 0-9 = how many, `?` = help.
 - The window runs the kit's job in its own process (the same code as `bbb_kit.exe --job build ...`, which prints
   one JSON record per event: choice, start, built, done). It starts copies of itself as helpers, one per core.
-- To build the exe yourself: `cport\geos_static\build_geos.cmd` once (GEOS 3.14.1 as a static library), then
-  `gui\build.cmd` (clang with the MinGW headers). The exe imports only Windows' own DLLs.
+- To build the exe yourself: `cport\geos_static\build_geos.cmd` and `cport\manifold_static\build_manifold.cmd`
+  once (GEOS 3.14.1 and Manifold 3.5.4 as static libraries), then `gui\build.cmd` (clang with the MinGW headers).
+  The exe imports only Windows' own DLLs.
 
 ## The drawing and the finished base
 
@@ -547,6 +576,10 @@ Everything is optional.
 | `out_folder` | `out` | Where runs are saved |
 | `workers` | "auto" | Bases built at the same time ("auto" = a third of the CPU cores, 2 to 12; or a number) |
 | `cpu_threads` | true | One base's height field and mesh on as many CPU threads as it needs, up to every thread the PC has, in C (a number = that many threads; false = one core, the proven path). The window's CPU threads switch wins |
+| `detail_step_mm` | 0.1 | The highest step on a rounded object (barrel, dome, log), in mm: smaller is smoother. 0 = the Python kit's steps (up to 18 per object) |
+| `smaller_files` | true | Each STL simplified by Manifold (flat parts in fewer triangles, the shape moves no more than `smaller_files_mm`, 0.005). The window's Smaller files switch wins |
+| `strict_check` | true | The print check also runs Manifold's own test of a valid closed solid. The window's Strict check switch wins |
+| `supports_join` | true | With supports on, the objects are joined into the base as one solid (Manifold), pieces in the air left out. false = each object its own shell. The window's Join switch wins |
 | `video_card` | true | 3D pictures drawn by the video card (Direct3D 11; Windows' software renderer if there is no card). false = Python draws them. The window's Video card switch wins |
 | `max_attempts` | 4 | Tries per base before it is flagged |
 | `max_detail_height_mm` | 0 | Tallest detail above the 4 mm base. 0 = no limit |
@@ -809,6 +842,10 @@ in `settings.json`) lifts that rule for the objects that gain from it:
 - a **signpost** stands up with its board in the air; **toadstools** have a thin stem and a wide cap; a boulder
   becomes a **balanced rock** on a narrow neck;
 - loose **bones** are round bars, and the **ribs** of a skeleton arch up off the ground.
+
+With **Join into one solid** on (the default; `--join on`), these objects are joined into the base with Manifold,
+so the STL is one solid; a piece that would hang in the air is left out. With it off (`--join off`) each object
+stays its own closed shell sunk a little into the base, and the slicer joins them.
 
 Everything else is built as before. To add one: give a solid a true form (`slab()` for a block hanging between two
 heights, `real=` on `lathe()`, `under=True` on `vault()`, `loft()` and `tube()`, `arch=` on `tube()`).

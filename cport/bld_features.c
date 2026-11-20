@@ -824,6 +824,94 @@ BUILD(L_hull) {
 fail: gfree(&rb); ar_free(A); if (R_ < 0) lyl_free(L); return R_;
 }
 
+/* L_vehicle(kind="iron", track="iron"): the wreck of a tank or a truck, all metal, every part standing on the ground or on
+   the part under it (no overhangs). A tank: two track runs with the links cut across them, the hull over them with a
+   lower glacis plate at the front, the engine grille cut into the rear deck, a shell hole; the turret either still on
+   (the gun laid over the deck) or blown off and lying beside the hull with its ring left open; one track broken with
+   loose links beside it. A truck: tyres on two or three axles, the bonnet and the tall cab at the front, the flatbed
+   with its rails (one side torn off), planks cut in its floor and a crate still on it. */
+BUILD(L_vehicle) {
+    BEGIN; GL ft = { 0 }, lk = { 0 }; GEOSGeometry *d, *e, *g, *body; double Ln, W; Frame ff; int jb, jt;
+    KREQ;
+    ff = lf_frame(cx, cy, a);
+    if (py_random(rng) < 0.6) {          /* ---- a tank */
+        double tw, ht, hb, ht2, Lb, Wb, bu, gap0, rt, tu; int bs = py_random(rng) < 0.5 ? -1 : 1, on;
+        Ln = py_uniform(rng, 15, 18.5) * k; W = py_uniform(rng, 10.0, 11.5) * mx1(P(k, 0.7));
+        tw = W * 0.24; ht = py_uniform(rng, 1.7, 2.1); hb = ht + py_uniform(rng, 0.9, 1.3); ht2 = py_uniform(rng, 1.2, 1.6);
+        Lb = Ln * 0.9; Wb = W - 2 * tw * 0.55;
+        gap0 = py_uniform(rng, -Ln / 4, Ln / 4);
+        for (int s = -1; s <= 1; s += 2) {          /* the track runs */
+            GEOSGeometry *tr; int jj;
+            CK(tr = RectF(A, &ff, 0, s * (W / 2 - tw / 2), Ln, tw, a)); CK(tr = Bufr(A, tr, -0.6)); CK(tr = Bufr(A, tr, 0.6));
+            if (s == bs) { CK(d = RectF(A, &ff, gap0, s * (W / 2 - tw / 2), 2.2, tw * 1.4, a)); CK(tr = Diff(A, tr, d)); }          /* broken */
+            L_up(L, tr, ht, c->s[1]); jj = L->n - 1; gp(&ft, tr);
+            for (double u = -Ln / 2 + 0.9; u < Ln / 2 - 0.6; u += 1.15) { CK(d = BarF(A, &ff, u, s * (W / 2 - tw - 0.2), u, s * (W / 2 + 0.2), 0.35)); gp(&lk, d); }
+            CK(d = U(A, &lk)); CK(d = Inter(A, d, tr)); L_tcut(L, d, jj, 0.3); lk.n = 0;
+        }
+        for (int i = 0; i < 3; i++) {          /* loose links by the break */
+            CK(d = RectF(A, &ff, gap0 + py_uniform(rng, -2.5, 2.5), bs * (W / 2 + py_uniform(rng, 0.9, 2.0)), 0.9, tw * 0.8, a + py_uniform(rng, -0.8, 0.8)));
+            L_up(L, d, 0.45, c->s[1]); gp(&ft, d);
+        }
+        {   /* the hull, the glacis plate lower at the front */
+            double xy[12], pu[6] = { -Lb / 2, Lb / 2 - 3.0, Lb / 2 - 3.0, -Lb / 2, 0, 0 }; (void)pu;
+            FF(&ff, -Lb / 2, -Wb / 2, &xy[0]); FF(&ff, Lb / 2 - 2.6, -Wb / 2, &xy[2]); FF(&ff, Lb / 2 - 2.6, Wb / 2, &xy[4]); FF(&ff, -Lb / 2, Wb / 2, &xy[6]);
+            CK(body = Poly(A, xy, 4)); L_up(L, body, hb, c->s[0]); jb = L->n - 1; gp(&ft, body);
+            FF(&ff, Lb / 2 - 2.6, -Wb / 2, &xy[0]); FF(&ff, Lb / 2, -Wb / 2 * 0.78, &xy[2]); FF(&ff, Lb / 2, Wb / 2 * 0.78, &xy[4]); FF(&ff, Lb / 2 - 2.6, Wb / 2, &xy[6]);
+            CK(d = Poly(A, xy, 4)); L_up(L, d, hb - 0.7, c->s[0]); gp(&ft, d);
+        }
+        for (double u = -Lb / 2 + 1.0; u < -Lb / 2 + 4.2; u += 0.8) { CK(d = BarF(A, &ff, u, -Wb / 2 + 1.0, u, Wb / 2 - 1.0, 0.35)); gp(&lk, d); }          /* engine grille */
+        CK(d = U(A, &lk)); L_tcut(L, d, jb, 0.3); lk.n = 0;
+        rt = Wb * 0.36; tu = Lb * 0.06; on = py_random(rng) < 0.65;
+        if (on) {          /* the turret still on, the gun laid over the deck */
+            double p[2], q[2], b = py_random(rng) < 0.4 ? 0.0 : py_uniform(rng, -0.9, 0.9), du = py_cos(b), dv = py_sin(b);
+            FF(&ff, tu, 0, p); CK(g = Disc(A, p[0], p[1], rt, 10)); L_on(L, g, jb, ht2, c->s[0]); jt = L->n - 1;
+            FF(&ff, tu - rt * 0.35, rt * 0.35, q); CK(d = Disc(A, q[0], q[1], 0.75, 12)); L_on(L, d, jt, 0.3, c->s[0]);          /* the hatch */
+            CK(d = BarF(A, &ff, tu, 0, tu + du * Lb, dv * Lb, 0.9)); CK(e = Inset(A, body, 0.4)); CK(d = Inter(A, d, e)); L_on(L, d, jb, ht2 * 0.65, c->s[0]);
+            CK(d = RectF(A, &ff, tu + du * rt, dv * rt, 1.4, 2.2, a + b)); CK(d = Inter(A, d, e)); L_on(L, d, jb, ht2 * 0.8, c->s[0]);          /* the mantlet */
+        } else {           /* blown off: the ring left open, the turret upside down beside the hull */
+            double p[2], q[2], side = py_random(rng) < 0.5 ? -1 : 1, u2 = py_uniform(rng, -Ln / 4, Ln / 4), b2 = py_uniform(rng, 0, 6.283);
+            FF(&ff, tu, 0, p); CK(d = Ann(A, p[0], p[1], rt, rt - 0.55, 24)); L_tcut(L, d, jb, 0.5);
+            FF(&ff, u2, side * (W / 2 + rt + 0.9), q); CK(g = Disc(A, q[0], q[1], rt, 10)); L_up(L, g, ht2 + 0.2, c->s[0]); gp(&ft, g);
+            { double r2[2] = { q[0] + Ln * 0.45 * py_cos(b2), q[1] + Ln * 0.45 * py_sin(b2) }; CK(d = Bar(A, q, r2, 0.9)); L_up(L, d, 0.9, c->s[0]); gp(&ft, d); }
+        }
+        { double p[2]; FF(&ff, py_uniform(rng, Lb * 0.15, Lb * 0.3), py_uniform(rng, -Wb / 4, Wb / 4), p); CK(d = Disc(A, p[0], p[1], 0.9, 12)); if (!on) L_tcut(L, d, jb, 0.6); else { CK(e = Disc(A, p[0], p[1], 0.9, 12)); (void)e; } }          /* a shell hole */
+        (void)bu;
+    } else {               /* ---- a truck */
+        double lc, lb, hc, hbd, rail, ub0, ub1; int nax = py_random(rng) < 0.5 ? 2 : 3, jbd, miss;
+        Ln = py_uniform(rng, 15, 18) * k; W = py_uniform(rng, 6.6, 7.6) * mx1(P(k, 0.7));
+        lc = Ln * 0.2; lb = Ln * 0.14; hc = py_uniform(rng, 3.6, 4.2); hbd = py_uniform(rng, 1.8, 2.2); rail = py_uniform(rng, 0.8, 1.1);
+        miss = (int)(py_random(rng) * (2 * nax + 2));          /* one tyre may be gone */
+        for (int ax = 0, t = 0; ax < nax; ax++) {
+            double u = ax == 0 ? Ln / 2 - lb * 0.9 - 1.2 : -Ln / 2 + 2.2 + (ax - 1) * 3.0;
+            for (int s = -1; s <= 1; s += 2, t++) {
+                GEOSGeometry *ty; int jj;
+                if (t == miss) continue;
+                CK(ty = RectF(A, &ff, u, s * (W / 2 - 0.55), 2.8, 1.4, a)); CK(ty = Bufr(A, ty, -0.4)); CK(ty = Bufr(A, ty, 0.4));
+                L_up(L, ty, 2.4, c->s[1]); jj = L->n - 1; gp(&ft, ty);
+                for (double w = -1.1; w <= 1.1; w += 0.55) { CK(d = BarF(A, &ff, u + w, s * (W / 2 - 1.4), u + w, s * (W / 2 + 0.3), 0.25)); gp(&lk, d); }
+                CK(d = U(A, &lk)); CK(d = Inter(A, d, ty)); L_tcut(L, d, jj, 0.2); lk.n = 0;
+            }
+        }
+        CK(d = RectF(A, &ff, Ln / 2 - lb / 2, 0, lb, W - 1.8, a)); L_up(L, d, 2.6, c->s[0]); gp(&ft, d);          /* the bonnet */
+        CK(g = RectF(A, &ff, Ln / 2 - lb - lc / 2, 0, lc, W - 0.9, a)); L_up(L, g, hc, c->s[0]); jt = L->n - 1; gp(&ft, g);          /* the cab */
+        CK(d = RectF(A, &ff, Ln / 2 - lb - lc / 2, 0, lc * 0.45, W * 0.35, a)); L_tcut(L, d, jt, 0.25);          /* a roof hatch */
+        ub0 = -Ln / 2; ub1 = Ln / 2 - lb - lc - 0.3;
+        CK(body = RectF(A, &ff, (ub0 + ub1) / 2, 0, ub1 - ub0, W - 0.4, a)); L_up(L, body, hbd, c->s[0]); jbd = L->n - 1; gp(&ft, body);
+        {   GEOSGeometry *in, *rl; double side = py_random(rng) < 0.5 ? -1 : 1, gu = py_uniform(rng, ub0 + 2, ub1 - 2);
+            CK(in = Inset(A, body, 0.55)); CK(rl = Diff(A, body, in));
+            CK(d = RectF(A, &ff, gu, side * (W / 2), py_uniform(rng, 3.0, 5.0), 1.6, a)); CK(rl = Diff(A, rl, d));          /* torn off */
+            L_on(L, rl, jbd, rail, c->s[0]);
+            for (double v = -W / 2 + 1.3; v < W / 2 - 0.9; v += 1.0) { CK(d = BarF(A, &ff, ub0, v, ub1, v, 0.2)); gp(&lk, d); }
+            CK(d = U(A, &lk)); CK(e = Inset(A, body, 0.8)); CK(d = Inter(A, d, e)); L_tcut(L, d, jbd, 0.15); lk.n = 0;
+            CK(d = RectF(A, &ff, py_uniform(rng, ub0 + 2.2, ub1 - 2.2), py_uniform(rng, -0.8, 0.8), 2.4, 2.4, a + py_uniform(rng, -0.3, 0.3))); CK(d = Inter(A, d, in));
+            L_on(L, d, jbd, py_uniform(rng, 1.4, 1.9), c->s[0]);          /* a crate still on the bed */
+        }
+    }
+    CK(d = U(A, &ft)); CK(d = Hull(A, d)); CK(d = Bufr(A, d, 0.3)); put_foot(foot, d);
+    R_ = 0;
+fail: gfree(&ft); gfree(&lk); ar_free(A); if (R_ < 0) lyl_free(L); return R_;
+}
+
 /* L_tree(kind="stump", root="root"): b_roots(kind, root, (2.6, 3.4))(cx, cy, a, rng, k) */
 BUILD(L_tree) { BC *c = (BC *)c_; KREQ; return roots(c->s[0], c->s[1], 2.6, 3.4, cx, cy, a, rng, k, foot, L); }
 
@@ -982,6 +1070,7 @@ FAC(F_L_river) { MK(L_river, 3); b->s[0] = as_s(call, 0, "kind", "water"); b->s[
 FAC(F_L_crater) { MK(L_crater, 2); b->s[0] = as_s(call, 0, "rim", "rock"); b->s[1] = as_s(call, 1, "pit", "pit"); return 0; }
 FAC(F_L_colonnade) { MK(L_colonnade, 2); b->s[0] = as_s(call, 0, "kind", "tcolumn"); b->s[1] = as_s(call, 1, "floor", "tflag"); return 0; }
 FAC(F_L_hull) { MK(L_hull, 2); b->s[0] = as_s(call, 0, "kind", "hull"); b->s[1] = as_s(call, 1, "rib", "hull"); return 0; }
+FAC(F_L_vehicle) { MK(L_vehicle, 2); b->s[0] = as_s(call, 0, "kind", "iron"); b->s[1] = as_s(call, 1, "track", "iron"); return 0; }
 FAC(F_L_tree) { MK(L_tree, 2); b->s[0] = as_s(call, 0, "kind", "stump"); b->s[1] = as_s(call, 1, "root", "root"); return 0; }
 FAC(F_L_circle) { MK(L_circle, 2); b->s[0] = as_s(call, 0, "kind", "glyph"); b->s[1] = as_s(call, 1, "post", "tcolumn"); return 0; }
 FAC(F_L_ruin) { MK(L_ruin, 2); b->s[0] = as_s(call, 0, "kind", "ruin"); b->s[1] = as_s(call, 1, "floor", "pavers"); return 0; }
@@ -1011,7 +1100,7 @@ static const struct { const char *name; BldFactory f; } TAB[] = {
     { "b_fairy_ring", F_fairy_ring }, { "b_sign", F_sign }, { "b_gear", F_gear }, { "b_brazier", F_brazier }, { "b_tiles", F_tiles },
     { "b_pile", F_pile }, { "b_hoops", F_hoops },
     { "L_wall", F_L_wall }, { "L_track", F_L_track }, { "L_dais", F_L_dais }, { "L_river", F_L_river }, { "L_skeleton", F_L_skeleton },
-    { "L_crater", F_L_crater }, { "L_colonnade", F_L_colonnade }, { "L_hull", F_L_hull }, { "L_tree", F_L_tree }, { "L_circle", F_L_circle },
+    { "L_crater", F_L_crater }, { "L_colonnade", F_L_colonnade }, { "L_hull", F_L_hull }, { "L_vehicle", F_L_vehicle }, { "L_tree", F_L_tree }, { "L_circle", F_L_circle },
     { "L_ruin", F_L_ruin }, { "L_pool", F_L_pool }, { "L_boardwalk", F_L_boardwalk }, { "L_nest", F_L_nest }, { "L_spires", F_L_spires },
     { "L_tentacles", F_L_tentacles },
 };

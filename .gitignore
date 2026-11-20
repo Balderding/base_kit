@@ -31,3 +31,6 @@ cport/*.exe
 
 # built by cport/geos_static/build_geos.cmd (GEOS 3.14.1, static): not kept in git
 cport/geos_static/lib/
+
+# built by cport/manifold_static/build_manifold.cmd (Manifold 3.5.4 + Clipper2, static): not kept in git
+cport/manifold_static/lib/
