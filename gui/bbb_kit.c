@@ -73,7 +73,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_STONED 0xFF16181Eu
 enum { SIDE_W = 300, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -83,7 +83,7 @@ static Hit hits[400]; static int nhit, hovK, hovI = -1;
 static WCHAR *logv[MAXLOG]; static int nlog;
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
-static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1"; static int curSup, curJoin = 1, selScale = 3;
+static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1", curObj[16] = "3"; static int curSup, curJoin = 1, selScale = 0, selObj = 5, curFig = 32;          /* selScale: the game scale (GAMEMM), selObj: the slider (OBJM) */
 static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, selJoin = 1, showDetails = 0;
 static int mfOn[4] = { 1, 1, 0, 0 };          /* the MANIFOLD switches: Smaller files, Strict check, Smooth details, Organic rocks */
 static const char *MFN[4] = { "Smaller files", "Strict check", "Smooth details", "Organic rocks" }, *MFA[4] = { "smaller", "strict", "smooth", "rocks" }; static int MF_N = 2;          /* 2.1.0: Smooth details and Organic rocks not shown yet (still being checked; --smooth / --rocks work) */          /* selCount: how many bases, 1 to 20 */
@@ -118,7 +118,8 @@ static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50",
                                 "60x35.5", "75x42", "90x52", "105x70", "120x92", "150x95", "170x109" };          /* then the common oval bases, long x short */
 enum { NROUND = 16, NSIZES = 23 };
 static const char *DETAILL[] = { "Mix", "1", "2", "3", "4" }, *DETAILV[] = { "mix", "1", "2", "3", "4" };
-static const char *SCALES[] = { "32 mm", "28 mm", "15 mm", "classic" }, *SCALEV[] = { "3", "2.6", "1.4", "1" };          /* the scenery scale: how many times larger than laid out, for figures of that height */
+static const char *SCALES[] = { "32 mm", "28 mm", "15 mm" }; static const double GAMEMM[] = { 32, 28, 15 };          /* the game scale: how tall a man is */
+static const double OBJM[] = { 0.33, 0.45, 0.6, 0.75, 0.9, 1.0, 1.15, 1.3, 1.5 }; enum { NOBJ = 9, OBJ_TRUE = 5 };          /* the slider: times the true size (0.33 of 32 mm: the classic look) */
 static const char *MINIS[] = { "default", "biped", "wide", "walker", "tripod", "quad", "many", "scorpion", "crawler", "tracked", "hover", "none", "mix" };
 
 
@@ -295,13 +296,13 @@ static void ask_choices(int fresh) {
     if (fresh || !ncell) {
         for (i = 0; i < ncell; i++) free_cell(&cells[i]);
         ncell = 0; scrollY = 0; outFolder[0] = 0;
-        strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; strcpy(curScale, SCALEV[selScale]);
+        strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; { double o = GAMEMM[selScale] / 32.0 * 3.0 * OBJM[selObj]; snprintf(curObj, sizeof curObj, "%.3g", o > 1.0 ? o : 1.0); curFig = (int)GAMEMM[selScale]; }
     }
     if (ncell + cnt > MAXC) cnt = MAXC - ncell;
     if (cnt <= 0) { wcscpy(sub, L"That is as many choices as fit. Build some, or press Show new choices to start over."); redraw(); return; }
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, L" --supports on");
-    swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
+    swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
     for (i = 2; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* smooth details / organic rocks change the layout: the choices are drawn the same way */
     swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
@@ -318,7 +319,7 @@ static void build(void) {
     if (!k) return;
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
-    swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
+    swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
     for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
     jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
@@ -904,6 +905,77 @@ static void big_view(int x0, int y0, int w0, int h0, int nrw) {
     }
     GdipResetClip(G);
 }
+/* SIZE OF THINGS ON TOP (2026-11-20): one slider for how big the objects on a base are. True = their real size beside a man
+   of the game scale (1:56 for 28 and 32 mm). Left of True shrinks them to the old "classic" map look, right makes them chunkier.
+   Under it a small picture from above: the base, the space the model takes (dashed: a long box for a tank, else a disc, the
+   same rule as the kit's features.c ft_model_space), a crate, a barrel and a rock at that size, and a man from the side. */
+static int ms_space(double mm, double R, const char *mini, double *rad, double *hx, double *hy) {
+    double a = mm < 39.9 ? 0.2 : mm < 59.9 ? 0.4 : mm < 89.9 ? 0.5 : 0.6; int dflt = !mini || !*mini || !strcmp(mini, "default") || !strcmp(mini, "mix");
+    int wide = mm >= 59.9 && ((mini && (!strcmp(mini, "tracked") || !strcmp(mini, "wide") || !strcmp(mini, "hover") || !strcmp(mini, "quad") || !strcmp(mini, "many"))) || (dflt && mm >= 89.9));
+    if (wide) { *hx = 0.9 * R; *hy = a * 3.14159265 * R / 3.6; if (*hy > 0.8 * R) *hy = 0.8 * R; *rad = 0; return 1; }
+    *rad = sqrt(a) * R; *hx = *hy = 0; return 0;
+}
+static void ell(double x, double y, double w, double h, ARGB fill, ARGB line, double lw, int dash) {
+    if (fill) { GpSolidFill *b; GdipCreateSolidFill(fill, &b); GdipFillEllipse(G, (GpBrush *)b, (REAL)x, (REAL)y, (REAL)w, (REAL)h); GdipDeleteBrush((GpBrush *)b); }
+    if (line) { GpPen *pn; GdipCreatePen1(line, (REAL)lw, UnitPixel, &pn); if (dash) GdipSetPenDashStyle(pn, DashStyleDash); GdipDrawEllipse(G, pn, (REAL)x, (REAL)y, (REAL)w, (REAL)h); GdipDeletePen(pn); }
+}
+static void boxl(double x, double y, double w, double h, ARGB fill, ARGB line, double lw, int dash) {
+    if (fill) { GpSolidFill *b; GdipCreateSolidFill(fill, &b); GdipFillRectangle(G, (GpBrush *)b, (REAL)x, (REAL)y, (REAL)w, (REAL)h); GdipDeleteBrush((GpBrush *)b); }
+    if (line) { GpPen *pn; GdipCreatePen1(line, (REAL)lw, UnitPixel, &pn); if (dash) GdipSetPenDashStyle(pn, DashStyleDash); GdipDrawRectangle(G, pn, (REAL)x, (REAL)y, (REAL)w, (REAL)h); GdipDeletePen(pn); }
+}
+static int obj_classic(void) { return OBJM[selObj] * GAMEMM[selScale] / 32.0 * 3.0 <= 1.0; }          /* the slider's left end: the classic map look */
+static void obj_slider(int *y) {
+    int x0 = S(16), wAll = S(SIDE_W - 32), th = S(24), cw = wAll / NOBJ, i, ph = S(128); WCHAR b[160];
+    double A = atof(SIZES[selSize]), B = A, man = GAMEMM[selScale], mpm = man / 1.8 * OBJM[selObj];          /* mpm: mm a metre on the base */
+    { const char *xx = strchr(SIZES[selSize], 'x'); if (xx) B = atof(xx + 1); }
+    section(L"SIZE OF THINGS ON TOP", x0, *y, wAll, S(18)); *y += sideTight ? S(19) : S(20);
+    if (lookPix) pbox(x0, *y, wAll, th, 1, 4, 0); else rr(x0, *y, wAll, th, S(6), C_BG, C_LINE, 1);
+    fillrect(x0 + cw / 2, *y + th / 2 - S(1), wAll - cw, S(2), C_LINE);
+    for (i = 0; i < NOBJ; i++) {
+        int cx = x0 + i * cw + cw / 2;
+        if (i == OBJ_TRUE) fillrect(cx - S(1), *y + S(4), S(2), th - S(8), C_GOLD);
+        if (i == selObj) ell(cx - S(8), *y + th / 2 - S(8), S(16), S(16), hov(H_OBJ, i) ? C_ACCH : C_ACC, C_EDGE, 1, 0);
+        else ell(cx - S(3), *y + th / 2 - S(3), S(6), S(6), hov(H_OBJ, i) ? C_ACCH : C_DIM, 0, 0, 0);
+        hit(x0 + i * cw, *y, cw, th, H_OBJ, i);
+    }
+    *y += th + S(2);
+    txt(L"Map", x0, *y, wAll / 3, S(14), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE);
+    txt(L"True", x0 + wAll / 3, *y, wAll / 3, S(14), fSmall, C_GOLD, DT_CENTER | DT_SINGLELINE);
+    txt(L"Chunky", x0 + 2 * wAll / 3, *y, wAll / 3, S(14), fSmall, C_DIM, DT_RIGHT | DT_SINGLELINE);
+    *y += S(16);
+    if (obj_classic()) swprintf(b, 160, L"Map look: things a third of true size, a small scene");
+    else swprintf(b, 160, L"%ls crate %.0f mm, barrel %.0f mm, man %.0f mm", selObj == OBJ_TRUE ? L"True:" : selObj < OBJ_TRUE ? L"Smaller:" : L"Chunkier:", 0.8 * mpm, 0.6 * mpm, man);
+    txt(b, x0, *y, wAll, S(28), fSmall, C_TEXT, DT_LEFT | DT_WORDBREAK);
+    *y += S(30);
+    {          /* the picture: the base from above, the model's space, the things at their size; the man from the side */
+        double pw = wAll - S(8), pk, bx, by, bw, bh, cx, cy, rad, hx, hy; int box; const char *mini = selMini ? MINIS[selMini] : "default";
+        rr(x0, *y, wAll, ph, S(6), C_BG, C_LINE, 1);
+        pk = fmin((pw - S(34)) / A, (ph - S(22)) / fmax(B, man + 4));          /* px a mm */
+        bw = A * pk; bh = B * pk; bx = x0 + S(6); by = *y + S(16) + (ph - S(16) - bh) / 2; cx = bx + bw / 2; cy = by + bh / 2;
+        ell(bx, by, bw, bh, 0xFF5A5246u, C_EDGE, 1, 0);
+        ell(bx + S(2), by + S(2), bw - S(4), bh - S(4), 0xFF6E6656u, 0, 0, 0);
+        box = ms_space(A, fmin(A, B) / 2 * 0.97, mini, &rad, &hx, &hy);
+        if (A >= 39.9 && !obj_classic()) {
+            double ex = fmin(hx, bw / 2 / pk * 0.97);
+            if (box) boxl(cx - ex * pk, cy - hy * pk, 2 * ex * pk, 2 * hy * pk, 0, C_TEALL, S(1.5), 1);
+            else ell(cx - rad * pk, cy - rad * pk, 2 * rad * pk, 2 * rad * pk, 0, C_TEALL, S(1.5), 1);
+            txt(L"dashed: the model's space", x0 + S(8), *y + S(2), wAll - S(60), S(14), fSmall, C_TEALL, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+        {          /* a crate, a barrel and a rock near the rim, where the kit puts them */
+            double cs = fmax(1, 0.8 * mpm * pk), bs = fmax(1, 0.6 * mpm * pk), rs = fmax(1, 0.5 * mpm * pk), gp = S(2), tw = cs + bs + 1.3 * rs + 2 * gp, ex = cx - tw / 2, ey = cy + bh * 0.5 - fmax(cs, bs) / 2 - S(5);          /* side by side, inside the rim at the front */
+            boxl(ex, ey - cs / 2, cs, cs, 0xFF9C6B3Bu, C_EDGE, 1, 0);
+            ell(ex + cs + gp, ey - bs / 2, bs, bs, 0xFF5D7A8Cu, C_EDGE, 1, 0);
+            ell(ex + cs + bs + 2 * gp, ey - rs / 2, rs * 1.3, rs, 0xFF8A7F74u, C_EDGE, 1, 0);
+        }
+        {          /* the man, from the side, to the right of the base */
+            double mh = man * pk, mx = x0 + wAll - S(18), my = *y + ph - S(6), mw = fmax(S(4), mh * 0.28);
+            rr(mx - mw / 2, my - mh * 0.82, mw, mh * 0.82, mw / 3, 0xFFD8D4CAu, C_EDGE, 1);
+            ell(mx - mw * 0.45, my - mh, mw * 0.9, mw * 0.9, 0xFFD8D4CAu, C_EDGE, 1, 0);
+            swprintf(b, 160, L"%.0f mm", man); txt(b, (int)(mx - S(20)), (int)(my - mh - S(16)), S(40), S(14), fSmall, C_DIM, DT_CENTER | DT_SINGLELINE);
+        }
+        *y += ph + S(8);
+    }
+}
 static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
@@ -928,7 +1000,7 @@ static void paint(HDC out, int W, int H) {
     y = S(68);
     chips(L"STYLE", STYLES, NSTYLES, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 8, selSize, H_SIZE, &y); y -= S(4); chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, selSize - NROUND, H_OVAL, &y);
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
-    chips(L"OBJECTS SIZED FOR FIGURES OF", SCALES, 4, 4, selScale, H_SCALE, &y);
+    chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
     {          /* how many: a number from 1 to 20. Type it, or use the minus and plus */
         int x0 = S(16), wAll = S(SIDE_W - 32), bh = S(30), bw = S(40), fresh = GetTickCount() - lastDigit < 1500; WCHAR nb[8];
         section(L"HOW MANY BASES  (1 TO 20)", x0, y, wAll, S(18)); y += S(20);
@@ -1109,7 +1181,7 @@ static void help(int W, int H) {
                               L"Base size:  the width of the round base in millimetres, 20 to 160; or an oval, long x short (60x35.5 to 170x109).\n"
                               L"Detail:  1 is the simplest, 4 has the most on it. Mix gives some of each.\n"
                               L"The miniature it is for:  the kit keeps the spot flat where that kind of model stands. Default takes it from settings.json; none keeps no spot.\n"
-                              L"Objects sized for figures of:  \"classic\" (the default) makes every base a whole small scene, its things about a third of true size beside a 32 mm figure. 32 mm, 28 mm or 15 mm makes the things true to a figure of that height instead: a small base then shows only a part of a scene, a large base gets real ground (rises, gullies, pools), and the picture shows a post as tall as the figure. The spot where the miniature stands is always kept flat and on the base.\n"
+                              L"Game scale:  how tall a man is in your game, 32, 28 or 15 mm. Size of things on top:  True (the default) makes every crate, barrel and skull its real size beside that man (a crate 14 mm at 32 mm), on every base. A bigger base is for a bigger model, so it gets the model's space kept clear and level in the middle (a long box for a tank, a disc for a walker or a monster), the big pieces round it and no grit. Left of True makes things smaller, down to Map (the old classic look: a whole small scene, things a third of true size); right of True makes them chunkier. The picture under the slider shows it from above: the base, the model's space dashed, a crate, a barrel and a rock at that size, and the man.\n"
                               L"How many bases:  1 to 20. Type the number or use the minus and plus. That many designs are drawn each time.\n"
                               L"Allow overhangs:  things may hang over (rounder barrels, arching ribs). The print then needs supports. Off: every base prints without supports.  Join into one solid (shown with overhangs on): the objects are joined into the base as one clean solid (Manifold); a piece that would hang in the air is left out.", x1, y, cwid);
     y = para(L"WHERE THE FILES GO", L"Everything the kit needs is inside bbb_kit.exe, the free public-domain models its details are made from too: nothing is downloaded and nothing needs installing. It runs from any folder.\n"
@@ -1119,7 +1191,7 @@ static void help(int W, int H) {
                               L"Parts:  a switch each for Core bars, Video card meter, Base taking shape, Time left (from your earlier builds) and Rows over time.", x1, y, cwid);
     y = py + S(58);
     y = para(L"THE CARDS", L"A flat picture from above is a design that is not built yet.\n"
-                              L"A grey 3D picture is the finished base, with its drawing small in the corner so you can check one against the other. The post standing beside it is a figure of the height you chose, to judge the scale by.\n"
+                              L"A grey 3D picture is the finished base, with its drawing small in the corner so you can check one against the other. The post standing beside it is a man of the game scale you chose, to judge the size by; on a base of 40 mm and up a dashed line floating over it marks the model's space.\n"
                               L"Teal BUILT:  built, and it passed the print check. Click the card to show its STL file.\n"
                               L"Gold \"built as a new variant\":  the design you picked failed the print check, so the kit built a different one in its place.\n"
                               L"Gold \"not built\":  no good base after four tries. Details says why.\n"
@@ -1170,6 +1242,7 @@ static void act2(int kind, int idx) {
     case H_DETAIL: selDetail = idx; break;
     case H_MINI: selMini = idx; break;
     case H_SCALE: selScale = idx; break;
+    case H_OBJ: selObj = idx; break;
     case H_COUNT: selCount += idx; if (selCount < 1) selCount = 1; if (selCount > 20) selCount = 20; break;
     case H_QUICK: if (!busy) { autoBuild = 1; ask_choices(1); if (!busy) autoBuild = 0; } return;
     case H_SUP: selSup = !selSup; break;
@@ -1261,9 +1334,9 @@ static void make_fonts(void) {
 }
 static void ini(int save) {
     WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu,
-                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &selJoin, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3] }; int lim[] = { NSTYLES, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 }, i;
-    static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"look", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard",
-                                   L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows", L"joinsolid", L"mfsmaller", L"mfstrict", L"mfsmooth", L"mfrocks" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
+                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &selJoin, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3], &selObj }; int lim[] = { NSTYLES, NSIZES, 5, 13, 21, 2, 2, 3, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, NOBJ }, i;
+    static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"game", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard",
+                                   L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows", L"joinsolid", L"mfsmaller", L"mfstrict", L"mfsmooth", L"mfrocks", L"objsize" };          /* "game": the game scale (2026-11-20; the old "look" key, the figure size with classic, is not read now), "objsize": the slider */
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
@@ -1277,7 +1350,7 @@ static void ini(int save) {
         savedR.right = (int)GetPrivateProfileIntW(L"window", L"right", 0, p); savedR.bottom = (int)GetPrivateProfileIntW(L"window", L"bottom", 0, p);
         savedMax = (int)GetPrivateProfileIntW(L"window", L"maximized", 0, p);
     }
-    for (i = 0; i < 24; i++) {
+    for (i = 0; i < 25; i++) {
         if (save) { swprintf(v, 16, L"%d", *vals[i]); WritePrivateProfileStringW(L"window", keys[i], v, p); }
         else { int x = (int)GetPrivateProfileIntW(L"window", keys[i], *vals[i], p); if (x >= (i == 4) && x < lim[i]) *vals[i] = x; }
     }
@@ -1301,7 +1374,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == 5) { if (shrinkI < 0) KillTimer(h, 5); }
         else anim++;
         redraw(); return 0;
-    case WM_MOUSEMOVE: { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); return 0; }
+    case WM_MOUSEMOVE: { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if ((w & MK_LBUTTON) && hovK == H_OBJ && hovI != selObj) act(H_OBJ, hovI); return 0; }          /* the slider follows a drag */
     case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; redraw(); return 0;
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
     case WM_LBUTTONDOWN: hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (hovK != H_NONE) act(hovK, hovI); return 0;
@@ -1376,7 +1449,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
     speed_env();          /* the speed switches, for every job started from here on */
     make_fonts(); wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
-    memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIcon(NULL, IDI_APPLICATION); RegisterClassW(&wc);
+    memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     if (selftest) ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
     hMain = CreateWindowExW(ex, L"bbb_kit", L"Balderding's Ballin Base Kit", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
@@ -1408,7 +1481,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         if (o) { fprintf(o, "how_many_after_typing_1_5 %d\n", selCount); fprintf(o, "thick_frame %d\nmaximize_box %d\nstart %ldx%ld\nlarger %ldx%ld\nsmallest %ldx%ld\nscroll_max_small %d\n", !!(st & WS_THICKFRAME), !!(st & WS_MAXIMIZEBOX), a.right, a.bottom, b2.right, b2.bottom, c2.right, c2.bottom, scrollMax); fclose(o); }
         return 0;
     }
-    if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) & 3; }          /* a test may ask for another figure size: 0 = 32 mm ... 3 = classic */
+    if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) % 3; }          /* a test may ask for another game scale: 0 = 32 mm, 1 = 28 mm, 2 = 15 mm */
     if (selftest) { char e[16]; int i; if (GetEnvironmentVariableA("BBB_TEST_SIZE", e, sizeof e)) for (i = 0; i < NSIZES; i++) if (!strcmp(e, SIZES[i])) stSize = i; }          /* and another base size, as written on its chip: 60, 90x52 ... */
     if (selftest == 3) { selStyle = 14; selSize = 8; selDetail = 4; selMini = 0; selCount = 8; selSup = 0; ask_choices(1); }
     if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = GetEnvironmentVariableA("BBB_TEST_OVERHANGS", NULL, 0) ? 1 : 0; ask_choices(1); }          /* a test of overhangs + join: BBB_TEST_OVERHANGS set */

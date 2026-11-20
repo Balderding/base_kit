@@ -75,6 +75,7 @@ int au_scene(Scene *s, const char *style, int n, double mm, const char *theme, F
             if (np == cap) { cap = cap ? 2 * cap : 256; P = (Pc *)realloc(P, sizeof *P * (size_t)cap); }
             p = &P[np++]; p->g = g; shp_bounds(g, p->bb); p->area = shp_area(g);
             p->z0 = o->n[0].v; p->top = o->type == OP_PRISM ? o->n[1].v : o->n[0].v + o->n[1].v;
+            { const char *pf = getenv("BBB_AUDIT_LIST"); FILE *ff = pf && *pf ? fopen(pf, "a") : NULL; if (ff) { fprintf(ff, "%s\t%s\t%.2f\t%.2f\n", w, o->kind ? o->kind->s : "?", p->area, p->top - p->z0); fclose(ff); } }          /* BBB_AUDIT_LIST: every piece, who, kind, area, height */
             p->feat = base ? -1 : o->feat ? o->feat : -1000;          /* laid with the scene: one detail per material (a path of pipe, a row of logs) */ p->base = base; p->op = i; p->k = o->kind; p->who = w;
         }
     }

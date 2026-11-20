@@ -16,6 +16,7 @@
 #include "draw2d.h"
 #include "pyx.h"
 #include "meshglue.h"
+#include "features.h"
 
 /* ================================================================ small strings */
 typedef struct { char *s; size_t n, cap; } Sb;
@@ -178,7 +179,7 @@ static const char DEFAULT_SETTINGS[] =
     " \"chamfer_rocks\": true, \"chamfer_grates\": true, \"max_detail_height_mm\": 0, \"random_mix\": true, \"extra_details\": true,"
     " \"max_attempts\": 4, \"merge_joins\": true, \"group_pieces\": true, \"min_difference_pct\": 15, \"compare_last\": 10, \"merge_chunk\": 12,"
     " \"join_on_parent\": true, \"engine\": \"mesh\", \"mesh_keep_running\": true, \"big_base_height_factor\": 1.5, \"scenes\": true,"
-    " \"scenery_scale\": 1, \"drawing_2d\": true, \"models_download\": true, \"no_bare_ground\": true, \"style_details\": true,"
+    " \"scenery_scale\": 1, \"object_size\": 3, \"model_room\": 1, \"drawing_2d\": true, \"models_download\": true, \"no_bare_ground\": true, \"style_details\": true,"
     " \"style_details_amount\": 0.5, \"objects_amount\": 1, \"cpu_threads\": true, \"video_card\": true, \"max_slenderness\": 3.0, \"miniature\": \"biped\","
     " \"smooth_details\": false, \"organic_rocks\": false}";
 static JV CFG_DEF;
@@ -226,6 +227,9 @@ void *runner_job;
 volatile long runner_stop;
 
 /* kit_settings.figure_scale */
+/* --obj (settings "object_size", default 3 = true beside a 32 mm figure): each detail at its real size on a base laid out at
+   its own size (features.c ft_obj_scale). 1 or under: the classic sizes. The old --scale wins when it is given. */
+static double obj_of(const char *obj_s, double sc) { double v; if (sc != 1.0) return 0.0; v = obj_s[0] ? strtod(obj_s, NULL) : cfg_num("object_size", 3.0); return v > 1.0 ? v : 0.0; }
 static double figure_scale(double size_mm, double scale) { return size_mm < cfg_num("figure_scale_from_mm", 50) - 1e-6 ? 1.0 : scale; }
 
 /* ================================================================ files and folders */
@@ -429,7 +433,7 @@ static DWORD WINAPI choice_worker(void *arg) {          /* one choices.py helper
 static int job_choices(Args *a, const char *style) {
     const char *size = opt(a, "--size", "30"), *detail = opt(a, "--detail", "mix"), *count_s = opt(a, "--count", "20");
     const char *mini = opt(a, "--mini", ""), *sup = opt(a, "--supports", ""), *scale_s = opt(a, "--scale", ""), *seed_s = opt(a, "--seed", "");
-    const char *jobs_s = opt(a, "--jobs", ""), *px_s = opt(a, "--px", "360");
+    const char *jobs_s = opt(a, "--jobs", ""), *px_s = opt(a, "--px", "360"), *obj_s = opt(a, "--obj", "");
     /* gui_job.models(): nothing to fetch, the model packs the kit uses are inside the exe (models.c, MODELS_BIN) */
     char ts[32], outdir[MAX_PATH * 3], od[MAX_PATH * 3]; strftime_now(ts, sizeof ts, "%Y%m%d_%H%M%S");
     snprintf(od, sizeof od, "%s\\choices\\%s", out_root(), ts); abs_path(od, outdir, sizeof outdir); make_dirs(outdir);
@@ -445,6 +449,7 @@ static int job_choices(Args *a, const char *style) {
     es[ne++] = (EnvSet){ "PYTHONWARNINGS", "ignore" }; es[ne++] = (EnvSet){ "PYTHONUNBUFFERED", "1" }; es[ne++] = (EnvSet){ "PYTHONIOENCODING", "utf-8" };
     es[ne++] = (EnvSet){ "SALT", seed }; es[ne++] = (EnvSet){ "RESEED", "" }; es[ne++] = (EnvSet){ "BASE_MM", bm }; es[ne++] = (EnvSet){ "KIT_QUIET", "1" };
     if (sc != 1.0) { es[ne++] = (EnvSet){ "KIT_FINAL_MM", fm }; es[ne++] = (EnvSet){ "KIT_SCALE", sk }; }
+    char obv[32]; double obd = obj_of(obj_s, sc); fmt_g(obv, sizeof obv, obd); if (obd > 0) es[ne++] = (EnvSet){ "KIT_OBJ", obv };
     es[ne++] = (EnvSet){ "KIT_OVAL", oval ? ov : NULL };
     if (mini[0]) es[ne++] = (EnvSet){ "KIT_MINI", mini };
     if (!strcmp(sup, "on") || !strcmp(sup, "off")) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
@@ -1214,7 +1219,7 @@ static void run_style(RunSet *rs) {
 }
 
 /* ---- gui_job.py build: run_set per seed, every OK base copied into out\picked_<date>_<time> ---- */
-typedef struct { const char *style, *size, *seed, *dest; double scale; int *seen, okc, bad; } PickCtx;
+typedef struct { const char *style, *size, *seed, *dest; double scale; int *seen, okc, bad; double obj, mm, fig; const char *mini; } PickCtx;          /* obj: --obj (0 = classic), fig: the figure post's height (mm) */
 static void size_tag_gui(const char *txt, char *out, size_t cap) {          /* gui_job.size_tag */
     double a, b; int ov; read_size(txt, &a, &b, &ov); char x[32], y[32]; fmt_g(x, sizeof x, a); fmt_g(y, sizeof y, b);
     if (a == b) snprintf(out, cap, "%s", x); else snprintf(out, cap, "%sx%s", x, y);
@@ -1245,10 +1250,22 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
             if (stl_read(stl, &soup)) {
                 char tmp[MAX_PATH * 3]; snprintf(tmp, sizeof tmp, "%.*s_raw.png", (int)strlen(img) - 4, img);
                 int W = strchr(P->size, 'x') ? 1100 : 900, Hh = strchr(P->size, 'x') ? 620 : 700;
-                if (P->scale > 1.01) {          /* concatenate([m, fig]) */
+                if (P->scale > 1.01 || P->obj > 0) {          /* concatenate([m, fig]) */
                     double r = -INFINITY; MgMesh fig = { 0 }, all;
                     for (int i = 0; i < soup.nv; i++) if (soup.v[3 * i] > r) r = soup.v[3 * i];
-                    if (mg_figure(P->scale, r, &fig) == 0) {
+                    if (P->obj > 0 && P->mm >= 39.9) {          /* the model's space: a low wall round it, so a big base shows where the model goes */
+                        double rad, hx, hy, xy[2 * 160], zt = 4.0; int box = ft_model_space(P->mm, r, P->mini, cfg_num("model_room", 1.0), &rad, &hx, &hy), n = 0; MgMesh ol = { 0 };
+                        if (box) { double per = 4 * (hx + hy); for (int k = 0; k < 160; k++) { double t = per * k / 160.0, x, y;
+                                if (t < 2 * hx) { x = -hx + t; y = -hy; } else if (t < 2 * hx + 2 * hy) { x = hx; y = -hy + (t - 2 * hx); } else if (t < 4 * hx + 2 * hy) { x = hx - (t - 2 * hx - 2 * hy); y = hy; } else { x = -hx; y = hy - (t - 4 * hx - 2 * hy); }
+                                double d = sqrt(x * x + y * y), lim = 0.95 * r; if (d > lim) { x *= lim / d; y *= lim / d; } xy[2 * n] = x; xy[2 * n + 1] = y; n++; } }
+                        else for (int k = 0; k < 64; k++) { xy[2 * n] = rad * cos(6.2831853 * k / 64); xy[2 * n + 1] = rad * sin(6.2831853 * k / 64); n++; }
+                        for (int i = 0; i < soup.nv; i++) { double x = soup.v[3 * i], y = soup.v[3 * i + 1], z = soup.v[3 * i + 2];
+                            if ((box ? fabs(x) <= hx && fabs(y) <= hy : x * x + y * y <= rad * rad) && x * x + y * y < 0.9 * r * r && z > zt) zt = z; }
+                        if (zt > 4.0 + 12.0) zt = 4.0 + 12.0;
+                        if (mg_outline(xy, n, 0.9, zt + 1.5, zt + 2.3, 2, &ol) == 0) { all.v = soup.v; all.nv = soup.nv; all.f = soup.f; all.nt = soup.nt; mg_concat(&all, &ol, 1); soup.v = all.v; soup.nv = all.nv; soup.f = all.f; soup.nt = all.nt; }
+                        mg_mesh_free(&ol);
+                    }
+                    if (mg_figure(P->obj > 0 ? P->fig * 3.0 / 32.0 : P->scale, r, &fig) == 0) {
                         all.v = soup.v; all.nv = soup.nv; all.f = soup.f; all.nt = soup.nt; mg_concat(&all, &fig, 1);
                         soup.v = all.v; soup.nv = all.nv; soup.f = all.f; soup.nt = all.nt;
                     }
@@ -1346,6 +1363,7 @@ static int job_build(Args *a, const char *style) {
         es[ne++] = (EnvSet){ "KIT_LIVE", LIVE_DIR }; es[ne++] = (EnvSet){ "SALT", rs.salt }; es[ne++] = (EnvSet){ "BASE_MM", lay }; es[ne++] = (EnvSet){ "SETDIR", rs.out };
         es[ne++] = (EnvSet){ "KIT_QUIET", "1" }; es[ne++] = (EnvSet){ "KIT_WORKER", "1" }; es[ne++] = (EnvSet){ "KIT_OVAL", rs.oval ? rs.size_tag : NULL };
         if (rs.SCALE != 1.0) { es[ne++] = (EnvSet){ "KIT_FINAL_MM", fin }; es[ne++] = (EnvSet){ "KIT_SCALE", skl }; }
+        char obv[32]; double obd = obj_of(opt(a, "--obj", ""), rs.SCALE); fmt_g(obv, sizeof obv, obd); if (obd > 0) es[ne++] = (EnvSet){ "KIT_OBJ", obv };
         if (mini[0]) es[ne++] = (EnvSet){ "KIT_MINI", mini };
         if (sup[0]) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
         if (on_off(smooth) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(smooth) ? "1" : "0" };
@@ -1355,6 +1373,7 @@ static int job_build(Args *a, const char *style) {
         JOIN_CLI = on_off(join); SMALL_CLI = on_off(smaller); STRICT_CLI = on_off(strict); SMOOTH_CLI = on_off(smooth); ROCKS_CLI = on_off(rocks);
         int *seen = calloc(100000, sizeof(int)); PickCtx P = { style, size, rs.salt, dest, rs.SCALE, seen, 0, 0 };
         if (scale_s[0]) P.scale = strtod(scale_s, NULL); else P.scale = cfg_num("scenery_scale", 1.0);
+        P.obj = obj_of(opt(a, "--obj", ""), rs.SCALE); P.mm = rs.SIZE; P.mini = mini; { const char *fg = opt(a, "--figure", ""); P.fig = fg[0] ? strtod(fg, NULL) : 32.0; }
         rs.done = picked_done; rs.done_ctx = &P;
         run_style(&rs);
         for (int i = 0; i < rs.nfree; i++) bridge_stop(&rs.free_br[i]);

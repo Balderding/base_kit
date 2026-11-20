@@ -29,5 +29,6 @@
    name: blight has b_rune_ring and L_rune_ring. -2 = not registered. */
 int bld_ft_make(const FtCall *call, int landmark, FtBuildFn *fn, void **ctx);
 void bld_register_features(void);
+int ft_outcrop(double cx, double cy, double a, PyRandom *rng, double size, double H, int crystal, const char *rock, const char *gem, Geo **foot, SoLayers *L);          /* a big stone or crystal outcrop, tallest toward a */
 int ft_track_cart(double cx, double cy, double a, PyRandom *rng, double gauge, const char *body, const char *wheel, Geo **foot, SoLayers *L);          /* a cart standing on a track's rails */
 #endif

@@ -181,6 +181,7 @@ int mg_icosphere(int subdivisions, double radius, MgMesh *out);
    concatenate([cylinder(w/2, h*0.82, 20) + [0, 0, h*0.41], icosphere(2, w*0.45) + [0, 0, h*0.82 + w*0.4]]) moved by
    [r*0.71 + w + 2, -(r*0.71 + w + 2), 0], with h = 32*sc/3, w = max(3, h*0.28). The picture is then
    mesher.shot(concatenate([m, figure]), W, H, 34, -60): mg_concat(base, &figure, 1) and the C shot. */
+int mg_outline(const double *xy, int n, double w, double z0, double z1, int dash, MgMesh *out);          /* a low wall along a closed outline (the model's space) */
 int mg_figure(double sc, double r, MgMesh *out);
 /* trimesh's merge_vertices() (tol.merge: round(v * 1e8), first occurrence kept, unreferenced vertices dropped) */
 void mg_merge_vertices(MgMesh *m);

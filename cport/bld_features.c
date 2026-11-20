@@ -1095,6 +1095,45 @@ int ft_track_cart(double cx, double cy, double a, PyRandom *rng, double gauge, c
 fail: gfree(&u); ar_free(A); if (R_ < 0) { lyl_free(L); geo_unref(*foot); *foot = NULL; } return R_;
 }
 
+/* a big outcrop (2026-11-20): the framing piece of a true-size base, standing at the rim outside the model's space. size: its
+   radius, H: its tallest point (mm), a: the way out (to the rim), where the tallest piece stands; the rest step down toward the
+   middle. Stone: 4-7 large stones in a tight cluster (they become chamfered rocks). Crystal: a big hex spire with 4-8 smaller
+   ones leaning round it, on a few low stones. */
+int ft_outcrop(double cx, double cy, double a, PyRandom *rng, double size, double H, int crystal, const char *rock, const char *gem, Geo **foot, SoLayers *L) {
+    Ar AR = { 0 }, *A = &AR; GL ft = { 0 }; GEOSGeometry *q, *d; int R_ = SC_ERR, n, i; double ux = py_cos(a), uy = py_sin(a), vx = -uy, vy = ux;
+    *foot = NULL;
+    if (!crystal) {
+        double r0 = size * py_uniform(rng, 0.6, 0.72);          /* the main boulder, at the back: rounded, about as tall as it is wide */
+        CK(q = Stone(A, cx + ux * size * 0.25, cy + uy * size * 0.25, r0, rng, py_uniform(rng, 0.65, 0.9), 10)); L_mound(L, q, H, rock, &FT_ROUND_T); gp(&ft, q);
+        n = (int)py_randint(rng, 3, 6);
+        for (i = 0; i < n; i++) {
+            double t = py_uniform(rng, -1.0, 1.0), f = py_uniform(rng, -0.7, 0.35), px = cx + vx * t * size * 0.75 + ux * f * size, py = cy + vy * t * size * 0.75 + uy * f * size;
+            double r = size * py_uniform(rng, 0.3, 0.5), h = H * py_uniform(rng, 0.35, 0.7) * (f > 0 ? 1.0 : 0.7);          /* lower toward the middle */
+            CK(q = Stone(A, px, py, r, rng, py_uniform(rng, 0.6, 0.9), 9)); L_mound(L, q, h, rock, py_random(rng) < 0.5 ? &FT_ROUND_T : &FT_ROCK_T); gp(&ft, q);
+        }
+    } else {
+        double r0 = size * py_uniform(rng, 0.26, 0.32);
+        CK(q = Hex_(A, cx + ux * size * 0.25, cy + uy * size * 0.25, r0, py_uniform(rng, 0, 1))); L_mound(L, q, H, gem, &FT_GEM_T); gp(&ft, q);
+        n = (int)py_randint(rng, 4, 8);
+        for (i = 0; i < n; i++) {
+            double t = py_uniform(rng, 0, 6.283), dd = size * py_uniform(rng, 0.35, 0.7), r = size * py_uniform(rng, 0.11, 0.2), px = cx + ux * size * 0.25 + dd * py_cos(t), py = cy + uy * size * 0.25 + dd * py_sin(t);
+            double back = (px - cx) * ux + (py - cy) * uy, h = H * py_uniform(rng, 0.3, 0.7) * (back > 0 ? 1.0 : 0.7); int ok = 1;
+            CK(q = Hex_(A, px, py, r, py_uniform(rng, 0, 1)));
+            for (int j = 0; j < ft.n; j++) if (!(shp_distance(q, ft.v[j]) > 0.3)) { ok = 0; break; }
+            if (ok) { L_mound(L, q, h, gem, &FT_GEM_T); gp(&ft, q); }
+        }
+        for (i = 0; i < 3; i++) {          /* the rock they grow from, low */
+            double t = py_uniform(rng, 0, 6.283), px = cx + size * 0.45 * py_cos(t), py = cy + size * 0.45 * py_sin(t); int ok = 1;
+            CK(q = Stone(A, px, py, size * py_uniform(rng, 0.22, 0.32), rng, 0.8, 8));
+            for (int j = 0; j < ft.n; j++) if (!(shp_distance(q, ft.v[j]) > 0.3)) { ok = 0; break; }
+            if (ok) { L_mound(L, q, py_uniform(rng, 1.4, 2.4), rock, &FT_ROCK_T); gp(&ft, q); }
+        }
+    }
+    CK(d = U(A, &ft)); CK(d = Hull(A, d)); put_foot(foot, d);
+    R_ = 0;
+fail: gfree(&ft); ar_free(A); if (R_ < 0) { lyl_free(L); geo_unref(*foot); *foot = NULL; } return R_;
+}
+
 /* b_skull / b_ribs / L_skeleton: features.py returns scenes.py's rounded builders */
 static int delegate(const FtCall *call, const char *name, FtBuildFn *fn, void **ctx) {
     BldFactory f = bld_get("scenes", name); FtCall c2;

@@ -260,7 +260,7 @@ static void bl_figure_ground(Scene *s, PyRandom *rng, const char *theme, Geo *ke
 Scene *new_blight(int n) {
     Scene *s = ly_mk("blight", "The Blight", n, "#6a6152"); PyRandom *rng = &s->rng; int v = RI(0, 4), fig; Geo *D = s2_D(), *keep = NULL, *ring_ = NULL; S2Fr fr = s2_fr(rng);
     const char *ks = getenv("KIT_SCALE"), *kf = getenv("KIT_FINAL_MM"), *theme = ""; double ts = (ks && *ks) ? strtod(ks, NULL) : 1;
-    fig = ts != 1.0;
+    { const char *ko = getenv("KIT_OBJ"); fig = ts != 1.0 || (ko && *ko && strtod(ko, NULL) > 1.0); }          /* true size either way (features.c ft_figure) */
     if (fig) theme = bl_theme_here(s);
     if (fig) {
         double rv = (kf && *kf) ? strtod(kf, NULL) : 2 * R0 * ts; int64_t ch;

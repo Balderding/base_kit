@@ -44,6 +44,29 @@ the one on that page, yours is an older one. (`python tools\make_release.py` mak
 
 ## Since 2.1.0 (not released yet): bases that make sense
 
+- **Things on top are their real size, on every base (the new default).** A crate is 14 mm, a barrel 11 mm and a
+  skull about 4 mm beside a 32 mm man (1:56, which fits 28 and 32 mm games), whatever the base size. The base is laid
+  out at its own size, so cracks and paving keep their normal size; only the objects are true to the man. In the
+  window: **Game scale** (how tall a man is: 32, 28 or 15 mm) and the slider **Size of things on top**, from Map (the
+  old classic look, a whole small scene) through True to Chunky, with a picture under it of the base from above, the
+  model's space, a crate, a barrel and a rock at that size and the man. Command line: `--obj 3` (true at 32 mm; 1 =
+  the classic look, 4.5 = chunky) and `--figure 32` (the man's height for the picture); `settings.json`:
+  `"object_size"` (default 3).
+- **A bigger base is for a bigger model, and keeps room for it.** From 40 mm up the middle of the base is the model's
+  space (web research on real bases: a model covers about 40 % of a 40-50 mm base, 50 % at 60-80 mm, 60 % from 90 mm
+  up). It is a long box for a tank or other wide model (`--mini tracked`, wide, hover, quad, many, or the default
+  from 90 mm up) and a disc for the rest. In it the ground is one level (no split level, no plate edge under the
+  tracks); low things stay (cracks, plates, thin rubble), anything standing more than 2 mm is moved out to the side
+  as a framing piece, or left out when there is no room. Loose debris and the bare-ground fill are fewer and larger
+  on big bases (rubble chunks, not grit). The 3D picture marks the model's space with a dashed line floating over it.
+  `"model_room"` in `settings.json` makes that space larger or smaller (default 1).
+- **Big outcrops of stone or crystal frame a big base.** From 50 mm up, 1 to 3 outcrops stand at the rim, outside the
+  model's space: a cluster of big rounded boulders in the style's own stone, or (about one time in three, where the
+  style has a gem material) a cluster of pointed crystal spires growing from low rocks. The tallest piece stands at
+  the back, toward the rim, and the rest step down toward the model. They grow with the base: about 8 mm across on a
+  60 mm base (the ring round the model is narrow there), 15 to 20 mm across and as tall on 100 to 160 mm bases.
+  `"outcrops": false` in `settings.json` turns them off.
+
 - **One level under every object.** A small object on a floor plate stands fully on it, never half over a lower
   surface; on rough ground it has no more than 0.3 mm of step under it (was 1 mm). A centrepiece or second feature
   that is only partly on the plates or on raised ground (bedrock, dunes) gets the plates cut back round it, so it

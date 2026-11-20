@@ -224,6 +224,7 @@ int cp_theme_order(const char *style, const char *salt, int64_t *out, int *n) { 
     py_seed_str(&r, seed); py_shuffle_i64(&r, out, *n);
     return 0;
 }
+double cp_model_room = 1.0;          /* settings "model_room": the model's space times this (features.c ft_model_space) */
 static int na_of(double mm) { return mm < 59 ? 0 : mm < 79 ? 1 : mm < 129 ? 2 : mm < 159 ? 3 : 4; }          /* _na */
 static double big_of(double mm) { return ft_true_scale() != 1.0 ? 1.0 : mm >= 59.9 ? 1.2 : 1.0; }        /* _big */
 
@@ -701,6 +702,79 @@ static Num surf(Scene *s, Geo *g) {          /* _surf(s, g) */
 }
 static FtS3dList *S3D;                   /* s.solids3d of the scene compose makes */
 static void uncover(Sc *sc, Geo *foot);
+/* the model's space kept clear (true size, 2026-11-20): a detail standing more than 2 mm that reaches into it goes, all of it;
+   low things (cracks, plates, thin rubble) stay, so the model sits on real ground */
+static Geo *cp_msp; static int cp_mbox; static double cp_mhx, cp_mhy, cp_mrad;          /* the model's space of the base being made (NULL: none) */
+static Geo *g_moved(Geo *g, double dx, double dy) { return LA(shp_translate(g->g, dx, dy)); }
+static double op_h(const Op *o) { return o->type == OP_PRISM ? o->n[1].v - o->n[0].v : o->n[1].v; }
+/* a detail standing in the model's space is moved out of it, to the side strip (a box) or outward (a disc), when it fits there
+   clear of the other standing details and inside the rim; else it goes */
+static int move_out(Sc *sc, Geo *space, int f, int box, double hx, double hy, double rad) {
+    Scene *s = sc->s; double bb[4], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 }, d[2][2]; int i, j, t, nt;
+    Geo *inner = g_buf(sc->disc, -0.8);
+    (void)hx;
+    for (i = 0; i < s->ops.n; i++) if (s->ops.v[i]->feat == f) for (j = 0; j < s->ops.v[i]->polys.n; j++) { g_bounds(s->ops.v[i]->polys.v[j], bb); lo[0] = pmin(lo[0], bb[0]); lo[1] = pmin(lo[1], bb[1]); hi[0] = pmax(hi[0], bb[2]); hi[1] = pmax(hi[1], bb[3]); }
+    if (lo[0] > hi[0]) return 0;
+    if (box) {          /* up or down past the long side, the nearer first */
+        double up = hy + 0.6 - lo[1], dn = -hy - 0.6 - hi[1];
+        if (fabs(up) <= fabs(dn)) { d[0][0] = 0; d[0][1] = up; d[1][0] = 0; d[1][1] = dn; } else { d[0][0] = 0; d[0][1] = dn; d[1][0] = 0; d[1][1] = up; }
+        nt = 2;
+    } else {
+        double cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2, L = sqrt(cx * cx + cy * cy), rf = pmax(hi[0] - lo[0], hi[1] - lo[1]) / 2, want = rad + rf + 0.6;
+        if (L < 0.5) { cx = 1; cy = 0; L = 1; }
+        d[0][0] = cx / L * want - cx; d[0][1] = cy / L * want - cy; nt = 1;
+    }
+    for (t = 0; t < nt; t++) {
+        int ok = 1;
+        for (i = 0; i < s->ops.n && ok; i++) {
+            Op *o = s->ops.v[i];
+            if (o->feat != f) continue;
+            for (j = 0; j < o->polys.n && ok; j++) {
+                Geo *m = g_moved(o->polys.v[j], d[t][0], d[t][1]); int k2;
+                if (!g_contains(inner, m) || (g_intersects(m, space) && area(LIn(m, space)) > 0.3)) { ok = 0; break; }
+                for (k2 = 0; k2 < s->ops.n && ok; k2++) { Op *q = s->ops.v[k2]; int z;
+                    if (q->feat == f || q->feat <= 0 || op_h(q) <= 1.0) continue;
+                    for (z = 0; z < q->polys.n; z++) if (g_intersects(m, q->polys.v[z]) && area(LIn(m, q->polys.v[z])) > 0.2) { ok = 0; break; } }
+            }
+        }
+        if (!ok) continue;
+        for (i = 0; i < s->ops.n; i++) {
+            Op *o = s->ops.v[i], *n; GeoList ps = { 0 };
+            if (o->feat != f) continue;
+            for (j = 0; j < o->polys.n; j++) gl_push(&ps, g_moved(o->polys.v[j], d[t][0], d[t][1]));
+            n = op_like(o, &ps); gl_free(&ps); op_unref(o); s->ops.v[i] = n;
+        }
+        return 1;
+    }
+    return 0;
+}
+static void drop_tall_in(Sc *sc, Geo *space, int box, double hx, double hy, double rad) {
+    Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL; OpList keep = { 0 };
+    for (i = 0; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i]; double h = op_h(o); int in = 0;
+        if (o->feat <= 0 || h <= 2.0) continue;
+        for (k = 0; k < nb; k++) if (bad[k] == o->feat) break;
+        if (k < nb) continue;
+        for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.3) in = 1;
+        if (!in) continue;
+        if (move_out(sc, space, o->feat, box, hx, hy, rad)) continue;          /* moved to the side: a framing piece */
+        if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); }
+        bad[nb++] = o->feat;
+    }
+    for (i = 0; i < s->ops.n; i++) {          /* the layout's own standing pieces (untagged, not ground: no plate, bedrock or grit) in the space go too */
+        Op *o = s->ops.v[i]; int in = 0;
+        int gb = 0, z; for (z = 0; z < s->base_ops.n && !gb; z++) gb = s->base_ops.v[z] == o;          /* the ground laid before the details stays */
+        if (gb || o->feat > 0 || op_h(o) <= 2.0 || !o->kind || in_bridge(o->kind) || in_soft(o->kind) || in_terrk(o->kind) || kd_has(KD.wetk, o->kind->s)) continue;
+        for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.3) in = 1;
+        if (in) { if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); } bad[nb++] = -(i + 1); }          /* -(index): this op alone */
+    }
+    if (!nb) return;
+    for (i = 0; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i]; for (k = 0; k < nb && !(bad[k] > 0 ? o->feat == bad[k] : bad[k] == -(i + 1)); k++) {}
+        if (k < nb) op_unref(o); else ol_push_own(&keep, o);
+    }
+    free(s->ops.v); s->ops = keep; free(bad);
+}
 static int place_(Sc *sc, Geo *foot, const SoLayers *layers0, double height) {          /* _place(sc, foot, layers, height) */
     SoLayers lay = { 0 }; Scene *s = sc->s; Geo *solid; Num z; int r; double boost = sc->mm >= 59.9 ? CPC.big_base_height_factor : 1.0;
     taller(layers0, height, boost, &lay);
@@ -1458,13 +1532,58 @@ static Snap snap(Scene *s) {          /* _snap(s) */
     for (i = s->ops.n - 3 < 0 ? 0 : s->ops.n - 3; i < s->ops.n; i++) r.d += s->ops.v[i]->polys.n;
     return r;
 }
+static double cp_grow = 1.0;          /* true size on a big base (clutter): loose debris and growth made this much larger, fewer of them */
+static void grow_new(Sc *sc, int from, int cfrom) {          /* the ops (and chamfered rocks) made since from, larger about their middle; heights by the root */
+    Scene *s = sc->s; double bb[4], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 }, cx, cy, k = cp_grow, kh = sqrt(cp_grow); int i, j, nm = 0; Op **olds = (Op **)LM(sizeof(Op *) * (size_t)(s->ops.n - from + 1)), **news = (Op **)LM(sizeof(Op *) * (size_t)(s->ops.n - from + 1));
+    for (i = from; i < s->ops.n; i++) for (j = 0; j < s->ops.v[i]->polys.n; j++) { g_bounds(s->ops.v[i]->polys.v[j], bb); lo[0] = pmin(lo[0], bb[0]); lo[1] = pmin(lo[1], bb[1]); hi[0] = pmax(hi[0], bb[2]); hi[1] = pmax(hi[1], bb[3]); }
+    if (lo[0] > hi[0]) return;
+    cx = (lo[0] + hi[0]) / 2; cy = (lo[1] + hi[1]) / 2;
+    for (i = from; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i], *n; GeoList ps = { 0 };
+        for (j = 0; j < o->polys.n; j++) { Geo *g = LIn(g_scale(o->polys.v[j], k, k, SHP_ORIGIN_POINT, cx, cy), sc->disc); if (g && !g_isempty(g) && area(g) > 0.05) gl_push(&ps, g); }
+        if (!ps.n) { gl_free(&ps); continue; }
+        n = op_like(o, &ps); gl_free(&ps);
+        if (n->type == OP_PRISM) n->n[1].v = n->n[0].v + (n->n[1].v - n->n[0].v) * kh; else n->n[1].v *= kh;
+        olds[nm] = o; news[nm++] = n; s->ops.v[i] = n;          /* o stays alive until its chop (if any) lets go of it */
+    }
+    for (i = cfrom; i < s->chops.n; i++) {          /* a chamfered rock is built from its chop: the same growth, and it points at the new ops */
+        Chop *c = s->chops.v[i]; Geo *g = c->poly ? LIn(g_scale(c->poly, k, k, SHP_ORIGIN_POINT, cx, cy), sc->disc) : NULL;
+        if (g && !g_isempty(g)) { geo_ref(g); geo_unref(c->poly); c->poly = g; }
+        c->top.v = c->z0.v + (c->top.v - c->z0.v) * kh;
+        for (j = 0; j < c->ops.n; j++) { int m; for (m = 0; m < nm && c->ops.v[j] != olds[m]; m++) {} if (m < nm) { op_unref(c->ops.v[j]); c->ops.v[j] = op_ref(news[m]); } }
+    }
+    for (i = 0; i < nm; i++) op_unref(olds[i]);
+}
+/* true size on a big base: the layout's own loose pebbles (chamfered rocks under 3 mm2) made k larger, each about its middle */
+static void grow_pebbles(Sc *sc, double k) {          /* (before the release: they are still plain rock ops; a rock's tiers grow about one middle) */
+    Scene *s = sc->s; int i, q, ngrit = 0, w; double kh = k, bb[4], c[2], pot = -1e300, pnt = 0;
+    if (k <= 1.0) return;
+    for (i = 0; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i], *n; GeoList ps = { 0 }; double a = 0;
+        int grit = o->kind && !strcmp(o->kind->s, "grit");
+        if (!o->kind || !(grit || strstr(o->kind->s, "rock") || strstr(o->kind->s, "pebble") || strstr(o->kind->s, "stone")) || !o->polys.n) continue;
+        if (grit && (ngrit++ % (int)(k * k + 0.5)) != 0) { op_unref(o); s->ops.v[i] = NULL; continue; }
+        if (grit) continue;          /* the kept grit stays its size: grown it reads as blocks */          /* grit: one bit in k*k kept (and grown), smooth ground between */
+        for (q = 0; q < o->polys.n; q++) a += area(o->polys.v[q]);
+        if (a > 3.0) continue;
+        g_bounds(o->polys.v[0], bb); c[0] = (bb[0] + bb[2]) / 2; c[1] = (bb[1] + bb[3]) / 2;
+        for (q = 0; q < o->polys.n; q++) { Geo *h = LIn(g_scale(o->polys.v[q], k, k, SHP_ORIGIN_POINT, c[0], c[1]), sc->disc); if (h && !g_isempty(h) && area(h) > 0.05) gl_push(&ps, h); }
+        if (!ps.n) { gl_free(&ps); continue; }
+        n = op_like(o, &ps); gl_free(&ps);
+        if (n->type == OP_PRISM) n->n[1].v = n->n[0].v + (n->n[1].v - n->n[0].v) * kh; else { double z0 = o->n[0].v; if (fabs(z0 - pot) < 1e-3) n->n[0].v = pnt; n->n[1].v *= kh; pot = z0 + o->n[1].v; pnt = n->n[0].v + n->n[1].v; }          /* a rock's next tier (it starts where the last one ended): on the grown one */
+        op_unref(o); s->ops.v[i] = n;
+    }
+    for (i = w = 0; i < s->ops.n; i++) if (s->ops.v[i]) s->ops.v[w++] = s->ops.v[i];          /* the dropped grit out of the list */
+    s->ops.n = w;
+}
 static int run_(Sc *sc, ScFn *fn, SmAt *at, SmAim *aim) {          /* _run(sc, fn, at, aim) */
-    Snap b, a; SmFocus keep; int r;
+    Snap b, a; SmFocus keep; int r, c0;
     if (!at) return 0;
-    b = snap(sc->s);
+    b = snap(sc->s); c0 = sc->s->chops.n;
     sm_focus_enter(&keep, at, aim);
     r = call_fn(fn, sc->s, sc->rng, sc->t);
     sm_focus_exit(&keep);
+    if (cp_grow > 1.0 && r >= 0 && sc->s->ops.n > b.a) grow_new(sc, b.a, c0);
     if (r < 0) cp_log(sc, fn->qualname && *fn->qualname ? fn->qualname : "detail");
     a = snap(sc->s);
     return a.a != b.a || a.b != b.b || a.c != b.c || a.d != b.d;
@@ -1509,6 +1628,7 @@ static int no_bare(Sc *sc, KVal *plan, int marks_only, int cracks) {          /*
     ts = ft_true_scale();
     lim = pmax(3.0, pmin(7.0, 0.07 * env_final_or(sc->mm)));
     lim = ts == 1.0 ? lim : pmax(1.7, lim / ts);
+    lim *= cp_grow;          /* true size on a big base: bigger bare patches are fine (smooth ground beside the model), fewer pebbles */
     py_seed_float(&rr, py_random(sc->mixr));
     by_klass(&by, plan);
     l = by_get(&by, "marks");
@@ -1799,8 +1919,10 @@ static void clutter(Sc *sc, KVal *plan, int has_n, double n_each) {          /* 
         const ScFnList *fs = by_get(&by, CS[k]); SmAt *f = k == 0 ? sm.debris : sm.growth; KVal *cv = cl ? kv_get(cl, CS[k]) : NULL; int64_t n;
         double am = k == 0 ? KD.amount_debris : KD.amount_growth;
         if (!fs || !fs->n || !f) continue;
-        n = print_((!has_n ? am * sc->K * sc->K : n_each) * (cv ? KN(cv) : 1.0) * share());
+        cp_grow = ft_obj_scale() > 0 && sc->mm >= 39.9 ? pmax(1.0, pmin(2.2, pow(sc->mm / 40.0, 0.7))) : 1.0;          /* true size: rubble chunks, not grit */
+        n = print_((!has_n ? am * sc->K * sc->K : n_each) * (cv ? KN(cv) : 1.0) * share() / (cp_grow * cp_grow));
         for (i = 0; i < n; i++) { int64_t c; int mark = ly_mark(); if (py_choice_e(sc->mixr, fs->n, &c) != 0) cp_raise(SC_ERR); run_(sc, fs->v[c], f, NULL); ly_pop(mark); }
+        cp_grow = 1.0;
     }
     {   const ScFnList *m = by_get(&by, "marks");
         sc->mark_pool.n = 0; sc->has_mark_pool = 1;
@@ -1896,6 +2018,48 @@ static int lay_scene(Sc *sc, KVal *plan, int small, int force) {          /* lay
     return 1;
 }
 
+/* big outcrops (2026-11-20): on a true-size base from 50 mm, 1 to 3 framing pieces of stone or crystal at the rim, outside the
+   model's space and clear of the other standing details (web research: one tall framing piece at 60-80 mm, 15-25 mm high;
+   20-35 mm at 90-130 mm; 30-45 mm at 130-170 mm, at one end). Crystal about one time in three where the style has a gem
+   material. settings "outcrops": false turns them off. */
+int cp_outcrops = 1;
+static void outcrops(Sc *sc) {
+    Scene *s = sc->s; double mm = sc->mm, R = sc->R; int want, made = 0, t, i, j; PyRandom rr; const ScPal *p = &sc->pal;
+    const char *rock = p->rock ? p->rock : p->stone ? p->stone : "rock", *gem = p->gem;
+    if (!cp_outcrops || ft_obj_scale() <= 0 || mm < 49.9) return;
+    py_seed_float(&rr, py_random(sc->mixr));
+    want = mm < 79.9 ? 1 : mm < 129.9 ? (int)py_randint(&rr, 1, 2) : (int)py_randint(&rr, 2, 3);
+    for (t = 0; t < 60 && made < want; t++) {
+        double size = pmax(7.0, pmin(22.0, 0.13 * mm)) * py_uniform(&rr, 0.85, 1.15) * (made ? 0.8 : 1.0), H;
+        double a = cp_mbox ? (py_random(&rr) < 0.5 ? 1.5708 : -1.5708) + py_uniform(&rr, -0.6, 0.6) : py_uniform(&rr, 0, 6.283), rc, cx, cy, room;
+        int cr = gem && py_random(&rr) < 0.35, ok = 1, mark = ly_mark();
+        room = cp_msp ? R - (cp_mbox ? cp_mhy / pmax(0.3, fabs(sin(a))) : cp_mrad) : R;          /* the strip between the model's space and the rim, this way */
+        if (room < 6.0) continue;
+        size = pmin(size, 0.52 * (room - 1.2)); rc = R - size * 0.85; cx = rc * cos(a); cy = rc * sin(a);
+        H = pmin(0.3 * mm, size * (cr ? py_uniform(&rr, 1.1, 1.5) : py_uniform(&rr, 0.9, 1.3)));          /* stone: as tall as wide; crystal: a little taller, pointed */          /* stone: as tall as wide; crystal: spires */
+        Geo *foot = NULL, *solid, *test; SoLayers lay = { 0 }; Num z;
+        if (ft_outcrop(cx, cy, a, &rr, size, H, cr, rock, gem ? gem : "crystal", &foot, &lay) < 0 || !foot) { lyl_free(&lay); ly_pop(mark); continue; }
+        LAG(foot);
+        test = g_buf(foot, 0.6);
+        if (area(LIn(foot, sc->disc)) < 0.75 * area(foot)) ok = 0;
+        if (ok && cp_msp && intersects(g_buf(foot, 1.0), cp_msp)) ok = 0;
+        for (i = 0; ok && i < sc->bigs.n; i++) if (intersects(sc->bigs.v[i], test)) ok = 0;
+        for (i = 0; ok && i < s->ops.n; i++) {          /* clear of the other standing details (not the ground) */
+            Op *o = s->ops.v[i];
+            if (op_h(o) <= 1.5 || !o->kind || in_bridge(o->kind) || in_soft(o->kind) || in_terrk(o->kind)) continue;
+            for (j = 0; j < o->polys.n; j++) if (intersects(o->polys.v[j], test)) { ok = 0; break; }
+        }
+        if (!ok) { lyl_free(&lay); ly_pop(mark); continue; }
+        solid = LIn(solid_of(&lay, 0.0), sc->wide);
+        if (terr(s)) R_(sm_clear_terrain(s, LIn(g_buf(g_uu2(foot, solid), 0.8), sc->wide)));
+        R_(sm_clear_small(s, g_buf(solid, 0.4))); R_(pl_evict(s, solid));
+        uncover(sc, LIn(g_uu2(foot, solid), sc->disc));          /* one level under it */
+        z = terr(s) ? num_f(H_) : surf(s, LIn(foot, sc->disc));
+        { int sv = sc_feat_push(cr ? "outcrop of crystal" : "outcrop of stone"); R_(ft_build(s, z, &lay, S3D)); sc_feat_pop(sv); }
+        gl_push(&sc->bigs, g_buf(solid, 0.0));
+        lyl_free(&lay); ly_pop(mark); made++;
+    }
+}
 static int small_scene(Sc *sc, KVal *plan) {          /* small_scene(sc, plan) */
     Scene *s = sc->s; KVal *pl = KG(plan, "props"); int np = pl->n, i, nall = 0, placed = 0, want; int64_t *idx = (int64_t *)LM(sizeof(int64_t) * (size_t)(np + 1)); KVal **all; Geo *line; double R = sc->R;
     SmAt *ring = KA(sm_ring(R));
@@ -2035,7 +2199,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
     given = plans->n;
     RX(cp_pick_plans(style, mixr, mm, (int)n, plans));
     ts = ft_true_scale();
-    if ((big || mm >= 39.9) && ts == 1.0) {
+    if ((big || mm >= 39.9) && !ft_figure()) {          /* at true size no landmark: the model is the subject */
         int np = big ? plans->n : (plans->n ? 1 : 0);
         for (i = 0; i < np; i++) {
             if (lay_scene(sc, plans->v[i], !big, 0)) { plan = plans->v[i]; scene = 1; break; }
@@ -2056,20 +2220,26 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         kv_push(plans, plan);
     }
     sc->plan = (ScPlan *)plan;
+    cp_msp = NULL;          /* set below for a true-size base; never left from the last base */
     if (scene) {
         place_also(sc, plan); { int sv = sc_feat_push("rim backdrop"); rim_dressing(sc, plan); sc_feat_pop(sv); } place_props(sc, plan);          /* the backdrop: one detail, however many blocks */
         style_made(sc, plan);
         tier_features(sc, plan, fns, &late);
         clutter(sc, plan, !big, (1 + t) * sc->K * sc->K);
     } else {
+        Geo *msp = NULL; int mbox = 0; double mrad = 0, mhx = 0, mhy = 0; cp_msp = NULL;          /* the model's space (true size from 40 mm): one level, cut clear of plates and steps */
         set_pal(sc, plan);
         if (!CO->stand.has_stand) {
             double c[2];
-            if (ts == 1.0) { c[0] = py_uniform(mixr, -0.08, 0.08) * sc->R; c[1] = py_uniform(mixr, -0.08, 0.08) * sc->R; } else { c[0] = 0.0; c[1] = 0.0; }
+            if (!ft_figure()) { c[0] = py_uniform(mixr, -0.08, 0.08) * sc->R; c[1] = py_uniform(mixr, -0.08, 0.08) * sc->R; } else { c[0] = 0.0; c[1] = 0.0; }
             hold_stand(sc, plan, c, 1, py_uniform(mixr, 0, 6.28));
         }
-        if (ts != 1.0) {
-            double rv = pmin(sc->R, env_final_or(2 * sc->R * ts) / (2 * ts)); Geo *clear = g_ptbuf(0, 0, CPC.clear_middle * rv, 24);
+        if (ft_figure()) {
+            double rv = pmin(sc->R, env_final_or(2 * sc->R * ts) / (2 * ts)), mr, hx, hy; Geo *clear;
+            if (ft_obj_scale() <= 0) clear = g_ptbuf(0, 0, CPC.clear_middle * rv, 24);          /* KIT_SCALE: the middle 45 % */
+            else if (ft_model_space(sc->mm, rv, CPC.kit_mini, cp_model_room, &mr, &hx, &hy)) clear = g_box(-hx, -hy, hx, hy);
+            else clear = g_ptbuf(0, 0, mr, 24);
+            if (ft_obj_scale() > 0 && sc->mm >= 39.9) { msp = clear; mbox = ft_model_space(sc->mm, rv, CPC.kit_mini, cp_model_room, &mrad, &mhx, &mhy); }
             GeoList nk = { 0 };
             if (s->has_objs) gl_copy(&nk, &s->keepout);
             gl_push(&nk, clear); gl_free(&s->keepout); s->keepout = nk;
@@ -2080,14 +2250,21 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         small_scene(sc, plan);
         style_made(sc, plan);
         tier_features(sc, plan, fns, &late);
+        if (ft_obj_scale() > 0 && sc->mm >= 39.9) grow_pebbles(sc, pmax(1.0, pmin(2.2, pow(sc->mm / 40.0, 0.7))));
+        if (msp) { cp_msp = LIn(msp, sc->disc); cp_mbox = mbox; cp_mhx = mhx; cp_mhy = mhy; cp_mrad = mrad; }
+        if (msp) { Geo *g = LIn(msp, sc->disc); drop_tall_in(sc, g, mbox, mhx, mhy, mrad); if (terr(s)) R_(sm_clear_terrain(s, g)); uncover(sc, g); }
+        outcrops(sc);          /* the framing pieces: big stone or crystal at the rim */          /* a tank sits level: no split level, no plate edge under it */
         clutter(sc, plan, 1, (1 + t) * sc->K * sc->K);
     }
-    {   int has_n = !(scene && big); NbArg a;
-        marks(sc, plan, has_n, (1 + t) * sc->K * sc->K * 0.6);
+    {   int has_n = !(scene && big); NbArg a; double kgrow = ft_obj_scale() > 0 && sc->mm >= 39.9 ? pmax(1.0, pmin(2.2, pow(sc->mm / 40.0, 0.7))) : 1.0;
+        cp_grow = kgrow;          /* true size on a big base: marks and the bare-ground fill larger too, fewer of them */
+        marks(sc, plan, has_n, (1 + t) * sc->K * sc->K * 0.6 / (kgrow * kgrow));
         a.sc = sc; a.plan = plan; a.marks_only = 0; a.cracks = 0;
         if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
+        if (cp_msp) drop_tall_in(sc, cp_msp, cp_mbox, cp_mhx, cp_mhy, cp_mrad);          /* again: the details laid after the first clearing (style details, fill) */
         cp_release(s);
         a.marks_only = 1; if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
+        cp_grow = 1.0;
         for (i = 0; i < late.n; i++) {
             int r = call_fn(late.v[i], s, rng, t);
             if (r < 0) cp_log(sc, late.v[i]->qualname && *late.v[i]->qualname ? late.v[i]->qualname : "late");

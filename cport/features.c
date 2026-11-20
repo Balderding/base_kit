@@ -68,6 +68,20 @@ static int env_float(int has, const char *v, double dflt, double *out) {
 
 /* features.true_scale: try float(os.environ.get("KIT_SCALE", 1) or 1) except ValueError: 1.0 */
 double ft_true_scale(void) { double v; if (env_float(HAS_SCALE, ENV_SCALE, 1.0, &v) < 0) return 1.0; return v; }
+/* the object size (KIT_OBJ, 2026-11-20): the base is laid out at its own size and each detail is brought to its real size
+   (3 = true beside a 32 mm figure, 1:56); not set, or 1 and under: the classic sizes */
+double ft_obj_scale(void) { const char *v = getenv("KIT_OBJ"); double o = (v && *v) ? strtod(v, NULL) : 0.0; return o > 1.0 ? o : 0.0; }
+int ft_figure(void) { return ft_true_scale() != 1.0 || ft_obj_scale() > 0; }
+/* the model's space on the base, kept clear (work\scale\RESEARCH.md): a model covers about 20 % of a 25-32 mm base, 40 % at
+   40-50 mm, 50 % at 60-80 mm and 60 % from 90 mm up (times room). A tank or other wide model gets a long box, hull and
+   tracks (1: half sizes *hx, *hy), any other model a disc (0: radius *rad). R is the base's radius. */
+int ft_model_space(double mm, double R, const char *mini, double room, double *rad, double *hx, double *hy) {
+    double a = (mm < 39.9 ? 0.2 : mm < 59.9 ? 0.4 : mm < 89.9 ? 0.5 : 0.6) * (room > 0 ? room : 1.0); int dflt = !mini || !*mini || !strcmp(mini, "default") || !strcmp(mini, "mix");
+    int wide = mm >= 59.9 && ((mini && (!strcmp(mini, "tracked") || !strcmp(mini, "wide") || !strcmp(mini, "hover") || !strcmp(mini, "quad") || !strcmp(mini, "many"))) || (dflt && mm >= 89.9));
+    if (a > 0.9) a = 0.9;
+    if (wide) { *hx = 0.9 * R; *hy = a * 3.14159265 * R / 3.6; if (*hy > 0.8 * R) *hy = 0.8 * R; *rad = 0; return 1; }
+    *rad = sqrt(a) * R; *hx = *hy = 0; return 0;
+}          /* a base for a model at true size: clear middle, no landmark */
 /* features.size_factor */
 double ft_size_factor(double mm) {
     if (ft_true_scale() != 1.0) return 1.6;
@@ -95,6 +109,7 @@ const FtTiers FT_ROCK_T = { 2, { TI(0.7, 6), TI(0.3, 40) } };
 const FtTiers FT_SPIKE_T = { 2, { TI(0.75, 4), TI(0.25, 30) } };
 const FtTiers FT_PEB_T = { 2, { TI(0.7, 10), TI(0.3, 45) } };
 const FtTiers FT_ROUND_T = { 3, { TI(0.45, 12), TI(0.3, 38), TI(0.25, 62) } };
+const FtTiers FT_GEM_T = { 2, { TI(0.5, 4), TI(0.5, 24) } };          /* an outcrop's crystal: half straight, half a long point */
 
 /* ================================================================== steps payloads */
 struct FtSteps { int rc, later, filled; SoPieces p; FtFillFn fill; void *ctx; void (*ctx_free)(void *); };
@@ -1911,6 +1926,17 @@ static double pmin(double a, double b) { return b < a ? b : a; }
 static int real_k(const char *style, const char *name, double *kout) {
     double sc, r = 0, dr = 0, D, k = 1.0;
     if (env_float(HAS_SCALE, ENV_SCALE, 1.0, &sc) < 0) return SC_ERR;
+    if (sc == 1.0 && ft_obj_scale() > 0 && !(HAS_NOREAL && ENV_NOREAL[0])) {          /* object size: real size on the base itself */
+        const char *bm = getenv("BASE_MM"); double o = ft_obj_scale(), D0 = (bm && *bm) ? strtod(bm, NULL) : 30.0;
+        if (!TABLES_SET) sdr_set_tables(NULL);
+        kv_get(&T_REAL, style, name, &r); kv_get(&T_DRAWN, style, name, &dr);
+        if (r > 0 && dr > 0) {
+            double want = pmax(r * 6.0 * o, 3.0);          /* 6 mm a metre at the classic scale: 18 at 3 (1:56); nothing prints under 3 mm */
+            k = pmax(0.25, pmin(6.0, want / dr));
+            if (dr * k < 0.08 * D0) k = 0.0;          /* a big base carries a big model: nothing under a twelfth of it */
+        } else if (dr > 0) k = pmax(0.8, pmin(2.2, pow(D0 / 40.0, 0.6)));          /* ground (rocks, drifts): grows with the base */
+        *kout = k; return 0;
+    }
     if (sc != 1.0 && !(HAS_NOREAL && ENV_NOREAL[0])) {
         if (!TABLES_SET) sdr_set_tables(NULL);          /* _REAL["tables"]: loaded the first time they are needed (built in) */
         kv_get(&T_REAL, style, name, &r); kv_get(&T_DRAWN, style, name, &dr);

@@ -1376,6 +1376,21 @@ int mg_icosphere(int subdivisions, double radius, MgMesh *out) {
 static void translate(MgMesh *m, double x, double y, double z) {          /* apply_translation (a pure translation: v + t) */
     for (int i = 0; i < m->nv; i++) { m->v[3 * i] += x; m->v[3 * i + 1] += y; m->v[3 * i + 2] += z; }
 }
+/* the model's space on the picture (2026-11-20): a low wall w wide from z0 to z1 along a closed outline of n points */
+int mg_outline(const double *xy, int n, double w, double z0, double z1, int dash, MgMesh *out) {
+    memset(out, 0, sizeof *out); if (n < 2) return -1;
+    out->v = (double *)malloc(sizeof(double) * 24 * (size_t)n); out->f = (int *)malloc(sizeof(int) * 36 * (size_t)n); if (!out->v || !out->f) return -1;
+    for (int i = 0; i < n; i++) {
+        double ax = xy[2 * i], ay = xy[2 * i + 1], bx = xy[2 * ((i + 1) % n)], by = xy[2 * ((i + 1) % n) + 1], ex = bx - ax, ey = by - ay, L = sqrt(ex * ex + ey * ey), nx, ny;
+        if (L < 1e-9 || (dash > 0 && (i / dash) % 2)) continue;          /* dashed: every other run of dash segments */
+        nx = -ey / L * w / 2; ny = ex / L * w / 2; ax -= ex / L * w / 2; ay -= ey / L * w / 2; bx += ex / L * w / 2; by += ey / L * w / 2;          /* a little past each end: closed corners */
+        double c[4][2] = { { ax - nx, ay - ny }, { bx - nx, by - ny }, { bx + nx, by + ny }, { ax + nx, ay + ny } }; int b0 = out->nv;          /* anticlockwise from above */
+        static const int F[12][3] = { { 0, 2, 1 }, { 0, 3, 2 }, { 4, 5, 6 }, { 4, 6, 7 }, { 0, 1, 5 }, { 0, 5, 4 }, { 1, 2, 6 }, { 1, 6, 5 }, { 2, 3, 7 }, { 2, 7, 6 }, { 3, 0, 4 }, { 3, 4, 7 } };
+        for (int k = 0; k < 8; k++) { double *p = out->v + 3 * (size_t)(out->nv++); p[0] = c[k % 4][0]; p[1] = c[k % 4][1]; p[2] = k < 4 ? z0 : z1; }
+        for (int k = 0; k < 12; k++) { int *t = out->f + 3 * (size_t)(out->nt++); t[0] = b0 + F[k][0]; t[1] = b0 + F[k][1]; t[2] = b0 + F[k][2]; }
+    }
+    return 0;
+}
 int mg_figure(double sc, double r, MgMesh *out) {
     double h = 32.0 * sc / 3.0, w = py_max(3.0, h * 0.28); MgMesh ico;
     mg_cylinder(w / 2, h * 0.82, 20, out); translate(out, 0, 0, h * 0.41);

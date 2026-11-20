@@ -29,6 +29,9 @@ void ft_set_env(const char *kit_scale, const char *kit_final_mm, const char *kit
 /* Python's float(str): 0 = ok, SC_ERR = ValueError */
 int ft_pyfloat(const char *s, double *out);
 double ft_true_scale(void);                   /* features.true_scale() */
+double ft_obj_scale(void);                    /* KIT_OBJ: details at their real size on a base laid out at its own size; 0 = classic */
+int ft_model_space(double mm, double R, const char *mini, double room, double *rad, double *hx, double *hy);          /* the model's space: 1 box, 0 disc */
+int ft_figure(void);                          /* true scale either way (KIT_SCALE or KIT_OBJ): the model's space kept clear */
 double ft_size_factor(double mm);             /* features.size_factor(mm) */
 
 /* ---------------- small helpers ---------------- */
@@ -38,7 +41,7 @@ extern int64_t ft_caught;                     /* kitlog.caught calls made by ft_
 
 /* ---------------- layer payloads ---------------- */
 typedef struct { int n; Tier t[8]; } FtTiers;
-extern const FtTiers FT_ROCK_T, FT_SOFT_T, FT_SPIKE_T, FT_PEB_T, FT_ROUND_T;   /* features.ROCK_T ... ROUND_T */
+extern const FtTiers FT_ROCK_T, FT_SOFT_T, FT_SPIKE_T, FT_PEB_T, FT_ROUND_T, FT_GEM_T;   /* features.ROCK_T ... ROUND_T */
 
 /* FtSteps: the pieces of a steps layer that are not a solids.h SoLater. Reference counted; LV_PTR does not hold a
    reference, so every FtSteps is also kept in a list here until ft_steps_release() (call it when a base is done). */

@@ -33,7 +33,7 @@
   "mesh_keep_running": true,
   "big_base_height_factor": 1.5,
   "scenes": true,
-  "scenery_scale": 1, "drawing_2d": true, "models_download": true, "no_bare_ground": true, "style_details": true,
+  "scenery_scale": 1, "object_size": 3, "model_room": 1, "drawing_2d": true, "models_download": true, "no_bare_ground": true, "style_details": true,
   "style_details_amount": 0.5, "objects_amount": 1, "cpu_threads": true, "video_card": true,
   "designer": {
     "enabled": false,
