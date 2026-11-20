@@ -68,8 +68,9 @@ int s3_build(const Solid *s, double zb, double zs, MgMesh *out, char *exc, int e
         double *pts = (double *)malloc(sizeof(double) * 3 * (size_t)(v.m + 1)), *radii = (double *)malloc(sizeof(double) * (size_t)(v.m + 1));
         int n = 0;
         for (int i = 0; i <= v.m; i++) if (v.R[i] >= 0.12) {
-            double re, im; int pr = px_pow(py_sin(S3_PI * i / v.m), 0.7, &re, &im);
-            if (pr != 0) {          /* a hair below zero to the 0.7: a complex height, and _sweep's math.sqrt of it raises */
+            double sn = py_sin(S3_PI * i / v.m), re, im; if (sn < 0.0) sn = 0.0;          /* the far end's sine can round a hair below zero: clamped, so the bar is kept (2.0.1; it was dropped as a complex height) */
+            int pr = px_pow(sn, 0.7, &re, &im);
+            if (pr != 0) {
                 free(pts); free(radii);
                 return pr == 1 ? s3_fail(exc, exccap, text, textcap, "TypeError", "must be real number, not complex") : s3_fail(exc, exccap, text, textcap, "ValueError", "math domain error");
             }

@@ -42,6 +42,11 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## What is new in 2.0.1
+
+- **Supports on keeps every round bar.** About 7% of ribs, bones, roots and horns were dropped from bases built with
+  supports on (the arch's far end rounded a hair below zero, which made its height invalid). They are kept now.
+
 ## What is new in 2.0: one exe, all in C, nothing to install
 
 - **`bbb_kit.exe` is the whole kit.** Every part of it is written again in C and built into the one exe: the styles

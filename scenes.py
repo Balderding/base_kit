@@ -602,7 +602,7 @@ def tube(pts, r, hk=1.0, n=None, lift=0.0, under=False, arch=0.0):
         return _u(parts) if parts else None
     if (under or arch) and SUPPORTS():          # a true round bar; arch = how high its middle lifts off the ground (a rib)
         k3 = [i for i in range(m + 1) if R[i] >= 0.12]
-        if len(k3) >= 2: return [(sect, lift + max(R) * hk, lambda zb, zs=1.0: _sweep([(P[i].x, P[i].y, zb + lift + 0.75 * R[i] + arch * math.sin(math.pi * i / m) ** 0.7) for i in k3], [R[i] for i in k3], 10))]
+        if len(k3) >= 2: return [(sect, lift + max(R) * hk, lambda zb, zs=1.0: _sweep([(P[i].x, P[i].y, zb + lift + 0.75 * R[i] + arch * max(0.0, math.sin(math.pi * i / m)) ** 0.7) for i in k3], [R[i] for i in k3], 10))]
     return [(sect, lift + max(R) * hk)]
 
 NEST = 0.015         # each piece sits this far inside the one below, all the way round, so two outlines never share an edge or a corner
