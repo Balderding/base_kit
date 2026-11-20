@@ -42,6 +42,36 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## What is new in 1.6: watch it build, rocks in C, faster choices
+
+- **Watch it build.** A strip under the window's top shows the kit's own work: a bar for each of its threads that is
+  working (other programs are not counted, idle threads are not shown) with how many of the PC's cores that is, and
+  how much of the video card is in use. Read twice a second. Three views, picked at the right of the strip:
+  - **Small:** each building card says in words what is being done, with a time-left bar.
+  - **Live card:** the building card shows the base taking shape. While the scene is laid out, the pieces appear as
+    they are placed. Then the base's drawing from above appears, with the height field's tiles over it, each one dimmed
+    until a thread has finished it.
+  - **Big view:** the base being built fills the middle, with what is being done, the time left and its thread count
+    beside it, and every card of the build small in a row below. When the base is done it shrinks back into its card
+    and the next one building takes its place. Click a building card to watch that one.
+  - **Parts** gives each piece its own switch: Core bars, Video card meter, Base taking shape, Time left and Rows over
+    time (one row per base, coloured by what it was doing when).
+  - Time left comes from your earlier builds of the same style, size and detail (`out\live_times.txt`, written as
+    bases finish). It never goes back up. Until there is a build to go by, it says "estimating ...".
+  - The build writes small progress notes into `out\.live` only while the window watches. The bases come out byte
+    for byte the same with or without them, and they cost about 1% of the build time.
+- **Oval bases get wide cards**, with their pictures cropped to the oval and their 3D pictures drawn wider.
+- **The small rocks are made in C** (`cport\scatter.c`, `cstone.py`): the rock clusters, and the pass that keeps the
+  top from being bare, which makes most of them. A 30 mm graveyard choice at 32 mm figure scale took 71 s, now 17 s.
+  The very same rocks: the outline sums are exact copies of the ones the shape library (GEOS 3.14.1) makes, checked
+  on 2 million random rocks and on whole scenes, byte for byte. `"c_rocks": false` in `settings.json` (or
+  `KIT_CROCKS=0`) makes them in Python again.
+- **Choices are drawn by up to every core but one at once** (it was 8).
+- **Fix: a detail cut into the top no longer slices a taller piece placed before it** (the tank tops on mine bases):
+  a cut now only lowers what lies between its bottom and its top.
+- **The run says what it really used:** the engine line names the mesher and the picture maker, and the report has
+  a "made by" column.
+
 ## What is new in 1.5: sharper objects, ovals, a figure for scale, real ground
 
 - **The classic look is the default again.** Every base is a whole small scene, its things about a third of true

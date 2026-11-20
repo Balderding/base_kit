@@ -6,6 +6,7 @@
 #include "field.h"
 #include "pyx.h"
 #include "mt.h"
+#include "livetiles.h"
 
 #define GRID 1e-4
 typedef GEOSContextHandle_t Cx;
@@ -94,14 +95,26 @@ static int new_for(Cx c, const Op *o, const Rules *R, GEOSGeometry *inter, int r
         if (!g) { *err = 1; return 0; }
         it[(*ni)++] = (Item){ g, o->f }; return 1;
     }
-    if (o->kind == OP_CUT) {
-        double zb = o->a;
-        if (r_lo(r) >= zb) { it[(*ni)++] = (Item){ G.GEOSGeom_clone_r(c, inter), o->f }; return 1; }
+    if (o->kind == OP_CUT) {          /* F.cut(poly, zb, zt): b = the tool's top; b <= a (the standing place) = no top */
+        double zb = o->a, zt = o->b; int lim = zt > zb;
+        if (lim && r_lo(r) > zt + 1e-6) return 1;          /* wholly above the tool: stays whole */
+        int full = !lim || r_hi(r) <= zt + 1e-6;
+        if (r_lo(r) >= zb && full) { it[(*ni)++] = (Item){ G.GEOSGeom_clone_r(c, inter), o->f }; return 1; }
         if (r_hi(r) <= zb) return 1;
-        GEOSGeometry *ab = above(c, r, zb, err); if (*err) return 0;
-        if (ab && !G.GEOSisEmpty_r(c, ab)) { GEOSGeometry *g = G.GEOSIntersection_r(c, inter, ab); G.GEOSGeom_destroy_r(c, ab); if (!g) { *err = 1; return 0; } it[(*ni)++] = (Item){ g, o->f }; }
-        else if (ab) G.GEOSGeom_destroy_r(c, ab);
-        return 1;
+        GEOSGeometry *g = G.GEOSGeom_clone_r(c, inter); if (!g) { *err = 1; return 0; }
+        if (r_lo(r) < zb) {
+            GEOSGeometry *ab = above(c, r, zb, err); if (*err) { G.GEOSGeom_destroy_r(c, g); return 0; }
+            if (!ab || G.GEOSisEmpty_r(c, ab)) { if (ab) G.GEOSGeom_destroy_r(c, ab); G.GEOSGeom_destroy_r(c, g); return 1; }
+            GEOSGeometry *g2 = G.GEOSIntersection_r(c, g, ab); G.GEOSGeom_destroy_r(c, ab); G.GEOSGeom_destroy_r(c, g); if (!g2) { *err = 1; return 0; } g = g2;
+        }
+        if (!full) {          /* a slope reaching over the tool's top: keep that part */
+            GEOSGeometry *at = above(c, r, zt, err); if (*err) { G.GEOSGeom_destroy_r(c, g); return 0; }
+            if (at && !G.GEOSisEmpty_r(c, at)) { GEOSGeometry *g2 = G.GEOSDifference_r(c, g, at); G.GEOSGeom_destroy_r(c, g); g = g2; }
+            if (at) G.GEOSGeom_destroy_r(c, at);
+            if (!g) { *err = 1; return 0; }
+        }
+        if (G.GEOSisEmpty_r(c, g)) { G.GEOSGeom_destroy_r(c, g); return 1; }
+        it[(*ni)++] = (Item){ g, o->f }; return 1;
     }
     /* join_taper */
     double ztop = o->a + o->b, zc;
@@ -191,6 +204,7 @@ static void tile_one(int k, Cx c, void *u) {
         if (o->noreg || !overlap(o->box, b->box)) continue;
         if (!apply_bucket(c, b, o, J->R)) J->fail[(size_t)k * J->nops + i] = 1;
     }
+    if (k > 0) lt_tile_done(k - 1);          /* the window's live view: this tile is done (bucket 0 is the rim ring, not a tile) */
 }
 
 /* ------------------------------------------------------------------------------------------------ the input */
@@ -303,12 +317,15 @@ int field_build(const unsigned char *buf, size_t n, int nthreads, MeshIn *in, ch
 
     /* the steps */
     int nsteps = 0; while (nsteps < nops && ops[nsteps].kind != OP_STAND) nsteps++;
+    if (nb > 1) { double (*tb)[4] = malloc(sizeof(double) * 4 * (nb - 1)); if (tb) { for (int k = 1; k < nb; k++) memcpy(tb[k - 1], bk[k].box, sizeof tb[0]); lt_begin(nb - 1, (const double (*)[4])tb, nsteps, nthreads); free(tb); } }
     if (nthreads > 1) {          /* every tile its own steps, on all threads */
         char *fail = calloc((size_t)nb * (nsteps ? nsteps : 1), 1); TileJob TJ = { bk, ops, nsteps, &R, fail };
         mt_run(nb, nthreads, 8, tile_one, &TJ);
         for (int i = 0; i < nsteps; i++) { int f = ops[i].failed; for (int k = 0; k < nb && !f; k++) f = fail[(size_t)k * nsteps + i]; if (f) { char l[96]; snprintf(l, sizeof l, "%s: GEOSException", ops[i].name); sk_add(skipped, sklen, l); } }
         free(fail);
-    } else for (int i = 0; i < nsteps; i++) if (ops[i].failed || !run_serial(bk, nb, &ops[i], &R)) { char l[96]; snprintf(l, sizeof l, "%s: GEOSException", ops[i].name); sk_add(skipped, sklen, l); }
+    } else for (int i = 0; i < nsteps; i++) { lt_steps(i); if (ops[i].failed || !run_serial(bk, nb, &ops[i], &R)) { char l[96]; snprintf(l, sizeof l, "%s: GEOSException", ops[i].name); sk_add(skipped, sklen, l); } }
+    lt_steps(nsteps); for (int k = 1; k < nb; k++) lt_tile_done(k - 1);
+    lt_stage("mesh");
 
     /* stand_flat(F, pads, H, sc): the miniature's standing spots, level with the ground most of their area has */
     for (int i = nsteps; i < nops; i++) {

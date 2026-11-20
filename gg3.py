@@ -284,7 +284,13 @@ def radial(cx, cy, r0, r1, n, rng, w=0.22):
     return unary_union(out)
 
 def cluster(s, rng, n, make_one, cx, cy, spread, gap=0.25):
-    """n small shapes near (cx, cy) that don't touch each other. Returns list."""
+    """n small shapes near (cx, cy) that don't touch each other. Returns list.
+    Rocks (a make_one with a cspec: details.sh_rock / sh_round, stone_one) are made in C, the same rocks (cstone.py)."""
+    sp = getattr(make_one, "cspec", None)
+    if sp is not None:
+        import cstone
+        got = cstone.cluster(rng, sp, n, cx, cy, spread, gap)
+        if got is not None: return got
     got = []
     for _ in range(n * 30):
         if len(got) >= n: break

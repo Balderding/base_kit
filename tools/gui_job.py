@@ -37,6 +37,7 @@ size = opt("--size", "30"); detail = opt("--detail", "mix"); count = opt("--coun
 if len(a) < 2 or a[0] not in ("choices", "build"): ev("error", text="usage: gui_job.py choices|build <style> ..."); sys.exit(2)
 job, style = a[0], a[1]; extra = (["--mini", mini] if mini else []) + (["--supports", sup] if sup else []) + (["--scale", scale] if scale else [])
 env = dict(os.environ, PYTHONWARNINGS="ignore", PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+if job == "build": env["KIT_LIVE"] = os.path.join(KIT, "out", ".live")          # the window's live view reads the builds' progress notes there
 
 def size_tag(txt):
     """the size as it goes into file names: 60 for a round base, 90x52 for an oval"""
@@ -105,13 +106,14 @@ def with_figure(stl, png, px=480):
     try: sc = float(scale or json.load(open(os.path.join(KIT, "settings.json"), encoding="utf-8")).get("scenery_scale", 1.0))
     except Exception: sc = 3.0
     m = trimesh.load(stl, process=False)
+    W, Hh = (1100, 620) if "x" in size else (900, 700)          # an oval base: a wider picture, for the window's wide oval cards
     if sc <= 1.01:          # the classic look is not sized for a figure: the base alone
-        tmp = png[:-4] + "_raw.png"; mesher.shot(m, tmp, 900, 700, 34, -60); see_through(tmp, png, px); os.remove(tmp); return
+        tmp = png[:-4] + "_raw.png"; mesher.shot(m, tmp, W, Hh, 34, -60); see_through(tmp, png, px); os.remove(tmp); return
     h = 32.0 * sc / 3.0; r = float(m.bounds[1][0]); w = max(3.0, h * 0.28)
     fig = trimesh.util.concatenate([trimesh.creation.cylinder(radius=w / 2, height=h * 0.82, sections=20).apply_translation([0, 0, h * 0.41]),
                                     trimesh.creation.icosphere(2, w * 0.45).apply_translation([0, 0, h * 0.82 + w * 0.4])])
     fig.apply_translation([r * 0.71 + w + 2, -(r * 0.71 + w + 2), 0]); tmp = png[:-4] + "_raw.png"
-    mesher.shot(trimesh.util.concatenate([m, fig]), tmp, 900, 700, 34, -60); see_through(tmp, png, px); os.remove(tmp)
+    mesher.shot(trimesh.util.concatenate([m, fig]), tmp, W, Hh, 34, -60); see_through(tmp, png, px); os.remove(tmp)
 
 for seed, nums in groups.items():
     p = subprocess.Popen([sys.executable, "-u", os.path.join(KIT, "run_set.py"), style, ",".join(map(str, nums)) + ",", "--seed", seed, "--size", size, "-q"] + extra,

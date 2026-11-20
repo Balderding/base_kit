@@ -16,9 +16,16 @@ def install(G):
 
 # ------------------------------------------------------------------------------------------------ shapes (x, y, rng)
 def sh_rock(r0, r1, nv=(5, 8)):
-    return lambda x, y, rng: stone(x, y, rng.uniform(r0, r1), rng, None, rng.randint(*nv))
+    f = lambda x, y, rng: stone(x, y, rng.uniform(r0, r1), rng, None, rng.randint(*nv))
+    f.cspec = (0, r0, r1, nv[0], nv[1], 0, 0.0); return f          # cspec: what cstone.cluster needs to make the same rocks in C
 def sh_round(r0, r1):
-    return lambda x, y, rng: stone(x, y, rng.uniform(r0, r1), rng, None, None, round_=True)
+    f = lambda x, y, rng: stone(x, y, rng.uniform(r0, r1), rng, None, None, round_=True)
+    f.cspec = (1, r0, r1, 0, 0, 0, 0.0); return f
+def _one(shape, rng):
+    """make_one for gg3.cluster: shape(x, y, rng), carrying the shape's cspec so the cluster can be made in C"""
+    f = lambda x, y: shape(x, y, rng); c = getattr(shape, "cspec", None)
+    if c is not None: f.cspec = c
+    return f
 def sh_disc(r0, r1, res=20):
     return lambda x, y, rng: Point(x, y).buffer(rng.uniform(r0, r1), res)
 def sh_ell(a0, a1, b0, b1):
@@ -84,7 +91,7 @@ def _raise(s, ps, z, h, kind, how, tiers):
 def scatter(shape, n=(3, 6), h=(0.5, 0.9), kind="rock", how="mound", spread=1.6, tiers=((0.7, 6), (0.3, 40))):
     def fn(s, rng, lvl):
         k = rng.randint(*n)
-        ps, z = place_group(s, rng, lambda cx, cy: cluster(s, rng, k, lambda x, y: shape(x, y, rng), cx, cy, spread, 0.3), gap=0.35)
+        ps, z = place_group(s, rng, lambda cx, cy: cluster(s, rng, k, _one(shape, rng), cx, cy, spread, 0.3), gap=0.35)
         if ps: _raise(s, [p for p in ps if wide_enough(p, 0.7)], z, rng.uniform(*h), kind, how, tiers)
     fn.tmpl, fn.kind, fn.shape = "scatter", kind, getattr(shape, "tag", "") if shape is not None else ""
     return fn
@@ -111,7 +118,7 @@ def sunk(shape, depth=(0.3, 0.6), kind="pit", n=(1, 1), spread=0.0):
             g, z = find(s, lambda cx, cy: shape(cx, cy, rng), gap=0.3, at=lambda: rp(rng, 0, 10.5))
             if g is not None: cut(s, [g], z, rng.uniform(*depth), kind)
             return
-        ps, z = place_group(s, rng, lambda cx, cy: cluster(s, rng, k, lambda x, y: shape(x, y, rng), cx, cy, spread, 0.3), gap=0.3)
+        ps, z = place_group(s, rng, lambda cx, cy: cluster(s, rng, k, _one(shape, rng), cx, cy, spread, 0.3), gap=0.3)
         if ps: cut(s, ps, z, rng.uniform(*depth), kind)
     fn.tmpl, fn.kind, fn.shape = "sunk", kind, getattr(shape, "tag", "") if shape is not None else ""
     return fn

@@ -32,6 +32,7 @@
 #include <string.h>
 #include <wchar.h>
 #include <math.h>
+#include "live.h"
 int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core-mesh and the other C parts of the kit */
 
 #define WM_LINE (WM_APP + 1)
@@ -65,11 +66,12 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_BAR 0xFFC9D3E6u           /* label ink on a navy bar */
 #define C_STONEL 0xFF20242Bu        /* the stone texture's light and dark grain on the side panel */
 #define C_STONED 0xFF16181Eu
-enum { SIDE_W = 300, HEAD_H = 74, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
+enum { SIDE_W = 300, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS };
 
-typedef struct { char seed[16]; int n, tier, picked, state, retry; GpImage *img, *img3; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; } Cell;
+struct LiveC;          /* a building card's live view (below, "the live view") */
+typedef struct { char seed[16]; int n, tier, picked, state, retry; GpImage *img, *img3; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
 typedef struct { RECT r; int kind, idx; } Hit;
 static Cell cells[MAXC]; static int ncell;
 static Hit hits[400]; static int nhit, hovK, hovI = -1;
@@ -90,6 +92,14 @@ static int lookPix = 1, lookTex = 1, lookFont = 1, PX = 2, FS = 1;
    spThr: the height field and the mesh on as many CPU threads as the base needs (off = one core, the proven path). spGpu: the 3D pictures on
    the video card (off = drawn by Python, much slower). */
 static int spThr = 1, spGpu = 1;
+/* the live view (docs\superpowers\specs\2026-11-19-live-build-view-design.md), saved in out\bbb_kit.ini. lvView: 0 Small (words, a bar, two
+   meters), 1 Live card (the base taking shape in its card), 2 Big view (the base being built large, rows over time below). The parts,
+   each its own switch: lvCores one bar per core, lvGpu the video card meter, lvShape the base taking shape, lvTime time left,
+   lvRows rows over time. lvParts: the Parts panel is open. Read twice a second (timer 3): the core bars are OUR threads only (every process
+   the window started, in hJob), the video card meter is the whole PC's. */
+static int lvView = 1, lvCores = 1, lvGpu = 1, lvShape = 1, lvTime = 1, lvRows = 1, lvParts;
+static float cpuV[LIVE_MAXCORE], gpuV = -1, jobCores; static int ncpu, nthr;
+static void meters_tick(void) { float pc[LIVE_MAXCORE]; ncpu = live_cpu(pc, LIVE_MAXCORE); nthr = live_job(hJob, cpuV, LIVE_MAXCORE, &jobCores); gpuV = live_gpu(); }
 static void speed_env(void) { WCHAR n[16]; DWORD c = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS); swprintf(n, 16, L"%lu", (unsigned long)(c > 1 ? c : 2)); SetEnvironmentVariableW(L"KIT_THREADS", spThr ? n : L"0"); SetEnvironmentVariableW(L"KIT_GPU", spGpu ? L"1" : L"0"); }
 
 static const char *STYLES[] = { "badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine", "swamp", "cynder", "targa",
@@ -172,7 +182,110 @@ static int run(const WCHAR *cmd, int mode) {
     busy = mode; anim = 0; SetTimer(hMain, 1, 60, NULL); return 1;
 }
 
-static void free_cell(Cell *c) { if (c->img) GdipDisposeImage(c->img); if (c->img3) GdipDisposeImage(c->img3); memset(c, 0, sizeof *c); }
+/* ---------- the live view: what each building card shows, from the build's progress notes (live.c, live.py) ----------
+   Polled every 0.1 s while building (timer 4): the stage, the pieces laid out so far (their outlines, .shapes), the
+   build's drawing from above once the layout is done, the height field's tiles and which are done (.tiles), and the
+   time left from earlier builds of the same kind (out\live_times.txt). Kept after the base is done, for the rows over time. */
+typedef struct LiveC {
+    LiveNote nt; int have; GpImage *plan; WCHAR planPath[MAX_PATH];
+    float *pts; int npts, cappts, *pstart, npoly, cappoly; char *pkind; long long shOff;
+    double expect, shownLeft, tEnd; int segS[16]; double segT[16]; int nseg;
+} LiveC;
+static WCHAR liveDir[MAX_PATH], liveTimes[MAX_PATH]; static double jobT0; static int bigPick = -1, bigNow = -1, shrinkI = -1; static DWORD shrinkT; static RECT shrinkFrom, cardR[MAXC], bigR;
+static const char *STAGES[5] = { "layout", "field", "mesh", "picture", "checks" };
+static double now_unix(void) { FILETIME ft; ULARGE_INTEGER u; GetSystemTimeAsFileTime(&ft); u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime; return (double)(u.QuadPart - 116444736000000000ULL) / 1e7; }
+static int stage_ix(const char *s) { int i; for (i = 0; i < 5; i++) if (!strcmp(s, STAGES[i])) return i; return 0; }
+static void live_free(LiveC *L) { if (!L) return; if (L->plan) GdipDisposeImage(L->plan); free(L->pts); free(L->pstart); free(L->pkind); free(L); }
+static void live_restart(LiveC *L) {          /* a retry of the same base: its picture starts again */
+    if (L->plan) GdipDisposeImage(L->plan);
+    L->plan = NULL; L->planPath[0] = 0; L->npts = L->npoly = 0; L->shOff = 0; L->shownLeft = 1e9; L->nseg = 0; L->have = 0;
+}
+static GpImage *load_copy(const WCHAR *p, UINT maxw) {          /* a picture copied into memory (the file is not held open), its white surround made see-through */
+    GpImage *im = NULL; GpBitmap *out = NULL; GpGraphics *g = NULL; GpImageAttributes *ia = NULL; UINT w = 0, h = 0, W, H;
+    if (GdipLoadImageFromFile(p, &im) != Ok || !im) return NULL;
+    GdipGetImageWidth(im, &w); GdipGetImageHeight(im, &h); W = w; H = h;
+    if (!w || !h) { GdipDisposeImage(im); return NULL; }
+    if (W > maxw) { H = H * maxw / W; W = maxw; }
+    if (GdipCreateBitmapFromScan0((INT)W, (INT)H, 0, PixelFormat32bppARGB, NULL, &out) == Ok && GdipGetImageGraphicsContext((GpImage *)out, &g) == Ok) {
+        GdipSetInterpolationMode(g, InterpolationModeHighQualityBicubic); GdipCreateImageAttributes(&ia);
+        if (ia) GdipSetImageAttributesColorKeys(ia, ColorAdjustTypeDefault, TRUE, 0xFFF2F2F2u, 0xFFFFFFFFu);
+        GdipDrawImageRectRectI(g, im, 0, 0, (INT)W, (INT)H, 0, 0, (INT)w, (INT)h, UnitPixel, ia, NULL, NULL);
+        if (ia) GdipDisposeImageAttributes(ia);
+        GdipDeleteGraphics(g);
+    }
+    GdipDisposeImage(im); return (GpImage *)out;
+}
+static void shapes_read(LiveC *L, const WCHAR *path) {          /* the piece outlines added since the last look: "r|c x y x y ..." per line */
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL); LARGE_INTEGER sz, off; DWORD got = 0; char *b, *e, *ln;
+    if (f == INVALID_HANDLE_VALUE) return;
+    GetFileSizeEx(f, &sz);
+    if (sz.QuadPart < L->shOff) { L->shOff = 0; L->npts = L->npoly = 0; }          /* started again */
+    if (sz.QuadPart > L->shOff && sz.QuadPart - L->shOff < (4 << 20) && (b = (char *)malloc((size_t)(sz.QuadPart - L->shOff) + 1))) {
+        off.QuadPart = L->shOff; SetFilePointerEx(f, off, NULL, FILE_BEGIN); ReadFile(f, b, (DWORD)(sz.QuadPart - L->shOff), &got, NULL); b[got] = 0;
+        if ((e = strrchr(b, '\n'))) {
+            *e = 0; L->shOff += (e - b) + 1;
+            for (ln = b; ln && *ln; ) {
+                char *nx = strchr(ln, '\n'), *q = ln + 1; int k = 0;
+                if (nx) *nx = 0;
+                if (L->npoly + 1 >= L->cappoly) { L->cappoly = L->cappoly ? L->cappoly * 2 : 256; L->pstart = (int *)realloc(L->pstart, sizeof(int) * (L->cappoly + 1)); L->pkind = (char *)realloc(L->pkind, L->cappoly); }
+                L->pstart[L->npoly] = L->npts; L->pkind[L->npoly] = ln[0];
+                for (;;) {
+                    char *z; double v = strtod(q, &z);
+                    if (z == q) break;
+                    if (L->npts >= L->cappts) { L->cappts = L->cappts ? L->cappts * 2 : 4096; L->pts = (float *)realloc(L->pts, sizeof(float) * L->cappts); }
+                    L->pts[L->npts++] = (float)v; q = z; k++;
+                }
+                if (k >= 6 && !(k & 1)) { L->npoly++; L->pstart[L->npoly] = L->npts; } else L->npts = L->pstart[L->npoly];
+                ln = nx ? nx + 1 : NULL;
+            }
+        }
+        free(b);
+    }
+    CloseHandle(f);
+}
+static void live_poll(void) {
+    int i; double t = now_unix();
+    for (i = 0; i < ncell; i++) {
+        Cell *c = &cells[i]; LiveC *L; LiveNote nt; WCHAR p[MAX_PATH]; int si;
+        if (c->state != ST_BUILDING) continue;
+        if (!c->lv) { if (!(c->lv = (LiveC *)calloc(1, sizeof(LiveC)))) continue; c->lv->expect = live_expect(liveTimes, curStyle, curSize, c->tier); c->lv->shownLeft = 1e9; }
+        L = c->lv;
+        if (!live_read(liveDir, c->seed, c->n, &nt) || nt.t0 < jobT0 - 5) continue;          /* not started yet, or a note from an earlier build */
+        if (L->have && nt.t0 > L->nt.t0 + 0.5) live_restart(L);
+        L->nt = nt; L->have = 1; si = stage_ix(nt.stage);
+        if ((!L->nseg || L->segS[L->nseg - 1] != si) && L->nseg < 16) { L->segS[L->nseg] = si; L->segT[L->nseg] = L->nseg ? t : nt.t0; L->nseg++; }
+        if (nt.plan[0] && wcscmp(nt.plan, L->planPath)) { GpImage *im = load_copy(nt.plan, 520); if (im) { if (L->plan) GdipDisposeImage(L->plan); L->plan = im; wcscpy(L->planPath, nt.plan); } }
+        if (!L->plan) { swprintf(p, MAX_PATH, L"%ls\\%hs_%d.txt.shapes", liveDir, c->seed, c->n); shapes_read(L, p); }
+        if (L->expect > 0) { double left = L->expect - (t - nt.t0); if (left < 0) left = 0; if (left < L->shownLeft) L->shownLeft = left; }          /* never goes back up */
+    }
+}
+static void live_text(const LiveC *L, WCHAR *b, int cap) {          /* what is being done, in words */
+    const LiveNote *n = &L->nt; int done = 0, k;
+    if (!L->have) { wcscpy(b, L"starting ..."); return; }
+    switch (stage_ix(n->stage)) {
+    case 0: swprintf(b, cap, L"laying out the scene: %d pieces", n->pieces); break;
+    case 1: if (n->ntile) { for (k = 0; k < n->ntile; k++) done += n->tdone[k]; swprintf(b, cap, L"height field: %d of %d tiles, %d thread%ls", done, n->ntile, n->threads, n->threads == 1 ? L"" : L"s"); }
+            else if (n->steps_total) swprintf(b, cap, L"height field: step %d of %d (one core)", n->steps_done, n->steps_total);
+            else wcscpy(b, L"height field"); break;
+    case 2: wcscpy(b, L"making the mesh"); break;
+    case 3: wcscpy(b, spGpu ? L"drawing the 3D picture (video card)" : L"drawing the 3D picture"); break;
+    default: wcscpy(b, L"print check");
+    }
+}
+static double live_frac(const LiveC *L, double t) {          /* how far this base is, 0..1; -1 = not known yet */
+    if (!L || !L->have) return -1;
+    if (L->expect > 0) { double f = (t - L->nt.t0) / L->expect; return f > 0.97 ? 0.97 : f; }
+    if (!strcmp(L->nt.stage, "field") && L->nt.ntile) { int k, d = 0; for (k = 0; k < L->nt.ntile; k++) d += L->nt.tdone[k]; return 0.5 * d / L->nt.ntile + 0.4; }
+    return -1;
+}
+static void live_left(const LiveC *L, double t, WCHAR *b, int cap) {          /* the time left, in words */
+    double el = L && L->have ? t - L->nt.t0 : 0;
+    if (!L || !L->have || L->expect <= 0) wcscpy(b, L"estimating ...");
+    else if (el > L->expect) swprintf(b, cap, L"longer than usual: %d s so far", (int)el);
+    else swprintf(b, cap, L"%d s left", (int)(L->shownLeft + 0.99));
+}
+
+static void free_cell(Cell *c) { if (c->img) GdipDisposeImage(c->img); if (c->img3) GdipDisposeImage(c->img3); live_free(c->lv); memset(c, 0, sizeof *c); }
 static void drop_pending(void) {
     int i, k = 0;
     for (i = 0; i < ncell; i++) { if (cells[i].state == ST_PENDING) continue; if (k != i) cells[k] = cells[i]; k++; }
@@ -210,7 +323,10 @@ static void build(void) {
     if (curSup) wcscat(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
     swprintf(cmd, 2600, L"\"%ls\" -u tools\\gui_job.py build %hs --size %hs --picks %ls%ls", py, curStyle, curSize, picks, extra);
+    jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
+    for (i = 0; i < ncell; i++) { live_free(cells[i].lv); cells[i].lv = NULL; }
     if (run(cmd, 2)) {
+        SetTimer(hMain, 4, 100, NULL);          /* the build's progress notes, ten times a second */
         for (i = 0; i < ncell; i++) if (cells[i].picked && cells[i].state == ST_NONE) { cells[i].state = ST_BUILDING; cells[i].retry = 0; }
         wanted = k; doneN = nOK = nBad = 0; swprintf(head, 200, L"Building %d base%ls", k, k == 1 ? L"" : L"s"); wcscpy(sub, L"Each one is built as an STL and put through the print check.");
     }
@@ -251,6 +367,9 @@ static void on_line(int mode, const WCHAR *t) {
     }
     if (!wcscmp(ev, L"retry")) { if ((c = cell_of(t))) c->retry = 1; redraw(); return; }
     if (!wcscmp(ev, L"built") && (c = cell_of(t))) {
+        if (c->lv) c->lv->tEnd = now_unix();          /* its row over time ends here */
+        if (lvView == 2 && c - cells == bigNow) { shrinkI = (int)(c - cells); shrinkT = GetTickCount(); shrinkFrom = bigR; SetTimer(hMain, 5, 30, NULL); }          /* the Big view's base goes back down into its card */
+        if (jtrue(t, L"ok") && jnum(t, L"secs") > 0) live_remember(liveTimes, curStyle, curSize, c->tier, jnum(t, L"secs"));          /* for the next time left */
         if (jtrue(t, L"ok")) {
             c->state = jtrue(t, L"variant") ? ST_VARIANT : ST_OK; c->secs = jnum(t, L"secs"); jstr(t, L"stl", c->stl, MAX_PATH); nOK++;
             if (jstr(t, L"img", path, MAX_PATH) && path[0]) GdipLoadImageFromFile(path, &c->img3);
@@ -271,7 +390,7 @@ static void anim_tick(void) {
 }
 static void on_ended(int mode, DWORD code) {
     int i;
-    busy = 0; KillTimer(hMain, 1); anim_tick();
+    busy = 0; KillTimer(hMain, 1); KillTimer(hMain, 4); anim_tick();
     if (mode == 1) {
         drop_pending();
         if (ncell) { wcscpy(head, L"Click the bases you want"); wcscpy(sub, L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
@@ -537,15 +656,91 @@ static void image_fit(GpImage *im, double x, double y, double w, double h) {
     UINT iw = 1, ih = 1; double s, dw, dh; GdipGetImageWidth(im, &iw); GdipGetImageHeight(im, &ih);
     s = w / iw < h / ih ? w / iw : h / ih; dw = iw * s; dh = ih * s; GdipDrawImageRect(G, im, (REAL)(x + (w - dw) / 2), (REAL)(y + (h - dh) / 2), (REAL)dw, (REAL)dh);
 }
+/* the oval of the session's base size: long / short (1 = round). Oval cards are wide boxes, their pictures cropped to the oval */
+static double oval_ratio(void) { double a = 0, b = 0; if (sscanf(curSize[0] ? curSize : SIZES[selSize], "%lfx%lf", &a, &b) == 2 && b > 0) return a / b; return 1.0; }
+static void image_box(GpImage *im, double x, double y, double w, double h, double ovr) {          /* a picture in a box; an oval's square drawing cropped to the oval's band */
+    UINT iw = 1, ih = 1; double sh, s, dw, dh, sy;
+    if (ovr <= 1.01) { image_fit(im, x, y, w, h); return; }
+    GdipGetImageWidth(im, &iw); GdipGetImageHeight(im, &ih);
+    sh = ih; sy = 0;
+    if (iw && ih && fabs((double)iw / ih - 1) < 0.05) { sh = ih / ovr * 1.08; if (sh > ih) sh = ih; sy = (ih - sh) / 2; }          /* a square drawing from above: just the oval's band */
+    s = w / iw < h / sh ? w / iw : h / sh; dw = iw * s; dh = sh * s;
+    GdipDrawImageRectRect(G, im, (REAL)(x + (w - dw) / 2), (REAL)(y + (h - dh) / 2), (REAL)dw, (REAL)dh, 0, (REAL)sy, (REAL)iw, (REAL)sh, UnitPixel, NULL, NULL, NULL);
+}
+static void meter_bar(int x, int y, int w, int h, double f, ARGB c);
+static const ARGB STAGEC[5] = { C_NAVYH, C_ACC, C_GREEN, C_GOLD, C_TEALL };          /* layout, height field, mesh, picture, check */
+/* the base taking shape, in a box: while laying out, the pieces' outlines as they are placed; then the build's own drawing from
+   above, with the height field's tiles over it, dimmed until a thread has finished them */
+static void live_pic(const LiveC *L, int x, int y, int w, int h) {
+    GpRegion *old = NULL; const LiveNote *n = &L->nt; double ovr = n->ovl > 0 && n->ovs > 0 ? n->ovl / n->ovs : 1.0;
+    GdipCreateRegion(&old); GdipGetClip(G, old); GdipSetClipRectI(G, x, y, w, h, CombineModeIntersect);
+    fillrect(x, y, w, h, 0xFF101216u);
+    if (L->plan) {
+        double D = w * 1.03 < h * 1.03 * ovr ? w * 1.03 : h * 1.03 * ovr, dx = x + (w - D) / 2, dy = y + (h - D) / 2; int k, st = stage_ix(n->stage);
+        GdipDrawImageRect(G, L->plan, (REAL)dx, (REAL)dy, (REAL)D, (REAL)D);
+        if (st == 1 && n->ntile && n->pb[2] > n->pb[0]) {          /* the tiles still to do, dimmed, with a teal edge */
+            double sx = D / (n->pb[2] - n->pb[0]), sy = D / (n->pb[3] - n->pb[1]); GpPen *pn = NULL;
+            GdipCreatePen1(C_TEALD, (REAL)(lookPix ? PX : 1), UnitPixel, &pn);
+            for (k = 0; k < n->ntile; k++) {
+                const float *q = n->tile[k]; double ax = dx + (q[0] - n->pb[0]) * sx, ay = dy + (n->pb[3] - q[3]) * sy, aw = (q[2] - q[0]) * sx, ah = (q[3] - q[1]) * sy;
+                if (n->tdone[k]) continue;
+                fillrect((int)ax, (int)ay, (int)(aw + 0.5), (int)(ah + 0.5), 0xB0101216u);
+                if (pn) GdipDrawRectangle(G, pn, (REAL)ax, (REAL)ay, (REAL)aw, (REAL)ah);
+            }
+            if (pn) GdipDeletePen(pn);
+        } else if (st == 1 && n->steps_total) {          /* the one-core field: no tiles, step after step; dim what is still to come */
+            double f = (double)n->steps_done / n->steps_total; int yy = (int)(y + h * f);
+            fillrect(x, yy, w, y + h - yy, 0xA0101216u); fillrect(x, yy, w, lookPix ? PX : S(2), C_ACC);
+        }
+    } else if (L->npoly) {          /* the layout so far: the ground, raised pieces light, cuts dark */
+        double R = (n->lay_r > 0 ? n->lay_r : 15) + 1, side = w < h ? w : h, sc = side / (2 * R), cx = x + w / 2.0, cy = y + h / 2.0; int k, j; GpSolidFill *br[2] = { NULL, NULL }; GpPen *pn = NULL;
+        static GpPointF pt[64];
+        if (lookPix) px_disc(cx, cy, R * sc, 0xFF3B342Cu); else rr(cx - R * sc, cy - R * sc, 2 * R * sc, 2 * R * sc, R * sc, 0xFF3B342Cu, 0, 0);
+        GdipCreateSolidFill(0xFFA8977Au, &br[0]); GdipCreateSolidFill(0xFF1B1714u, &br[1]); GdipCreatePen1(0xFF6B5D49u, 1, UnitPixel, &pn);
+        for (k = 0; k < L->npoly; k++) {
+            int a = L->pstart[k], m = (L->pstart[k + 1] - a) / 2; if (m > 64) m = 64;
+            for (j = 0; j < m; j++) { pt[j].X = (REAL)(cx + L->pts[a + 2 * j] * sc); pt[j].Y = (REAL)(cy - L->pts[a + 2 * j + 1] * sc); }
+            GdipFillPolygon(G, (GpBrush *)br[L->pkind[k] == 'c'], pt, m, FillModeAlternate);
+            if (L->pkind[k] != 'c' && pn) GdipDrawPolygon(G, pn, pt, m);
+        }
+        GdipDeleteBrush((GpBrush *)br[0]); GdipDeleteBrush((GpBrush *)br[1]); if (pn) GdipDeletePen(pn);
+    }
+    GdipSetClipRegion(G, old, CombineModeReplace); GdipDeleteRegion(old);
+}
+/* rows over time: one row per base of this build, coloured by what it was doing when (layout, height field, mesh, picture, check) */
+static int rows_count(void) { int i, k = 0; for (i = 0; i < ncell; i++) k += cells[i].lv && cells[i].lv->nseg; return k > 12 ? 12 : k; }
+static void rows(int x, int y, int w, int h) {
+    static const WCHAR *nm[5] = { L"laying out", L"height field", L"mesh", L"picture", L"check" };
+    int i, k = 0, lw = S(150), j, lx = x, most = (h - S(20)) / S(14); double t = now_unix(), t0 = jobT0, t1 = t, rh = S(14);
+    if (t1 < t0 + 10) t1 = t0 + 10;
+    if (most > 12) most = 12;
+    for (j = 0; j < 5; j++) {          /* the key */
+        fillrect(lx, y + S(5), S(10), S(8), STAGEC[j]); txt(nm[j], lx + S(14), y, S(90), S(18), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE); lx += S(100);
+    }
+    y += S(20);
+    for (i = 0; i < ncell && k < most; i++) {
+        const LiveC *L = cells[i].lv; double ry = y + k * rh;
+        if (!L || !L->nseg) continue;
+        txt(cells[i].theme, x, (int)ry - S(2), lw - S(8), (int)rh + S(2), fSmall, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+        fillrect(x + lw, (int)ry + S(2), w - lw, (int)rh - S(4), 0xFF1E2128u);
+        for (j = 0; j < L->nseg; j++) {
+            double a = L->segT[j], b = j + 1 < L->nseg ? L->segT[j + 1] : (L->tEnd > 0 ? L->tEnd : t);
+            int xa = x + lw + (int)((a - t0) / (t1 - t0) * (w - lw)), xb = x + lw + (int)((b - t0) / (t1 - t0) * (w - lw));
+            fillrect(xa, (int)ry + S(2), xb - xa > 1 ? xb - xa : 1, (int)rh - S(4), STAGEC[L->segS[j]]);
+        }
+        k++;
+    }
+}
 static void card(int i, int x, int y, int w, int h) {
-    Cell *c = &cells[i]; int pad = S(10), iw = w - 2 * pad, hv = hov(H_CARD, i) && !busy, capY = y + pad + iw + S(6); WCHAR b[160];
+    Cell *c = &cells[i]; int pad = S(10), iw = w - 2 * pad, ih = h - 2 * pad - S(40), hv = hov(H_CARD, i) && !busy, capY = y + pad + ih + S(6); WCHAR b[160]; double ovr = oval_ratio();
+    SetRect(&cardR[i], x, y, x + w, y + h);
     if (c->state == ST_PENDING) {          /* a grey card that breathes while its picture is being drawn */
-        ARGB a = (ARGB)(150 + (int)(70 * (0.5 + 0.5 * sin((anim + i * 3) * 0.18))));
+        ARGB a = (ARGB)(150 + (int)(70 * (0.5 + 0.5 * sin((anim + i * 3) * 0.18)))); double rd = (iw < ih ? iw : ih) / 2.0;
         if (lookPix) {
-            px_box(x, y, w, h, 2, (a << 24) | (C_CARD & 0xFFFFFF), 0, 0, 0); px_disc(x + pad + iw / 2.0, y + pad + iw / 2.0, iw / 2.0, ((a / 6) << 24) | 0xFFFFFF);
+            px_box(x, y, w, h, 2, (a << 24) | (C_CARD & 0xFFFFFF), 0, 0, 0); px_disc(x + pad + iw / 2.0, y + pad + ih / 2.0, rd, ((a / 6) << 24) | 0xFFFFFF);
             px_box(x + pad, capY + S(4), iw * 0.6, S(10), 0, 0x18FFFFFF, 0, 0, 0); return;
         }
-        rr(x, y, w, h, S(12), (a << 24) | (C_CARD & 0xFFFFFF), 0, 0); rr(x + pad, y + pad, iw, iw, iw / 2.0, ((a / 6) << 24) | 0xFFFFFF, 0, 0);
+        rr(x, y, w, h, S(12), (a << 24) | (C_CARD & 0xFFFFFF), 0, 0); rr(x + pad, y + pad, iw, ih, rd, ((a / 6) << 24) | 0xFFFFFF, 0, 0);
         rr(x + pad, capY + S(4), iw * 0.6, S(10), S(5), 0x18FFFFFF, 0, 0); return;
     }
     if (!lookPix) rr(x, y, w, h, S(12), hv ? C_CARDH : C_CARD, c->picked ? C_ACC : hv ? 0xFF4A5060u : C_LINE, c->picked ? S(3) : 1);
@@ -554,18 +749,33 @@ static void card(int i, int x, int y, int w, int h) {
         if (lookTex) ants(x, y, w, h);
     } else px_box(x, y, w, h, 2, hv ? C_CARDH : C_CARD, hv ? 0xFF4A5060u : C_EDGE, hv ? C_BEVHH : C_BEVH, C_BEVD);
     if ((c->state == ST_OK || c->state == ST_VARIANT) && c->img3) {          /* built: the 3D picture, with its 2D drawing small in the corner to check one against the other */
-        image_fit(c->img3, x + pad, y + pad + iw * 0.12, iw, iw * 0.88);
-        if (c->img) { double d = iw * 0.36; if (lookPix) px_box(x + pad - PX, y + pad - PX, d + 2 * PX, d + 2 * PX, 1, C_CARD, C_LINE, 0, 0); else rr(x + pad - 1, y + pad - 1, d + 2, d + 2, d / 2 + 1, C_CARD, C_LINE, 1); image_fit(c->img, x + pad, y + pad, d, d); }
+        if (ovr > 1.01) image_fit(c->img3, x + pad, y + pad, iw, ih); else image_fit(c->img3, x + pad, y + pad + ih * 0.12, iw, ih * 0.88);
+        if (c->img) { double d = (iw < ih ? iw : ih) * 0.36, dw = ovr > 1.01 ? d * ovr : d;
+            if (lookPix) px_box(x + pad - PX, y + pad - PX, dw + 2 * PX, d + 2 * PX, 1, C_CARD, C_LINE, 0, 0); else rr(x + pad - 1, y + pad - 1, dw + 2, d + 2, d / 2 + 1, C_CARD, C_LINE, 1);
+            image_box(c->img, x + pad, y + pad, dw, d, ovr); }
     }
-    else if (c->img) image_fit(c->img, x + pad, y + pad, iw, iw);
+    else if (c->img) image_box(c->img, x + pad, y + pad, iw, ih, ovr);
     if (lookPix && lookTex && (c->state == ST_OK || c->state == ST_VARIANT)) ribbon(x, y, w, c->state == ST_OK ? C_ACC : C_GOLD);
-    if (c->state == ST_BUILDING && lookPix) {          /* dimmed, with blocks walking round */
-        px_disc(x + pad + iw / 2.0, y + pad + iw / 2.0, iw / 2.0, 0xA0101216); px_spinner(x + w / 2.0, y + pad + iw / 2.0, S(24));
-    } else if (c->state == ST_BUILDING) {          /* dimmed, with a turning arc */
-        GpPen *pn; double cx = x + w / 2.0, cy = y + pad + iw / 2.0, r = S(18);
-        rr(x + pad, y + pad, iw, iw, iw / 2.0, 0xA0101216, 0, 0);
-        GdipCreatePen1(C_ACC, (REAL)S(4), UnitPixel, &pn); GdipSetPenStartCap(pn, LineCapRound); GdipSetPenEndCap(pn, LineCapRound);
-        GdipDrawArc(G, pn, (REAL)(cx - r), (REAL)(cy - r), (REAL)(2 * r), (REAL)(2 * r), (REAL)((anim * 14) % 360), 260); GdipDeletePen(pn);
+    if (c->state == ST_BUILDING) {
+        const LiveC *L = c->lv; double t = now_unix(), f = live_frac(L, t);
+        if (lvView >= 1 && lvShape && L && L->have && (L->plan || L->npoly)) live_pic(L, x + pad, y + pad, iw, ih);          /* Live card: the base taking shape */
+        else if (lookPix) {          /* dimmed, with blocks walking round */
+            px_disc(x + pad + iw / 2.0, y + pad + ih / 2.0, (iw < ih ? iw : ih) / 2.0, 0xA0101216); px_spinner(x + w / 2.0, y + pad + ih / 2.0, S(24));
+        } else {          /* dimmed, with a turning arc */
+            GpPen *pn; double cx = x + w / 2.0, cy = y + pad + ih / 2.0, r = S(18);
+            rr(x + pad, y + pad, iw, ih, (iw < ih ? iw : ih) / 2.0, 0xA0101216, 0, 0);
+            GdipCreatePen1(C_ACC, (REAL)S(4), UnitPixel, &pn); GdipSetPenStartCap(pn, LineCapRound); GdipSetPenEndCap(pn, LineCapRound);
+            GdipDrawArc(G, pn, (REAL)(cx - r), (REAL)(cy - r), (REAL)(2 * r), (REAL)(2 * r), (REAL)((anim * 14) % 360), 260); GdipDeletePen(pn);
+        }
+        if (lvTime && L && L->have) {          /* the time left: a bar along the bottom of the picture, the seconds over it */
+            int by = y + pad + ih - S(10); WCHAR tl[64];
+            live_left(L, t, tl, 64);
+            fillrect(x + pad, by - S(18), iw, S(28), 0xC0101216u);
+            if (f >= 0) meter_bar(x + pad + S(6), by, iw - S(12), S(6), f, C_ACC);
+            else if (lookPix) { int k; for (k = 0; k < 6; k++) fillrect(x + pad + S(6) + ((anim * 3 + k * 9) % (iw - S(20))), by, S(6), S(6), C_TEALM); }          /* no estimate yet: blocks walking */
+            else { double p = (anim % 40) / 40.0; meter_bar(x + pad + S(6) + (int)(p * (iw - S(60))), by, S(48), S(6), 1, C_TEALM); }
+            txt(tl, x + pad + S(6), by - S(18), iw - S(12), S(16), fSmall, C_TEXT, DT_RIGHT | DT_SINGLELINE);
+        }
     }
     if (c->picked && lookPix) { px_disc(x + w - S(22), y + S(22), S(12), C_ACC); px_tick(x + w - S(22), y + S(22), C_ONACC); }
     else if (c->picked) {          /* the tick */
@@ -577,7 +787,10 @@ static void card(int i, int x, int y, int w, int h) {
     }
     txt(c->theme, x + pad, capY, iw, S(18), fUI, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     switch (c->state) {
-    case ST_BUILDING: txt(c->retry ? L"first try failed the check; new variant ..." : L"building ...", x + pad, capY + S(20), iw, S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); break;
+    case ST_BUILDING: {          /* what is being done, in words (every view) */
+        WCHAR st[120]; if (c->lv && c->lv->have) live_text(c->lv, st, 120); else wcscpy(st, L"building ...");
+        if (c->retry) { WCHAR r2[160]; swprintf(r2, 160, L"new variant: %ls", st); wcscpy(st, r2); }
+        txt(st, x + pad, capY + S(20), iw, S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); break; }
     case ST_OK: swprintf(b, 160, L"BUILT  %.0f s", c->secs); pill(b, x + pad, capY + S(20), S(96), S(18), C_ACC, C_ONACC); break;
     case ST_VARIANT: pill(L"built as a new variant", x + pad, capY + S(20), iw < S(160) ? iw : S(160), S(18), C_GOLD, C_ONGOLD); break;
     case ST_FAIL: pill(L"not built: failed the check", x + pad, capY + S(20), iw < S(180) ? iw : S(180), S(18), C_GOLD, C_ONGOLD); break;
@@ -586,8 +799,105 @@ static void card(int i, int x, int y, int w, int h) {
     hit(x, y, w, h, H_CARD, i);
 }
 static void help(int W, int H);
+/* the strip under the top bar: the PC's meters on the left (Small: one CPU and one video card bar; Live card and Big view:
+   one thin bar per core), the three views and the Parts button on the right */
+static const char *VIEWS[3] = { "Small", "Live card", "Big view" };
+static RECT partsR;          /* where the Parts button is, for its panel */
+static void meter_bar(int x, int y, int w, int h, double f, ARGB c) {
+    if (lookPix) { px_box(x, y, w, h, 0, 0xFF262A33u, 0, 0, 0); if (f > 0) px_box(x, y, w * (f > 1 ? 1 : f), h, 0, c, 0, 0, 0); }
+    else { rr(x, y, w, h, h / 2.0, 0xFF262A33u, 0, 0); if (f > 0.02) rr(x, y, w * (f > 1 ? 1 : f), h, h / 2.0, c, 0, 0); }
+}
+static void strip(int x, int y, int w, int h) {
+    int cw = S(78), gap = S(4), pw = S(64), rx = x + w - pw, i, gx; WCHAR b[64];
+    chipSpec = -1;
+    button(L"Parts", rx, y, pw, h, lvParts ? 1 : 0, H_PARTS); SetRect(&partsR, rx, y, rx + pw, y + h);
+    for (i = 2; i >= 0; i--) { rx -= cw + gap; chip(VIEWS[i], rx, y, cw, h, lvView == i, H_VIEW, i); }
+    rx -= S(14); gx = rx;
+    if (lvGpu) {          /* the video card: its 3D engine, every program on the PC */
+        gx = rx - S(196);
+        ltxt(L"VIDEO CARD", gx, y, S(80), h, fLabel, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
+        if (gpuV < 0) txt(L"not available", gx + S(82), y, S(110), h, fSmall, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        else { meter_bar(gx + S(82), y + h / 2 - S(5), S(70), S(10), gpuV, C_GOLD); swprintf(b, 64, L"%d%%", (int)(gpuV * 100 + 0.5)); txt(b, gx + S(156), y, S(40), h, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE); }
+        hit(gx, y, S(196), h, H_PARTS, 12);
+    }
+    if (lvCores && ncpu) {          /* our own threads only: one bar each that is working, busiest first; idle ones are not shown */
+        int lw = S(64), ax = x + lw, aw = gx - S(120) - ax, n = nthr;          /* room for "12 of 36 cores" after the bars */
+        ltxt(L"OUR CORES", x, y, lw, h, fLabel, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
+        if (!busy && !n) txt(L"idle", ax, y, S(80), h, fSmall, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        else if (lvView == 0 || aw < n * 3) {          /* Small (or too narrow for a bar each): one bar, how many of the PC's cores we use */
+            int mw2 = aw < S(160) ? aw : S(160);
+            meter_bar(ax, y + h / 2 - S(5), mw2, S(10), jobCores / ncpu, C_ACC);
+            swprintf(b, 64, L"%.1f of %d cores", jobCores, ncpu); txt(b, ax + mw2 + S(6), y, S(110), h, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        } else {          /* one thin bar per working thread, filled from the bottom by how busy it is */
+            int step = n ? aw / n : aw, bw = step - (step > 4 ? 2 : 1), bh = h - S(4), by = y + S(2);
+            if (bw > S(8)) { bw = S(8); step = bw + S(3); }
+            if (lookPix) { bw = bw / PX * PX; if (bw < PX) bw = PX; }
+            for (i = 0; i < n; i++) {
+                int bx = ax + i * step, fh = (int)(bh * cpuV[i] + 0.5);
+                if (lookPix) fh = (fh + PX / 2) / PX * PX;
+                fillrect(bx, by, bw, bh, 0xFF262A33u);
+                if (fh > 0) fillrect(bx, by + bh - fh, bw, fh, cpuV[i] > 0.85 ? C_ACCH : C_ACC);
+            }
+            swprintf(b, 64, L"%d of %d cores", n, ncpu); txt(b, ax + n * step + S(4), y, S(110), h, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        }
+        hit(x, y, gx - x, h, H_PARTS, 11);
+    }
+}
+static const char *PARTS[5] = { "Core bars", "Video card meter", "Base taking shape", "Time left", "Rows over time" };
+static int *part_v(int i) { int *v[5] = { &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows }; return v[i]; }
+static void parts_panel(int W, int H) {          /* the five parts, each its own switch, under the Parts button */
+    int pw = S(220), ph = S(20) + 5 * S(30) + S(10), px = partsR.right - pw, py = partsR.bottom + S(6), i;
+    hit(0, 0, W, H, H_PARTS, 0);          /* a click anywhere else closes it */
+    if (lookPix) px_box(px, py, pw, ph, 2, C_SIDE, C_EDGE, C_BEVH, C_BEVD); else rr(px, py, pw, ph, S(10), C_SIDE, C_LINE, 1);
+    ltxt(L"SHOW WHILE BUILDING", px + S(12), py + S(6), pw - S(24), S(16), fLabel, C_DIM, DT_LEFT | DT_SINGLELINE, 0, -1);
+    for (i = 0; i < 5; i++) chip(PARTS[i], px + S(12), py + S(26) + i * S(30), pw - S(24), S(24), *part_v(i), H_PARTS, i + 1);
+}
+/* the Big view: the base being built (the oldest one, or the one clicked) fills the middle, what is being done and the time
+   left beside it, the rows over time under it, and every card of this build small in one row at the bottom. When the base is
+   done it shrinks back into its card (paint's overlay) and the next one building takes its place */
+static void big_view(int x0, int y0, int w0, int h0, int nrw) {
+    int pad = S(18), gap = S(12), aw = w0 - 2 * pad, n = ncell, cwm, ihm, chm, rh = nrw && lvRows ? S(28) + nrw * S(14) : 0, bx = x0 + pad, by = y0 + pad, bw = aw, bh, pw, i, mx, off = 0, total;
+    double ovr = oval_ratio(), t = now_unix(); Cell *c = &cells[bigNow]; const LiveC *L = c->lv; WCHAR b[160];
+    cwm = n ? (aw - (n - 1) * gap) / n : aw;
+    if (cwm > S(170)) cwm = S(170);
+    if (cwm < S(104)) cwm = S(104);
+    ihm = ovr > 1.01 ? (int)((cwm - 2 * S(10)) / ovr * 1.08) : cwm - 2 * S(10); chm = ihm + 2 * S(10) + S(40);
+    bh = h0 - 2 * pad - chm - gap - (rh ? rh + gap : 0);
+    if (bh < S(120)) bh = S(120);
+    pw = (int)(bh * (ovr > 1.01 ? ovr : 1.0)); if (pw > bw * 0.66) pw = (int)(bw * 0.66);          /* the picture: as large as fits, the words beside it */
+    GdipSetClipRectI(G, x0, y0, w0, h0, CombineModeReplace);
+    if (lookPix) px_box(bx, by, bw, bh, 2, C_CARD, C_ACC, C_BEVH, C_BEVD); else rr(bx, by, bw, bh, S(14), C_CARD, C_ACC, S(2));
+    SetRect(&bigR, bx, by, bx + pw, by + bh);
+    if (L && L->have && lvShape && (L->plan || L->npoly)) live_pic(L, bx + S(12), by + S(12), pw - S(24), bh - S(24));
+    else {
+        if (c->img) image_box(c->img, bx + S(12), by + S(12), pw - S(24), bh - S(24), ovr);
+        if (lookPix) px_spinner(bx + pw / 2.0, by + bh / 2.0, S(30)); else { GpPen *pn; double r = S(24); GdipCreatePen1(C_ACC, (REAL)S(5), UnitPixel, &pn); GdipDrawArc(G, pn, (REAL)(bx + pw / 2.0 - r), (REAL)(by + bh / 2.0 - r), (REAL)(2 * r), (REAL)(2 * r), (REAL)((anim * 14) % 360), 260); GdipDeletePen(pn); }
+    }
+    {          /* the words beside it */
+        int tx = bx + pw + S(10), tw = bw - pw - S(26), ty = by + S(18);
+        txt(c->theme, tx, ty, tw, S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); ty += S(30);
+        swprintf(b, 160, L"design %hs-%d, detail %d of 4", c->seed, c->n, c->tier); txt(b, tx, ty, tw, S(18), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE); ty += S(30);
+        if (L && L->have) live_text(L, b, 160); else wcscpy(b, L"starting ...");
+        section(L"NOW", tx, ty, tw, S(18)); ty += S(22); txt(b, tx, ty, tw, S(40), fUI, C_ACC, DT_LEFT | DT_WORDBREAK); ty += S(44);
+        if (lvTime) {
+            double f = live_frac(L, t);
+            section(L"TIME LEFT", tx, ty, tw, S(18)); ty += S(22);
+            live_left(L, t, b, 160); txt(b, tx, ty, tw, S(26), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE); ty += S(30);
+            if (f >= 0) meter_bar(tx, ty, tw, S(10), f, C_ACC); ty += S(24);
+        }
+        if (L && L->have && L->nt.threads) { swprintf(b, 160, L"this base: %d thread%ls for the height field and the mesh", L->nt.threads, L->nt.threads == 1 ? L"" : L"s"); txt(b, tx, ty, tw, S(36), fSmall, C_DIM, DT_LEFT | DT_WORDBREAK); ty += S(36); }
+        swprintf(b, 160, L"%d of %d bases done. Click another building card to watch it.", doneN, wanted); txt(b, tx, by + bh - S(46), tw, S(36), fSmall, C_DIM, DT_LEFT | DT_WORDBREAK);
+    }
+    if (rh) rows(bx, by + bh + gap, bw, rh);
+    {          /* every card of this build, small, in one row (slid so the one shown stays in view) */
+        int ry = y0 + h0 - pad - chm; total = n * (cwm + gap) - gap; mx = bx;
+        if (total > aw) { off = bigNow * (cwm + gap) + cwm / 2 - aw / 2; if (off < 0) off = 0; if (off > total - aw) off = total - aw; }
+        for (i = 0; i < n; i++) { int cx = mx + i * (cwm + gap) - off; if (cx + cwm > x0 && cx < x0 + w0) card(i, cx, ry, cwm, chm); else SetRect(&cardR[i], cx, ry, cx + cwm, ry + chm); }
+    }
+    GdipResetClip(G);
+}
 static void paint(HDC out, int W, int H) {
-    HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H); WCHAR b[200];
+    HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
     GdipCreateFromHDC(DC, &G); GdipSetSmoothingMode(G, lookPix ? SmoothingModeNone : SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
     nhit = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
@@ -595,7 +905,7 @@ static void paint(HDC out, int W, int H) {
         int tb = snp(S(66));
         texfill(0, 0, mx, H, 2, C_STONEL, 0);
         fillrect(0, 0, mx, tb, C_NAVY); texfill(0, 0, mx, tb, 1, C_NAVYD, 0); fillrect(0, tb - PX, mx, PX, C_TEALD);
-        texfill(mx + 1, 0, mw, S(HEAD_H) - 2 * PX, 1, 0xFF181A20u, 0);
+        texfill(mx + 1, 0, mw, HH - 2 * PX, 1, 0xFF181A20u, 0);
     }
 
     /* the left side: what to make */
@@ -641,11 +951,12 @@ static void paint(HDC out, int W, int H) {
     txt(head, mx + S(22), S(14), mw - S(44) - S(110) - S(238), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     txt(sub, mx + S(22), S(42), mw - S(44) - S(110), S(20), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     button(L"Help   ?", W - S(22) - S(96), S(18), S(96), S(34), 0, H_HELP);
+    strip(mx + S(22), S(HEAD_H) - S(8), mw - S(44), S(26));
     if (!lookPix) {
-        fillrect(mx + 1, S(HEAD_H) - S(3), mw, S(3), C_LINE);
-        if (busy && wanted) { double f = (doneN + 0.15) / (double)wanted; if (f > 1) f = 1; fillrect(mx + 1, S(HEAD_H) - S(3), (int)(mw * f), S(3), C_ACC); }
+        fillrect(mx + 1, HH - S(3), mw, S(3), C_LINE);
+        if (busy && wanted) { double f = (doneN + 0.15) / (double)wanted; if (f > 1) f = 1; fillrect(mx + 1, HH - S(3), (int)(mw * f), S(3), C_ACC); }
     } else {          /* the line under the top, a whole number of art pixels high: a lit row over a dark one */
-        int ly = S(HEAD_H) - 2 * PX; double f = busy && wanted ? (doneN + 0.15) / (double)wanted : 0;
+        int ly = HH - 2 * PX; double f = busy && wanted ? (doneN + 0.15) / (double)wanted : 0;
         if (f > 1) f = 1;
         fillrect(mx + 1, ly, mw, PX, C_LINE); fillrect(mx + 1, ly + PX, mw, PX, C_EDGE);
         if (f > 0 && lookTex) {          /* segmented: blocks of 6 art pixels; the one being worked on blinks green */
@@ -659,13 +970,26 @@ static void paint(HDC out, int W, int H) {
     }
 
     /* the middle: the choices */
-    SetRect(&gridR, mx + 1, S(HEAD_H), W, fy - (showDetails ? S(170) : 0));
-    {
-        int pad = S(18), gap = S(14), aw = gridR.right - gridR.left - 2 * pad - S(8), cols = (aw + gap) / (S(196) + gap), cw, ch, rows, total, vh = gridR.bottom - gridR.top;
+    {          /* the live view while building: which base the Big view shows, and the rows over time under the cards */
+        int building = 0, nrw = busy == 2 && lvRows ? rows_count() : 0; double best = 1e300;
+        for (i = 0; i < ncell; i++) building += cells[i].state == ST_BUILDING;
+        bigNow = -1;
+        if (busy == 2 && lvView == 2 && building) {
+            if (bigPick >= 0 && bigPick < ncell && cells[bigPick].state == ST_BUILDING) bigNow = bigPick;
+            else for (i = 0; i < ncell; i++) if (cells[i].state == ST_BUILDING) { double t0 = cells[i].lv && cells[i].lv->have ? cells[i].lv->nt.t0 : 1e299; if (bigNow < 0 || t0 < best) { bigNow = i; best = t0; } }          /* the oldest one building */
+        }
+        rowsH = nrw && bigNow < 0 ? S(28) + nrw * S(14) + S(10) : 0;
+        rowsN = nrw;
+    }
+    SetRect(&gridR, mx + 1, HH, W, fy - (showDetails ? S(170) : 0) - rowsH);
+    if (bigNow >= 0) big_view(gridR.left, gridR.top, gridR.right - gridR.left, gridR.bottom - gridR.top, rowsN);
+    else {
+        int pad = S(18), gap = S(14), aw = gridR.right - gridR.left - 2 * pad - S(8), cols, cw, ch, nrows, total, vh = gridR.bottom - gridR.top; double ovr = oval_ratio();
+        cols = (aw + gap) / ((ovr > 1.01 ? S(300) : S(196)) + gap);          /* an oval base: wider cards */
         if (cols < 1) cols = 1;
         cw = (aw - (cols - 1) * gap) / cols;
-        if (cw > S(280)) cw = S(280);
-        ch = cw + S(40); rows = (ncell + cols - 1) / cols; total = rows * (ch + gap) + 2 * pad - gap; scrollMax = total > vh ? total - vh : 0;
+        if (cw > (ovr > 1.01 ? S(440) : S(280))) cw = ovr > 1.01 ? S(440) : S(280);
+        ch = ovr > 1.01 ? (int)((cw - 2 * S(10)) / ovr * 1.08) + 2 * S(10) + S(40) : cw + S(40); nrows = (ncell + cols - 1) / cols; total = nrows * (ch + gap) + 2 * pad - gap; scrollMax = total > vh ? total - vh : 0;
         if (scrollY > scrollMax) scrollY = scrollMax;
         if (scrollY < 0) scrollY = 0;
         GdipSetClipRectI(G, gridR.left, gridR.top, gridR.right - gridR.left, vh, CombineModeReplace); GdipFlush(G, FlushIntentionSync); IntersectClipRect(DC, gridR.left, gridR.top, gridR.right, gridR.bottom);
@@ -693,8 +1017,26 @@ static void paint(HDC out, int W, int H) {
             } }
         GdipResetClip(G); GdipFlush(G, FlushIntentionSync); SelectClipRgn(DC, NULL);
     }
+    if (rowsH) {          /* rows over time, under the cards */
+        fillrect(mx + 1, gridR.bottom, mw, rowsH, C_SIDE); fillrect(mx + 1, gridR.bottom, mw, lookPix ? PX : 1, C_LINE);
+        rows(mx + S(22), gridR.bottom + S(8), mw - S(44), rowsH - S(10));
+    }
+    if (shrinkI >= 0 && shrinkI < ncell) {          /* the Big view's base going back down into its card */
+        DWORD el = GetTickCount() - shrinkT; double u = el / 300.0, e; Cell *c = &cells[shrinkI]; RECT *to = &cardR[shrinkI];
+        if (u >= 1) shrinkI = -1;
+        else {
+            double rx, ry, rw, rh2;
+            e = 1 - (1 - u) * (1 - u);
+            rx = shrinkFrom.left + (to->left - shrinkFrom.left) * e; ry = shrinkFrom.top + (to->top - shrinkFrom.top) * e;
+            rw = (shrinkFrom.right - shrinkFrom.left) + ((to->right - to->left) - (shrinkFrom.right - shrinkFrom.left)) * e;
+            rh2 = (shrinkFrom.bottom - shrinkFrom.top) + ((to->bottom - to->top) - (shrinkFrom.bottom - shrinkFrom.top)) * e;
+            if (lookPix) px_box(rx, ry, rw, rh2, 2, C_CARD, C_ACC, C_BEVH, C_BEVD); else rr(rx, ry, rw, rh2, S(12), C_CARD, C_ACC, S(2));
+            if (c->img3) image_fit(c->img3, rx + S(8), ry + S(8), rw - S(16), rh2 - S(16));
+            else if (c->lv && c->lv->plan) image_fit(c->lv->plan, rx + S(8), ry + S(8), rw - S(16), rh2 - S(16));
+        }
+    }
     if (showDetails) {          /* what the kit itself says, for when something goes wrong */
-        int dy = gridR.bottom, dh = S(170), lh = S(16), k = (dh - S(34)) / lh, j, from = nlog > k ? nlog - k : 0;
+        int dy = gridR.bottom + rowsH, dh = S(170), lh = S(16), k = (dh - S(34)) / lh, j, from = nlog > k ? nlog - k : 0;
         fillrect(mx + 1, dy, mw, dh, C_SIDE); if (lookPix && lookTex) texfill(mx + 1, dy, mw, dh, 2, C_STONEL, 0);
         fillrect(mx + 1, dy, mw, lookPix ? PX : 1, C_LINE);
         section(L"DETAILS: WHAT THE KIT SAYS", mx + S(22), dy + S(8), S(320), S(18));
@@ -719,6 +1061,7 @@ static void paint(HDC out, int W, int H) {
         rx -= btnw + S(10); button(L"Open folder", rx - S(110), by, S(110), bh, 0, H_OPEN); rx -= S(118);
         button(showDetails ? L"Hide details" : L"Details", rx - S(104), by, S(104), bh, 0, H_DETAILS);
     }
+    if (lvParts && !showHelp) parts_panel(W, H);
     if (showHelp) help(W, H);
     GdipFlush(G, FlushIntentionSync); GdipDeleteGraphics(G); BitBlt(out, 0, 0, W, H, DC, 0, 0, SRCCOPY); SelectObject(DC, obm); DeleteObject(bm); DeleteDC(DC);
 }
@@ -731,7 +1074,7 @@ static int para(const WCHAR *title, const WCHAR *body, int x, int y, int w) {
     return y + (r.bottom - r.top) + S(12);
 }
 static void help(int W, int H) {
-    int pw = W - S(80) > S(1040) ? S(1040) : W - S(80), ph = H - S(50) > S(700) ? S(700) : H - S(50), px = (W - pw) / 2, py = (H - ph) / 2, cwid = (pw - S(84)) / 2, x1 = px + S(28), x2 = x1 + cwid + S(28), y;
+    int pw = W - S(80) > S(1040) ? S(1040) : W - S(80), ph = H - S(40) > S(880) ? S(880) : H - S(40), px = (W - pw) / 2, py = (H - ph) / 2, cwid = (pw - S(84)) / 2, x1 = px + S(28), x2 = x1 + cwid + S(28), y;
     fillrect(0, 0, W, H, 0xB0080A0Du);
     if (lookPix) px_box(px, py, pw, ph, 2, C_SIDE, C_EDGE, C_BEVH, C_BEVD); else rr(px, py, pw, ph, S(14), C_SIDE, C_LINE, 1);
     if (lookPix && lookTex) { int bx = snp(px) + 2 * PX, by = snp(py) + 2 * PX, bw = snp(px + pw) - 2 * PX - bx, bh = snp(S(48)); fillrect(bx, by, bw, bh, C_NAVY); texfill(bx, by, bw, bh, 1, C_NAVYD, 0); fillrect(bx, by + bh - PX, bw, PX, C_TEALD); }          /* its title bar */
@@ -751,6 +1094,9 @@ static void help(int W, int H) {
                               L"Allow overhangs:  things may hang over (rounder barrels, arching ribs). The print then needs supports. Off: every base prints without supports.", x1, y, cwid);
     y = para(L"WHERE THE FILES GO", L"The first time, the kit fetches the free model packs its details are made from (public domain, about 90 MB, once). The top line says so while it does, and Details shows from where. \"models_download\": false in settings.json stops it.\n"
                               L"Every base you build is copied into one folder, out\\picked_<date>_<time> in the kit folder, named by style, size and theme: the STL, its 3D picture (_3d.png), its drawing from above (_2d.png) and its plan. Open folder takes you there.", x1, y, cwid);
+    y = para(L"WATCHING IT BUILD", L"The strip at the top: a bar for each of the kit's own working threads (only ours, idle ones hidden) and the video card. Small:  words and a time-left bar.  "
+                              L"Live card:  the card shows the base taking shape, tile by tile.  Big view:  the base being built fills the middle; done, it goes back into its card.  "
+                              L"Parts:  a switch each for Core bars, Video card meter, Base taking shape, Time left (from your earlier builds) and Rows over time.", x1, y, cwid);
     y = py + S(58);
     y = para(L"THE CARDS", L"A flat picture from above is a design that is not built yet.\n"
                               L"A grey 3D picture is the finished base, with its drawing small in the corner so you can check one against the other. The post standing beside it is a figure of the height you chose, to judge the scale by.\n"
@@ -808,6 +1154,8 @@ static void act2(int kind, int idx) {
     case H_QUICK: if (!busy) { autoBuild = 1; ask_choices(1); if (!busy) autoBuild = 0; } return;
     case H_SUP: selSup = !selSup; break;
     case H_SPEED: if (idx == 0) spThr = !spThr; else spGpu = !spGpu; speed_env(); break;
+    case H_VIEW: lvView = idx; lvParts = 0; break;
+    case H_PARTS: if (idx >= 1 && idx <= 5) *part_v(idx - 1) = !*part_v(idx - 1); else lvParts = !lvParts; break;
     case H_SHOW: ask_choices(1); return;
     case H_MORE: ask_choices(0); return;
     case H_GO: build(); return;
@@ -820,7 +1168,7 @@ static void act2(int kind, int idx) {
     case H_LOOK: if (idx == 0) lookPix = !lookPix; else if (idx == 1) lookTex = !lookTex; else lookFont = !lookFont; break;
     case H_CARD: {
         Cell *c = &cells[idx]; int np;
-        if (busy) break;
+        if (busy) { if (busy == 2 && c->state == ST_BUILDING) { bigPick = idx; if (lvView != 2) lvView = 2; } break; }          /* while building: watch that one in the Big view */
         if (c->state == ST_NONE) c->picked = !c->picked;
         else if ((c->state == ST_OK || c->state == ST_VARIANT) && c->stl[0]) { WCHAR a[MAX_PATH + 20]; swprintf(a, MAX_PATH + 20, L"/select,\"%ls\"", c->stl); ShellExecuteW(hMain, L"open", L"explorer.exe", a, NULL, SW_SHOWNORMAL); }
         np = npicked();
@@ -846,6 +1194,23 @@ static void hover_at(int x, int y) {
                                           L"Video card: the 3D pictures are drawn by the video card (Direct3D 11), in a fraction of a second. Off: drawn by Python, seconds per base." };
             wcscpy(sub, st[id]);
         }
+        if (k == H_VIEW) {          /* say what the view under the mouse shows */
+            static const WCHAR *vt[3] = { L"Small: each building card says in words what is being done, with a bar for the time left; one CPU and one video card meter at the top.",
+                                          L"Live card: the card being built shows the base taking shape (the plan, then the height field filling in tile by tile), what is being done and the time left.",
+                                          L"Big view: the base being built fills the middle, large, with rows over time below. When it is done it goes back into its card and the next one takes its place." };
+            wcscpy(sub, vt[id]);
+        }
+        if (k == H_PARTS) {          /* say what the part under the mouse is */
+            static const WCHAR *pt[6] = { L"Parts: choose what the live view shows. Each part has its own switch.",
+                                          L"Core bars: one thin bar for each of the kit's own threads that is working, filled by how busy it is (other programs are not counted), and how many of the PC's cores that is.",
+                                          L"Video card meter: how much of the video card's 3D engine is in use (every program on the PC). It draws the 3D pictures.",
+                                          L"Base taking shape: the building card (or the big view) shows the plan, then the height field tiles lighting up as the threads finish them.",
+                                          L"Time left: a bar and seconds left, worked out from your earlier builds of the same style, size and detail. It never goes back up.",
+                                          L"Rows over time: one row per base being built, coloured by what it is doing (laying out, height field, mesh, checks, picture)." };
+            if (id >= 0 && id <= 5) wcscpy(sub, pt[id]);
+            else if (id == 11) wcscpy(sub, L"The kit's own working threads, one bar each, busiest first (other programs are not counted). Idle threads are not shown.");
+            else if (id == 12) wcscpy(sub, gpuV < 0 ? L"The video card meter: Windows does not report the video card's use on this PC." : L"How much of the video card's 3D engine is in use (all programs). The kit draws its 3D pictures there.");
+        }
         if (k == H_CARD && !busy && cells[id].state != ST_PENDING) {          /* say what the card under the mouse is */
             Cell *c = &cells[id];
             if (c->why[0]) swprintf(sub, 300, L"%ls", c->why);
@@ -863,8 +1228,10 @@ static void make_fonts(void) {
     FS = (int)(SC + 0.25); if (FS < 1) FS = 1;
 }
 static void ini(int save) {
-    WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu }; int lim[] = { 19, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2 }, i;
-    static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"look", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
+    WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu,
+                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows }; int lim[] = { 19, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2 }, i;
+    static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"look", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard",
+                                   L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
@@ -878,7 +1245,7 @@ static void ini(int save) {
         savedR.right = (int)GetPrivateProfileIntW(L"window", L"right", 0, p); savedR.bottom = (int)GetPrivateProfileIntW(L"window", L"bottom", 0, p);
         savedMax = (int)GetPrivateProfileIntW(L"window", L"maximized", 0, p);
     }
-    for (i = 0; i < 13; i++) {
+    for (i = 0; i < 19; i++) {
         if (save) { swprintf(v, 16, L"%d", *vals[i]); WritePrivateProfileStringW(L"window", keys[i], v, p); }
         else { int x = (int)GetPrivateProfileIntW(L"window", keys[i], *vals[i], p); if (x >= (i == 4) && x < lim[i]) *vals[i] = x; }
     }
@@ -887,7 +1254,21 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_LINE: on_line((int)w, (WCHAR *)l); free((void *)l); return 0;
     case WM_ENDED: on_ended((int)w, (DWORD)l); return 0;
-    case WM_TIMER: if (w == 2) KillTimer(h, 2); else anim++; redraw(); return 0;
+    case WM_TIMER:
+        if (w == 2) KillTimer(h, 2);
+        else if (w == 3) meters_tick();
+        else if (w == 4) {          /* the animation timer redraws while building */
+            live_poll();
+            if (selftest && GetEnvironmentVariableA("BBB_LIVE_SHOTS", NULL, 0)) {          /* a test: pictures of the three views while laying out, then while the height field is cut */
+                static int got[2]; int k, ph = -1, keep = lvView;
+                for (k = 0; k < ncell; k++) { LiveC *L = cells[k].lv; if (!L || !L->have) continue; if (!got[0] && L->npoly > 20 && !L->plan) ph = 0; else if (!got[1] && L->plan && !strcmp(L->nt.stage, "field") && L->nt.ntile) ph = 1; }
+                if (ph >= 0) { WCHAR q[MAX_PATH]; got[ph] = 1; for (k = 0; k < 3; k++) { lvView = k; swprintf(q, MAX_PATH, L"%ls.live_%ls_%hs.bmp", stShot, ph ? L"field" : L"layout", VIEWS[k]); capture(q); } lvView = keep; }
+            }
+            return 0;
+        }
+        else if (w == 5) { if (shrinkI < 0) KillTimer(h, 5); }
+        else anim++;
+        redraw(); return 0;
     case WM_MOUSEMOVE: { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); return 0; }
     case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; redraw(); return 0;
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
@@ -961,6 +1342,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if ((chh + 44) * SC > wa.bottom - wa.top) { chh = (int)((wa.bottom - wa.top) / SC) - 44; if (chh < 890) { chh = 890; SC = (wa.bottom - wa.top) / (double)(chh + 44); } }          /* a small screen: a lower window, and only then everything a little smaller */
     if ((cw + 20) * SC > wa.right - wa.left) cw = (int)((wa.right - wa.left) / SC) - 20;
     if (!selftest) ini(0);
+    swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
     speed_env();          /* the speed switches, for every Python job started from here on */
     make_fonts(); wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
     memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIcon(NULL, IDI_APPLICATION); RegisterClassW(&wc);
@@ -975,12 +1357,14 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         WINDOWPLACEMENT wp; memset(&wp, 0, sizeof wp); wp.length = sizeof wp; wp.rcNormalPosition = savedR; wp.showCmd = SW_HIDE; SetWindowPlacement(hMain, &wp);
         if (savedMax) show = SW_SHOWMAXIMIZED;
     }
+    meters_tick(); SetTimer(hMain, 3, 500, NULL);          /* the PC's meters, twice a second */
     ShowWindow(hMain, selftest ? SW_SHOWNOACTIVATE : show); UpdateWindow(hMain);
     if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_LOOK", e, sizeof e) >= 3) { lookPix = e[0] == '1'; lookTex = e[1] == '1'; lookFont = e[2] == '1'; } }          /* a test may ask for another look: 3 digits, pixel textures font */
     if (selftest == 2) {          /* --resizetest: make the window larger, then as small as it will go, and write down what it became */
         FILE *o; WCHAR q[MAX_PATH]; RECT a, b2, c2; LONG st = GetWindowLongW(hMain, GWL_STYLE); int i;
         GetClientRect(hMain, &a); SetWindowPos(hMain, NULL, 0, 0, a.right + S(520), a.bottom + S(300), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); GetClientRect(hMain, &b2);
         for (i = 0; i < 26; i++) { memset(&cells[i], 0, sizeof(Cell)); cells[i].state = ST_NONE; cells[i].n = i + 1; cells[i].tier = 4; cells[i].picked = i % 5 == 0; strcpy(cells[i].seed, "test"); swprintf(cells[i].theme, 64, L"sample %d", i + 1); }
+        Sleep(500); meters_tick();          /* the meters need two readings to show anything */
         ncell = 26; wcscpy(head, L"Resize test: 26 sample cards"); PostMessageW(hMain, WM_CHAR, '1', 0); PostMessageW(hMain, WM_CHAR, '5', 0);
         { MSG m2; while (PeekMessageW(&m2, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m2); DispatchMessageW(&m2); } }
         if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* only to look at the drawing: a few cards building, built, failed, waiting, and a half-full progress bar, in the first picture */

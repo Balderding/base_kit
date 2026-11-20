@@ -14,6 +14,7 @@
 #include "shot.h"
 #include "field.h"
 #include "mt.h"
+#include "livetiles.h"
 
 static unsigned char *read_all(HANDLE h, size_t *n) {
     size_t cap = 1 << 20, len = 0; unsigned char *b = malloc(cap); DWORD got;
@@ -53,10 +54,11 @@ static int core_build(void) {
     if (!geos_load() || !pyx_load()) { say("GEOS or the UCRT math could not be loaded\n"); return 1; }
     size_t n; unsigned char *blob = read_all(in, &n);
     MeshIn mi; MeshOut mo; memset(&mo, 0, sizeof mo); static char sk[8192]; char err[256] = "";
-    if (!field_build(blob, n, mt_threads(), &mi, sk, sizeof sk, err, sizeof err)) { say(err); say("\n"); return 1; }
+    if (!field_build(blob, n, mt_threads(), &mi, sk, sizeof sk, err, sizeof err)) { lt_end(); say(err); say("\n"); return 1; }
     free(blob);
     uint32_t ncell = (uint32_t)mi.ncells;
     int ok = mesh_from_field(&mi, &mo); mesh_in_free(&mi);
+    lt_end();          /* the window's live view: the field and the mesh are done */
     if (!ok) { say(mo.err); say("\n"); return 1; }
     uint32_t hd[2] = { (uint32_t)mo.nv, (uint32_t)mo.nt }, x[2] = { ncell, (uint32_t)strlen(sk) };
     if (!write_all(out, "BBR1", 4) || !write_all(out, hd, 8) || !write_all(out, mo.v, sizeof(double) * 3 * (size_t)mo.nv) || !write_all(out, mo.t, sizeof(int) * 3 * (size_t)mo.nt)) return 1;

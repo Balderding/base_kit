@@ -19,6 +19,7 @@ Output: out/<style>/*.stl + *_iso.png (3D picture) + *_2d.png (the drawing from 
 import random, sys, os, json, time, csv, subprocess, argparse, signal, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from kit_settings import CFG, HERE
+import live          # the window's live view: progress notes (nothing unless KIT_LIVE is set)
 
 ALL_STYLES = ["badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine",
               "swamp", "cynder", "targa", "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast"]
@@ -372,6 +373,7 @@ def one_base(style, n, stop):
                     except OSError: pass
         seam = False
         if not reason:
+            live.set_stage(n, "checks")          # the window's live view (nothing unless it watches)
             if not QUIET:
                 with _lock: print(f"    {nm(style, n)}  checking STL (seams, watertight, size, magnet)", flush=True)
             try:
@@ -409,9 +411,11 @@ def one_base(style, n, stop):
         tries.append({"variant": v or "original", "secs": r.get("secs"), "reason": reason, "slowest": r.get("slowest", ""), "steps": r.get("steps", ""),
                       "theme": r.get("theme", ""), "plan_line": r.get("plan_line", ""), "plan": json.dumps(r["plan"]) if r.get("plan") else "",
                       "dropped": ", ".join(sorted(set(r.get("skipped", [])))), "restarts": r.get("restarts", 0),
-                      "note": "rim seam closed" if seam else "", "diff": r.get("diff", "")})
+                      "note": "rim seam closed" if seam else "", "diff": r.get("diff", ""),
+                      "made": f"mesh: {r['mesher']}; pictures: {r.get('pictures', '-')}" if r.get("mesher") else ""})
         if not reason: break
     ok = bool(tries) and not tries[-1]["reason"]
+    live.finish(n)          # its live note goes: the window shows the finished card
     return {"base": nm(style, n), "ok": ok, "tries": tries, "detail": TIER.get((style, n), (n - 1) % 20 // 5 + 1)}
 
 
@@ -430,10 +434,23 @@ def sheet(style, results):
     plt.tight_layout(); fig.savefig(os.path.join(CFG["out_folder"], f"{style}_sheet.png"), dpi=70); plt.close(fig)
 
 
+def engine_text():
+    """what really builds the bases this run: the layout is planned in Python; the height field + mesh run in C
+    (bbb_kit.exe, threaded when the CPU threads switch is on); pictures on the video card when that switch is on"""
+    import cmesh
+    exe = os.path.exists(os.path.join(HERE, "bbb_kit.exe"))
+    n = cmesh.threads()
+    if exe and n > 1: core = f"height field + mesh in C ({n} threads)"
+    elif exe and cmesh.enabled(): core = "height field in Python, mesh in C (1 thread)"
+    else: core = "height field + mesh in Python"
+    pics = "pictures on the video card" if exe and cmesh.gpu_mode() else "pictures in Python"
+    return f"layout in Python, {core}, {pics}"
+
+
 def preflight():
     """check everything cheap before starting, so problems show up in 2 seconds not 2 minutes"""
     if ENGINE == "mesh":
-        print(f"kit    : {HERE}\nengine : mesh (built in Python, SolidCraft not used)\nout    : {CFG['out_folder']}", flush=True)
+        print(f"kit    : {HERE}\nengine : mesh, {engine_text()}\nout    : {CFG['out_folder']}", flush=True)
     else:
         from sc_client import cli_path
         cli = cli_path()
@@ -463,7 +480,7 @@ def main():
     ap.add_argument("--detail", default="mix", help="1 (simplest) to 4 (most detailed), or mix (default: an even mix of all four)")
     ap.add_argument("--workers", type=int, default=CFG["workers"])
     ap.add_argument("--seed", default="", help="reuse an earlier run's seed to rebuild the same bases (shown at the start of every run)")
-    ap.add_argument("--engine", default=globals()["ENGINE"], choices=["solidcraft", "mesh"], help="solidcraft: build in SolidCraft. mesh: build the STL directly in Python (seconds per base, SolidCraft not needed)")
+    ap.add_argument("--engine", default=globals()["ENGINE"], choices=["solidcraft", "mesh"], help="solidcraft: build in SolidCraft. mesh: build the STL in the kit itself: layout in Python, height field + mesh in C (seconds per base, SolidCraft not needed)")
     ap.add_argument("-q", "--quiet", action="store_true", help="only OK/FLAG lines, no per-step progress")
     ap.add_argument("--scenes", choices=["on", "off"], default=None, help="every base is one place with a theme (default: the scenes setting in settings.json)")
     ap.add_argument("--theme", default="", help="build every base with this theme of the style, e.g. --theme \"tunnel mouth\" (a wrong name lists the themes)")
@@ -633,11 +650,11 @@ def run_style(style, nums, workers):
     results.sort(key=lambda r: r["base"])
     rep = os.path.join(CFG["out_folder"], f"{a.style}_report.csv")
     with open(rep, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f); w.writerow(["base", "result", "attempt", "variant", "build secs", "failure reason", "dropped pieces", "restarts", "note", "steps", "slowest steps", "% different from closest of last 10", "detail level", "theme", "plan from", "plan"])
+        w = csv.writer(f); w.writerow(["base", "result", "attempt", "variant", "build secs", "failure reason", "dropped pieces", "restarts", "note", "steps", "slowest steps", "% different from closest of last 10", "detail level", "theme", "made by", "plan from", "plan"])
         for r in results:
             for i, t in enumerate(r["tries"], 1):
                 res = ("OK" if not t["reason"] else ("FLAGGED" if i == len(r["tries"]) and not r["ok"] else "retried"))
-                w.writerow([r["base"], res, i, t["variant"], t["secs"], t["reason"] or "", t["dropped"], t["restarts"], t.get("note", ""), t.get("steps", ""), t.get("slowest", ""), t.get("diff", ""), r.get("detail", ""), t.get("theme", ""), t.get("plan_line", ""), t.get("plan", "")])
+                w.writerow([r["base"], res, i, t["variant"], t["secs"], t["reason"] or "", t["dropped"], t["restarts"], t.get("note", ""), t.get("steps", ""), t.get("slowest", ""), t.get("diff", ""), r.get("detail", ""), t.get("theme", ""), t.get("made", ""), t.get("plan_line", ""), t.get("plan", "")])
     sheet(a.style, results)
     ok = sum(r["ok"] for r in results)
     print(f"DONE {a.style}: {ok}/{len(nums)} OK, {flagged} flagged, {round((time.time() - t0) / 60, 1)} min. "

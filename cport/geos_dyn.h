@@ -68,7 +68,7 @@ enum { GEOS_POINT, GEOS_LINESTRING, GEOS_LINEARRING, GEOS_POLYGON, GEOS_MULTIPOI
   X(int, GEOSGeom_getXMin_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
   X(int, GEOSGeom_getYMin_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
   X(int, GEOSGeom_getXMax_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
-  X(int, GEOSGeom_getYMax_r, (GEOSContextHandle_t, const GEOSGeometry *, double *))
+  X(int, GEOSGeom_getYMax_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \n  X(GEOSGeometry *, GEOSConvexHull_r, (GEOSContextHandle_t, const GEOSGeometry *)) \n  X(GEOSGeometry *, GEOSTopologyPreserveSimplify_r, (GEOSContextHandle_t, const GEOSGeometry *, double))
 
 #define GEOS_PTR(ret, name, args) ret (*name) args;
 typedef struct { GEOS_FNS(GEOS_PTR) } GeosApi;

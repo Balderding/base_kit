@@ -177,13 +177,24 @@ class Field:
             return res
         s._apply(poly, new_for)
 
-    def cut(s, poly, zb):
+    def cut(s, poly, zb, zt=None):
+        """lower what is inside `poly` to zb. zt = the top of the cutting tool: what stands higher than that (a tank
+        standing over a groove in the ground) stays whole, as the solid tool would leave it; None = no top"""
         f = Flat(zb)
         def new_for(inter, rule):
-            if rule.lo >= zb: return [(inter, f)]
+            if zt is not None and rule.lo > zt + 1e-6: return []          # wholly above the tool
+            full = zt is None or rule.hi <= zt + 1e-6
+            if rule.lo >= zb and full: return [(inter, f)]
             if rule.hi <= zb: return []
-            ab = rule.above(zb)
-            return [(inter.intersection(ab), f)] if ab is not None and not ab.is_empty else []
+            g = inter
+            if rule.lo < zb:
+                ab = rule.above(zb)
+                if ab is None or ab.is_empty: return []
+                g = g.intersection(ab)
+            if not full:                                   # a slope reaching over the tool's top: keep that part
+                at = rule.above(zt)
+                if at is not None and not at.is_empty: g = g.difference(at)
+            return [(g, f)] if not g.is_empty else []
         s._apply(poly, new_for)
 
 
@@ -360,9 +371,10 @@ def rescale(groups, f, mm, cap=25.0, floor=2.9, tx=0.0, ty=0.0, pads=None):
 
 def field_from_cmds(groups):
     """run the kit's command groups on a height field. Returns (field, base radius, top z, rim tan, magnet (r, depth))"""
-    import gg
+    import gg, live
     F = None; R0 = H = None; rim_tan = 0.0; mag = None; skipped = []
-    for g in groups:
+    for gi, g in enumerate(groups):
+        live.note(steps_done=gi)                            # the window's live view (nothing when it is not watching)
         ext = [c for c in g if c["command"] == "solid.extrude"]
         if not ext: continue                                # chamfer polish etc.: nothing to do here
         # a group may hold several sketch+extrude pairs (straight part + sloped cap)
@@ -398,8 +410,8 @@ def field_from_cmds(groups):
                 if reg.is_empty: continue
                 try:
                     if op == "cut":
-                        zb = off - dist if p.get("direction") == "negative" else off
-                        F.cut(reg, zb)
+                        zb, zt = (off - dist, off) if p.get("direction") == "negative" else (off, off + dist)
+                        F.cut(reg, zb, zt)
                     elif tap > 0.01:
                         for q in polys(reg): F.join_taper(q, off, dist, math.tan(math.radians(tap)))
                     elif p.get("loft"): F.join_step(P(reg), off + dist, p["loft"][0], p["loft"][1])
@@ -413,7 +425,7 @@ def field_ops(groups):
     """field_from_cmds() for the C field builder (the CPU threads switch): the same reading of the command groups,
     but the steps are only written down, for bbb_kit.exe --core-build to cut on all threads. Returns
     (base: dict of what the mesher needs, steps: [(kind, name, outline, a, b, c, chain)], skipped). Kinds: 1 prism
-    (a = top z), 2 step (a = top z, b = zb, chain), 3 taper (a = z0, b = height, c = tan), 4 cut (a = bottom z)."""
+    (a = top z), 2 step (a = top z, b = zb, chain), 3 taper (a = z0, b = height, c = tan), 4 cut (a = bottom z, b = the tool's top z)."""
     import gg
     base = None; steps = []; skipped = []; chains = {}; mag = None
     for g in groups:
@@ -449,7 +461,7 @@ def field_ops(groups):
                 reg = reg.intersection(base["guard"])
                 if reg.is_empty: continue
                 try:
-                    if op == "cut": steps.append((4, name, reg, off - dist if p.get("direction") == "negative" else off, 0.0, 0.0, -1))
+                    if op == "cut": steps.append((4, name, reg, *((off - dist, off) if p.get("direction") == "negative" else (off, off + dist)), 0.0, -1))
                     elif tap > 0.01:
                         for q in polys(reg): steps.append((3, name, q, off, dist, math.tan(math.radians(tap)), -1))
                     elif p.get("loft"): steps.append((2, name, P(reg), off + dist, p["loft"][1], 0.0, chains.setdefault(p["loft"][0], len(chains))))
@@ -790,14 +802,25 @@ def add_solids(s, m, skipped=None, rlim=None):
     return m, extra
 
 def build(style, n, path=None):
-    import gg3, gg, trimesh
+    import gg3, gg, trimesh, live
     t = time.time()
+    ov0 = gg.oval()
+    live.start(n, oval=f"{ov0[0]:g}x{ov0[1]:g}" if ov0 else "", mm=f"{gg.BASE_MM:g}", lay_r=f"{gg.R0:.3f}")          # the window's live view (only when it asks: KIT_LIVE)
+    if live.on(): live.hook_layout()
     s = gg3.make(style, n)
     if os.environ.get("BASENAME"): s.name = os.environ["BASENAME"]
     import hashlib
     sig = hashlib.md5(repr([(op[0], op[-1], round(op[2], 2), [[round(v, 1) for c in p.exterior.coords for v in c] for p in op[1]]) for op in s.ops]).encode()).hexdigest()[:16]
     gg3.smooth_isolated(s)
     groups = list(gg.build_cmds(s))
+    drawn = None
+    if live.on():          # the window is watching: the 2D drawing now (not at the end, so it costs nothing more), to show while the rest is built
+        if path is None:
+            D = os.environ.get("SETDIR", gg3.CFG["out_folder"]); os.makedirs(f"{D}/{style}", exist_ok=True); path = f"{D}/{style}/{s.name}.stl"
+        if gg3.CFG.get("drawing_2d", True):
+            try: draw2d(s, path[:-4] + "_2d.png"); drawn = path[:-4] + "_2d.png"; live.plan(drawn, PLAN_WIN)
+            except Exception: pass
+        live.note(stage="field", steps_total=len(groups), steps_done=0)
     fin = float(os.environ.get("KIT_FINAL_MM", 0) or 0); sc = float(os.environ.get("KIT_SCALE", 1) or 1)          # the scenery scale: laid out small, built sc times larger on the base that was asked for
     sp = scale_plan(s); ov = gg.oval()
     if sp and not (ov and abs(sp[0] - 1) < 1e-6 and not sp[2] and not sp[3]): groups = rescale(groups, sp[0], sp[1], tx=sp[2], ty=sp[3])          # an oval with no scenery scale is built as laid out, only cut to the oval
@@ -810,7 +833,9 @@ def build(style, n, path=None):
             if sp and sp[4] is not None:
                 try: stand = (sp[4].buffer(1.2, 6), base["H"], sp[0])
                 except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
-            res = cmesh.build_c(base, steps, stand)
+            if live.on(): os.environ["KIT_LIVE_FILE"] = live._P[0]; live.note(threads=cmesh.threads(), steps_total=len(steps))          # the exe writes its tiles beside the note
+            try: res = cmesh.build_c(base, steps, stand)
+            finally: os.environ.pop("KIT_LIVE_FILE", None)
             if res is not None:
                 v, f, ncells, sk = res; skipped += sk; got = (v, f)
                 R0, H, rim_tan = base["R0"], base["H"], base["rim_tan"]
@@ -819,6 +844,7 @@ def build(style, n, path=None):
         if sp and sp[4] is not None:
             try: stand_flat(F, sp[4].buffer(1.2, 6), H, sp[0])
             except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
+        live.note(stage="mesh", threads=1)
         got = cmesh.mesh(F, R0, H, rim_tan, mag)          # the C mesher (bbb_kit.exe): the same mesh, faster; None = use Python
         v, f = got if got is not None else mesh_from_field(F, R0, H, rim_tan, mag)
         ncells = len(F.cells)
@@ -828,7 +854,7 @@ def build(style, n, path=None):
     if path is None:
         D = os.environ.get("SETDIR", gg3.CFG["out_folder"]); os.makedirs(f"{D}/{style}", exist_ok=True); path = f"{D}/{style}/{s.name}.stl"
     m.export(path)
-    if gg3.CFG.get("drawing_2d", True):          # the 2D drawing of this very base beside its STL, to check the 3D against
+    if gg3.CFG.get("drawing_2d", True) and not drawn:          # the 2D drawing of this very base beside its STL, to check the 3D against
         try: draw2d(s, path[:-4] + "_2d.png")
         except Exception: pass
     r = {"name": s.name, "secs": round(time.time() - t, 1), "skipped": skipped, "restarts": 0, "rock_fallbacks": 0, "sig": f"{style}{gg.BASE_MM:g}" + (f"o{ov[1]:g}" if ov else "") + sig,
@@ -852,6 +878,18 @@ def draw2d(s, png, px=900, transparent=False):
     except Exception: return draw2d_mpl(s, png, px, transparent)
 
 
+PLAN_WIN = (0.0, 0.0, 0.0, 0.0)
+
+
+def _to_field(s, box):
+    """a box in the layout's millimetres -> the built base's (build() rescales the layout when there is a scale plan)"""
+    import gg
+    sp = scale_plan(s); ov = gg.oval()
+    if not sp or (ov and abs(sp[0] - 1) < 1e-6 and not sp[2] and not sp[3]): return box
+    f, tx, ty = sp[0], sp[2], sp[3]
+    return (box[0] * f + tx, box[1] * f + ty, box[2] * f + tx, box[3] * f + ty)
+
+
 def _draw2d_pil(s, png, px=900, transparent=False):
     from PIL import Image, ImageDraw
     import gg
@@ -865,6 +903,7 @@ def _draw2d_pil(s, png, px=900, transparent=False):
         sc, fin, tx, ty = sp[:4]; r = fin / sc / 2.0; ocx, ocy = -tx / sc, -ty / sc
         clip = ("circle", ocx, ocy, r, r); ring = clip; cx, cy, half = ocx, ocy, r * 1.03
     k = W / (2 * half)
+    global PLAN_WIN; PLAN_WIN = _to_field(s, (cx - half, cy - half, cx + half, cy + half))          # what this drawing shows, for the live view's tiles
     def X(x): return (x - (cx - half)) * k
     def Y(y): return ((cy + half) - y) * k
     def ell(c): return [X(c[1] - c[3]), Y(c[2] + c[4]), X(c[1] + c[3]), Y(c[2] - c[4])]
@@ -947,6 +986,13 @@ def crop_to_scale(ax, s=None):
     ax.set_xlim(cx - r * 1.03, cx + r * 1.03); ax.set_ylim(cy - r * 1.03, cy + r * 1.03)
 
 
+def pic_by():
+    """what drew the last 3D picture: the video card's name, or Python"""
+    import cmesh
+    by = cmesh.SHOT_LAST.get("by", "")
+    return by if by and not by.startswith("failed") else "Python" + (f" ({by})" if by else "")
+
+
 def shot(mesh_or_path, png, w=900, h=560, elev=30, azim=-60):
     """a shaded picture of the base seen from the side at `elev` degrees above the table (30 by default, so heights
     show). Drawn with its own depth buffer: what is in front always hides what is behind."""
@@ -1001,7 +1047,8 @@ if __name__ == "__main__":
                 os.environ["RESEED"] = req.get("variant", ""); os.environ["BASENAME"] = req["name"]
                 if req.get("plan"): os.environ["PLAN_JSON"] = json.dumps(req["plan"])          # this base's scene plan, from the designer
                 r = build(req["style"], int(req["n"]))
-                try: shot(r["path"], r["path"][:-4] + "_iso.png")
+                import live; live.note(stage="picture")
+                try: shot(r["path"], r["path"][:-4] + "_iso.png"); r["pictures"] = pic_by()
                 except Exception as e: r["note"] = f"no picture: {e}"
             except Exception as e:
                 r = {"error": f"crash: {type(e).__name__}: {str(e)[:100]}"}
@@ -1013,7 +1060,7 @@ if __name__ == "__main__":
     elif sys.argv[1] == "build":                            # python mesher.py build <style> <n>   (one base, then exit)
         st, n = sys.argv[2], int(sys.argv[3]); sys.argv = sys.argv[:1]
         r = build(st, n)
-        try: shot(r["path"], r["path"][:-4] + "_iso.png")
+        try: shot(r["path"], r["path"][:-4] + "_iso.png"); r["pictures"] = pic_by()
         except Exception as e: r["note"] = f"no picture: {e}"
         print(json.dumps(r))
     else:

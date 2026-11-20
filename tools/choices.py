@@ -23,7 +23,7 @@ _sz = size.strip().lower().replace("mm", "").replace(" ", "").replace("*", "x") 
 if "x" in _sz: _a, _b = sorted((float(v) for v in _sz.split("x", 1)), reverse=True); oval = (_a, _b) if _a != _b else None
 else: _a = float(_sz); oval = None
 scale = float(opt("--scale", "") or _ks.CFG.get("scenery_scale", 1.0)); lay = _a if scale == 1.0 else round(max(30.0, _a / scale), 1)          # the scenery scale: the scene is laid out smaller and built larger (see run_set.py --scale)
-jobs = int(opt("--jobs", str(max(1, min(8, (os.cpu_count() or 4) // 2))))); only = opt("--only", ""); px = int(opt("--px", "360")); JSON = flag("--json")
+jobs = int(opt("--jobs", str(max(1, (os.cpu_count() or 4) - 1)))); only = opt("--only", ""); px = int(opt("--px", "360")); JSON = flag("--json")          # jobs: one helper per choice, up to every core but one; only = opt("--only", ""); px = int(opt("--px", "360")); JSON = flag("--json")
 seed = opt("--seed", "") or "".join(random.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(5))
 style, out = a[0], os.path.abspath(a[1]); os.makedirs(out, exist_ok=True)
 os.environ.update({"SALT": seed, "RESEED": "", "BASE_MM": f"{lay:g}", "KIT_QUIET": "1"})
