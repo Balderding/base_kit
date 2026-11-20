@@ -68,7 +68,78 @@ enum { GEOS_POINT, GEOS_LINESTRING, GEOS_LINEARRING, GEOS_POLYGON, GEOS_MULTIPOI
   X(int, GEOSGeom_getXMin_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
   X(int, GEOSGeom_getYMin_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
   X(int, GEOSGeom_getXMax_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
-  X(int, GEOSGeom_getYMax_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \n  X(GEOSGeometry *, GEOSConvexHull_r, (GEOSContextHandle_t, const GEOSGeometry *)) \n  X(GEOSGeometry *, GEOSTopologyPreserveSimplify_r, (GEOSContextHandle_t, const GEOSGeometry *, double))
+  X(int, GEOSGeom_getYMax_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
+  X(GEOSGeometry *, GEOSConvexHull_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSTopologyPreserveSimplify_r, (GEOSContextHandle_t, const GEOSGeometry *, double)) \
+  SHP_GEOS_FNS(X)
+
+/* the functions the shapely layer (shp.c) needs on top of the ones above */
+typedef struct GEOSBufParams_t GEOSBufferParams;
+typedef struct GEOSWKBWriter_t GEOSWKBWriter;
+#define SHP_GEOS_FNS(X) \
+  X(GEOSBufferParams *, GEOSBufferParams_create_r, (GEOSContextHandle_t)) \
+  X(void, GEOSBufferParams_destroy_r, (GEOSContextHandle_t, GEOSBufferParams *)) \
+  X(int, GEOSBufferParams_setEndCapStyle_r, (GEOSContextHandle_t, GEOSBufferParams *, int)) \
+  X(int, GEOSBufferParams_setJoinStyle_r, (GEOSContextHandle_t, GEOSBufferParams *, int)) \
+  X(int, GEOSBufferParams_setMitreLimit_r, (GEOSContextHandle_t, GEOSBufferParams *, double)) \
+  X(int, GEOSBufferParams_setQuadrantSegments_r, (GEOSContextHandle_t, GEOSBufferParams *, int)) \
+  X(int, GEOSBufferParams_setSingleSided_r, (GEOSContextHandle_t, GEOSBufferParams *, int)) \
+  X(GEOSGeometry *, GEOSBufferWithParams_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSBufferParams *, double)) \
+  X(GEOSGeometry *, GEOSUnion_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSSymDifference_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSGetCentroid_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSEnvelope_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSSimplify_r, (GEOSContextHandle_t, const GEOSGeometry *, double)) \
+  X(GEOSGeometry *, GEOSMinimumRotatedRectangle_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSInterpolate_r, (GEOSContextHandle_t, const GEOSGeometry *, double)) \
+  X(GEOSGeometry *, GEOSInterpolateNormalized_r, (GEOSContextHandle_t, const GEOSGeometry *, double)) \
+  X(double, GEOSProject_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(double, GEOSProjectNormalized_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(GEOSGeometry *, GEOSOffsetCurve_r, (GEOSContextHandle_t, const GEOSGeometry *, double, int, int, double)) \
+  X(GEOSGeometry *, GEOSSnap_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *, double)) \
+  X(GEOSGeometry *, GEOSVoronoiDiagram_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *, double, int)) \
+  X(int, GEOSLength_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
+  X(int, GEOSGeom_getExtent_r, (GEOSContextHandle_t, const GEOSGeometry *, double *, double *, double *, double *)) \
+  X(int, GEOSGeomGetX_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
+  X(int, GEOSGeomGetY_r, (GEOSContextHandle_t, const GEOSGeometry *, double *)) \
+  X(char, GEOSWithin_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSTouches_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSCrosses_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSOverlaps_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSCovers_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSCoveredBy_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSDisjoint_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSEquals_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSDistanceWithin_r, (GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *, double)) \
+  X(char, GEOSPreparedContains_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedContainsProperly_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedIntersects_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedWithin_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedTouches_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedCrosses_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedOverlaps_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedCovers_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedCoveredBy_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *)) \
+  X(char, GEOSPreparedDistanceWithin_r, (GEOSContextHandle_t, const GEOSPreparedGeometry *, const GEOSGeometry *, double)) \
+  X(GEOSGeometry *, GEOSGeom_createEmptyPoint_r, (GEOSContextHandle_t)) \
+  X(GEOSGeometry *, GEOSGeom_createEmptyLineString_r, (GEOSContextHandle_t)) \
+  X(GEOSGeometry *, GEOSGeom_createEmptyPolygon_r, (GEOSContextHandle_t)) \
+  X(GEOSGeometry *, GEOSGeom_createEmptyCollection_r, (GEOSContextHandle_t, int)) \
+  X(GEOSCoordSequence *, GEOSCoordSeq_create_r, (GEOSContextHandle_t, unsigned int, unsigned int)) \
+  X(int, GEOSCoordSeq_setXY_r, (GEOSContextHandle_t, GEOSCoordSequence *, unsigned int, double, double)) \
+  X(int, GEOSCoordSeq_copyToBuffer_r, (GEOSContextHandle_t, const GEOSCoordSequence *, double *, int, int)) \
+  X(void, GEOSCoordSeq_destroy_r, (GEOSContextHandle_t, GEOSCoordSequence *)) \
+  X(int, GEOSGetNumCoordinates_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(char, GEOSHasZ_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(GEOSWKBWriter *, GEOSWKBWriter_create_r, (GEOSContextHandle_t)) \
+  X(void, GEOSWKBWriter_destroy_r, (GEOSContextHandle_t, GEOSWKBWriter *)) \
+  X(void, GEOSWKBWriter_setOutputDimension_r, (GEOSContextHandle_t, GEOSWKBWriter *, int)) \
+  X(void, GEOSWKBWriter_setByteOrder_r, (GEOSContextHandle_t, GEOSWKBWriter *, int)) \
+  X(void, GEOSWKBWriter_setFlavor_r, (GEOSContextHandle_t, GEOSWKBWriter *, int)) \
+  X(void, GEOSWKBWriter_setIncludeSRID_r, (GEOSContextHandle_t, GEOSWKBWriter *, char)) \
+  X(unsigned char *, GEOSWKBWriter_write_r, (GEOSContextHandle_t, GEOSWKBWriter *, const GEOSGeometry *, size_t *)) \
+  X(GEOSGeometry *, GEOSReverse_r, (GEOSContextHandle_t, const GEOSGeometry *)) \
+  X(void, GEOSFree_r, (GEOSContextHandle_t, void *))
 
 #define GEOS_PTR(ret, name, args) ret (*name) args;
 typedef struct { GEOS_FNS(GEOS_PTR) } GeosApi;

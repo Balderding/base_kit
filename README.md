@@ -9,7 +9,7 @@ a preview picture. No two bases come out the same.
 
 ## What it does
 
-- **19 styles, 95 themes.** Badlands, mine, swamp, graveyard, temple, space-ship corridor and more. Each base is a
+- **25 styles, 125 themes.** Badlands, mine, swamp, graveyard, temple, space-ship corridor, a shelled gothic city and more. Each base is a
   small scene with a theme ("tram stop", "hanging tree", "ore siding"), not scattered clutter.
 - **Any size from 20 to 200 mm.** The usual sizes (30, 40, 50, 60, 80, 100, 130, 160 mm) are tested.
 - **Oval bases too**, in the usual sizes: 60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95 and 170x109 mm.
@@ -21,19 +21,19 @@ a preview picture. No two bases come out the same.
 - **Room for the miniature.** A clear spot is kept where the model stands (`--mini` sets its footprint).
 - **Never the same twice.** The kit remembers every base it has built and rejects one that is too like the last ten.
 - **Details from free models.** About 300 details (chests, skulls, tools, bottles, wheels, standing stones ...) are
-  made from public-domain 3D models. The kit fetches those packs once, on its first run, and tells you first what it
-  fetches and from where.
+  made from public-domain 3D models. They are inside `bbb_kit.exe`; the Python kit fetches its own copy once, on its
+  first run, and tells you first what it fetches and from where.
 - **Optional: a local AI model as designer.** A model running on your own PC can invent new themes; the kit checks
   and repairs its plans and does all the geometry. Without a model the built-in themes are used. Nothing leaves
   your PC.
 
-Three ways to run it (Windows, Python 3.10 or newer):
+Three ways to run it (Windows):
 
 | Start | What it does |
 |---|---|
-| `bbb_kit.exe` | **The window.** Pick from pictures, build the ones you tick. The easiest way |
-| `python run_set.py mine 10 --size 60` | Ten 60 mm mine bases from the built-in themes. No AI model needed. Add `--scale 2.6` for 28 mm figures |
-| `bbb_kit.cmd` | The guided run: explains every step on screen, asks the local AI model for the scenes, builds them |
+| `bbb_kit.exe` | **The window.** Pick from pictures, build the ones you tick. The easiest way. **Needs nothing installed**: no Python, no libraries, no download. One file that runs from any folder |
+| `python run_set.py mine 10 --size 60` | The Python kit (Python 3.10 or newer): ten 60 mm mine bases from the built-in themes. Add `--scale 2.6` for 28 mm figures |
+| `bbb_kit.cmd` | The guided run (Python): explains every step on screen, asks the local AI model for the scenes, builds them |
 
 ## Which version this is
 
@@ -41,6 +41,30 @@ The kit's version number is in the file `VERSION`, and `bbb_kit.cmd` shows it in
 version is always the one marked **Latest** on the [Releases page](https://github.com/Balderding/base_kit/releases):
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
+
+## What is new in 2.0: one exe, all in C, nothing to install
+
+- **`bbb_kit.exe` is the whole kit.** Every part of it is written again in C and built into the one exe: the styles
+  and themes, the layouts, every detail, the height field, the mesh, the checks, the pictures and the report. It
+  never starts Python, needs nothing installed, carries the model packs inside it and runs from any folder: copy
+  `bbb_kit.exe` anywhere and start it. What it makes goes into `out\` beside it.
+- **The same bases as the Python kit, byte for byte.** Each C part was checked against the Python it replaces, call
+  by call (millions of cases in all), and then whole jobs: all 25 styles at 30, 60, 100 mm and 90x52, the classic
+  look and figure scale, with supports off and on. The STL files and pictures come out identical. The Python kit
+  stays in the folder and still works as before.
+- **About 2 to 3 times faster per base**, and the choices are drawn on all but one of your cores.
+- **A colour view of the finished base.** The **COLOUR** switch beside a built base shows its 3D picture coloured as
+  its 2D drawing, so you can see each part is where the drawing put it. It is saved too, as `_3d_color.png`.
+- **Six new styles** (sundered, ashveil, ferrum, thornwild, obelis, blight), five themes each, every base size: 25
+  styles and 125 themes in all.
+- **Small bases keep their detail.** Under 50 mm the kit always uses the classic look (a whole small scene), because
+  objects at true figure scale are too small to show there. Big bases keep detail on the top: rough ground stays off
+  the floors.
+- **Errors say exactly what went wrong.** Every error the kit catches and works round is written to
+  `out\kit_errors.log` with the base, the step, the file and line; the report has an "errors caught" column.
+- **Supports on** (true 3D solids for overhanging objects) works in the exe too.
+- **Licences:** `bbb_kit.exe` contains the GEOS geometry library and parts written after Pillow, trimesh, CPython and
+  others; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the `licenses` folder.
 
 ## What is new in 1.6: watch it build, rocks in C, faster choices
 
@@ -124,6 +148,9 @@ base would have looked the size of an airship.
   again since 1.5).
   In the window it is the row "Objects sized for figures of"; on the command line `--scale 3` (32 mm), `2.6` (28 mm),
   `1.4` (15 mm) or `1` (classic, the default); in `settings.json` it is `"scenery_scale"`.
+  **Bases under 50 mm always get the classic look**, with all their detail on top, whatever figure size is chosen:
+  at figure scale a 30 mm base showed only a bare part of a scene. `"figure_scale_from_mm"` in `settings.json`
+  moves that limit (default 50).
 - **Each object has its own real size** (695 objects, a size in metres for each, in `scale/real.json`): a skull is
   about 4 mm, a barrel 11 mm across, a chest 14 mm, a rowing boat 54 mm. Nothing prints under 3 mm, so a coin or a
   key is shown a little larger than life.
@@ -176,14 +203,14 @@ the layout's own millimetres.
 - **The 2D drawing is saved with every base**, beside the STL, so you can check the finished base against what was laid
   out. See [The drawing and the finished base](#the-drawing-and-the-finished-base).
 - **One folder for what you picked**: every base you build from the window is copied to `out\picked_<date>_<time>`,
-  named by style, size and theme, with its STL, 3D picture, 2D drawing and plan.
+  named by style, size and theme, with its STL, 3D picture (grey and colour), 2D drawing and plan.
 - **130 and 160 mm bases have five magnet pockets** (four round, one in the middle).
 - **A help page** in the window: press `?` or F1, or the Help button.
 
 ## The window (`bbb_kit.exe`)
 
-Start `bbb_kit.exe` in the kit folder (it is in the release zip; its source is in `gui\`). It needs Python and the
-libraries from [What you need](#1-what-you-need), nothing else.
+Start `bbb_kit.exe` (it is in the release zip; its source is in `gui\` and `cport\`). It needs nothing else: no
+Python, no libraries, no download. It runs from any folder and keeps what it makes in `out\` beside it.
 
 **1. Choose, and look at the designs.** Style, size, detail, miniature and the figure size the objects are made for
 are one click each on the left; the number box takes 1 to 20. "Show choices" draws that many designs. Click the ones you want: a teal tick marks them.
@@ -199,6 +226,9 @@ the line at the top says how far it is.
 against the other. Teal means built and checked. Gold means look here: a picked design that failed the print check
 was either replaced by a fresh variant or, after four tries, not built, and the window says so instead of handing
 over a bad file. Click a built card to see its STL file; "Open folder" opens the folder with all of them.
+The **COLOUR** switch beside a built base shows the same 3D picture coloured as its 2D drawing (the same
+colours, taken from straight above), so you can see each part is where the drawing put it. Click it again for the
+plain grey picture. Bases built after you switch it on start in colour too.
 
 ![Five built and checked](docs/ui_3_built.png)
 
@@ -214,9 +244,10 @@ Good to know:
   its drawing in the folder is the drawing of the variant, so drawing and STL always match.
 - The window is resizable and remembers its size and your last choices (`out\bbb_kit.ini`).
 - Keys: Enter = the teal button, Esc = stop, Ctrl+A = pick all, D = details, 0-9 = how many, `?` = help.
-- The window starts `python tools\gui_job.py`, which prints one JSON record per event (choice, start, built, done).
-  Python is looked for in the `BBB_PYTHON` variable, then `C:\Python315\python.exe`, then the PATH.
-- To build the exe yourself: `gui\build.cmd` (clang with the MinGW headers; one C file, Win32 and GDI+ only).
+- The window runs the kit's job in its own process (the same code as `bbb_kit.exe --job build ...`, which prints
+  one JSON record per event: choice, start, built, done). It starts copies of itself as helpers, one per core.
+- To build the exe yourself: `cport\geos_static\build_geos.cmd` once (GEOS 3.14.1 as a static library), then
+  `gui\build.cmd` (clang with the MinGW headers). The exe imports only Windows' own DLLs.
 
 ## The drawing and the finished base
 
@@ -259,7 +290,7 @@ stays no taller than 3 times its own thickness, so it prints and does not snap o
 
 The kit builds the STL itself, in Python, in a few seconds per base. No CAD program is needed.
 
-19 styles:
+25 styles:
 
 | Theme | What it is |
 |---|---|
@@ -282,9 +313,17 @@ The kit builds the STL itself, in Python, in a few seconds per base. No CAD prog
 | `dungeon` | Flagstones, drains, trapdoors, chains |
 | `temple` | Ancient temple: paving, columns, steps, glyphs |
 | `coast` | Rock shelves, tide pools, shells, driftwood |
+| `sundered` | Sundered City: a gothic city shelled to rubble, broken columns, arched windows, fallen statues |
+| `ashveil` | Ashveil Wastes: grey ash plains, half-buried wrecks, pipelines, bones, scrap |
+| `ferrum` | Ferrum Works: a red, rusted factory world, deck plates, gears, cables, vents, slag |
+| `thornwild` | Thornwild: a deadly alien jungle, giant roots, maw flowers, spore pods, glowing fungi |
+| `obelis` | Obelis Tombs: an ancient alien tomb world, black monoliths, glyph slabs, pylons, caskets |
+| `blight` | The Blight: corrupted ground, twisted thorns, bone heaps, boiling pools, rune circles |
 
 
 ## 1. What you need
+
+For the window (`bbb_kit.exe`): nothing. The rest of this part is for the Python kit (`run_set.py`, `bbb_kit.cmd`).
 
 - **Python 3.10 or newer** (tested on 3.15).
 - These Python libraries (shapely 2.1 or newer). Install them once:
@@ -303,14 +342,14 @@ If `pip` is blocked on your machine, the `python -m pip ...` form above usually 
 
 When you run a build the kit stops with a plain message if a Python library is missing or too old.
 
-### The model packs (fetched on the first run)
+### The model packs (inside the exe; fetched on the Python kit's first run)
 
 About 300 details (chests, skulls, tools, bottles, wheels, gravestones ...) are made from ready-made low-poly 3D
-models. The models are not part of the kit. They are free and in the public domain (Creative Commons Zero, CC0:
-anyone may use them for any purpose), from three makers: Kenney (www.kenney.nl), Kay Lousberg's KayKit
-(kaylousberg.com) and The Base Mesh (thebasemesh.com).
+models. They are free and in the public domain (Creative Commons Zero, CC0: anyone may use them for any purpose),
+from three makers: Kenney (www.kenney.nl), Kay Lousberg's KayKit (kaylousberg.com) and The Base Mesh
+(thebasemesh.com). `bbb_kit.exe` carries the models it uses inside it, so the window downloads nothing.
 
-The first time you run `bbb_kit.exe` or `bbb_kit.cmd` the kit says which packs it is about to fetch, from which pages
+The first time you run `bbb_kit.cmd` (the Python kit) the kit says which packs it is about to fetch, from which pages
 and how big they are, and then downloads them into `models\<pack>`: 25 packs, about 92 MB. It happens
 once, nothing else is downloaded, and nothing is sent anywhere. A pack whose licence text does not say CC0 is not
 unpacked or used. `python run_set.py ...` never downloads by itself; it only tells you if packs are missing.
@@ -545,7 +584,7 @@ Everything is optional.
 | `tools/gui_job.py`, `tools/choices.py` | What the window runs in the background: draw the designs to pick from, build the picked ones |
 | `tools/make_compare.py` | The picture of drawings beside finished bases |
 | `scenes.py` | Puts a base together as one place: subject, path, the things that belong to them, clutter, open ground |
-| `themes.py` | The 95 themes, one line each. Add your own here |
+| `themes.py` | The themes of the first 19 styles, one line each. Add your own here (the newer styles keep theirs in `style_<name>.py`) |
 | `designer.py` | Asks a local AI model for scene plans (optional) |
 | `mesher.py` | The builder: turns a base's shape list into the STL |
 | `features.py` | Multi-part details (wheel, cart, well...) and the large landmark features |
@@ -788,7 +827,7 @@ left running. Everything from one run goes in one folder, `outbases_<date>_<time
 
 | Option | Default | |
 |---|---|---|
-| `--styles` | `mine,swamp,temple` | A list, or `all` for the 19 styles |
+| `--styles` | `mine,swamp,temple` | A list, or `all` for the 25 styles |
 | `--basestobuild` | 4 | Bases to build per style, per size. The model writes one plan for each |
 | `--build` | all of them | Build only the first few of the plans the model wrote |
 | `--supports` | off | `on`: objects may overhang, so the print needs supports. See [Supports allowed](#supports-allowed) |
@@ -897,6 +936,36 @@ left running. Everything from one run goes in one folder, `outbases_<date>_<time
 | `coast` | tide pool | pool | stream, to it | pebbles, shrubs, nest |
 | `coast` | beach camp | camp fire and bedrolls | footpath, to it | timbers, posts, anchor, barrel, sacks |
 | `coast` | whale bones | giant skeleton | none | shrubs, pebbles, posts |
+| `ashveil` | buried transport | wreck | wagon ruts, past it | wheel, crate, tank, rubble, bones |
+| `ashveil` | pipeline break | machine | pipe run, past it | oildrum, puddle, wrench, cables, rubble |
+| `ashveil` | scavengers' camp | camp fire and bedrolls | footpath, to it | crates, sacks, oildrum, rifle, wrench, timbers |
+| `ashveil` | marker pylon | platform with a column | stepping stones, to it | sign, posts, cables, skull, bones |
+| `ashveil` | dust-choked crater | crater | footpath, past it | rubble, slab, ribs, bones, skull, boulder |
+| `blight` | spike garden | cluster of twisted thorns | footpath, to it | rubble, skull, bones, crack, pebbles |
+| `blight` | bone altar | platform with an altar | paved way, to it | skull, bones, ribs, brazier, rubble |
+| `blight` | boiling pool | pool | stepping stones, to it | pustules, puddle, bones, rubble, crack |
+| `blight` | rune circle | cracked rune ring | stepping stones, to it | brazier, slab, skull, rubble, crack |
+| `blight` | rift in the ground | rift torn in the ground | footpath, past it | crack, rubble, tentacle, bones, skull |
+| `ferrum` | gear pit | crater | cables, to it | gear, rubble, wrench, oildrum, crack |
+| `ferrum` | cable run | ruined wall | cables, past it | cables, grate, lid, oildrum, wrench |
+| `ferrum` | vent stack | machine | pipe run, to it | vent, grate, tank, cables, lid |
+| `ferrum` | fallen work-machine | broken wagon | wagon ruts, to it | gear, wheel, wrench, cables, rubble, oildrum |
+| `ferrum` | slag heap | spires | rail track, past it | cart, rubble, rocks, oildrum, puddle |
+| `obelis` | tomb gate | doorway on the rim | paved way, to it | steps, slab, tiles, coins |
+| `obelis` | fallen monolith | plinth and fallen statue | stepping stones, to it | slab, rubble, tiles, grate |
+| `obelis` | pylon array | colonnade | paved way, past it | grate, cables, slab, crystals |
+| `obelis` | sarcophagus field | row of graves | paved way, to it | slab, chest, tiles, coins |
+| `obelis` | glyph plaza | platform with an altar | paved way, to it | tiles, slab, steps, grate |
+| `sundered` | fallen cathedral wall | ruined wall | paved way, past it | rubble, drum, slab, stub, tiles |
+| `sundered` | statue toppled in the square | plinth and fallen statue | paved way, to it | rubble, slab, tiles, drum, stub |
+| `sundered` | shell crater in the street | crater | paved way, past it | rubble, slab, casings, tiles, stub |
+| `sundered` | collapsed arcade | colonnade | paved way, past it | drum, rubble, slab, stub, tiles |
+| `sundered` | barricaded doorway | doorway on the rim | paved way, to it | sandbags, crates, casings, beam, rifle, rubble |
+| `thornwild` | root tangle | great stump | vein or root, past it | tentacle, skull, shrubs, bones, fairy |
+| `thornwild` | maw flower | tentacle pit | footpath, to it | bones, skull, rifle, pustules, shrubs |
+| `thornwild` | spore field | great nest | footpath, past it | pustules, eggs, prints, puddle, shrubs |
+| `thornwild` | fungus ring | ritual circle | stepping stones, to it | bones, fairy, shrubs |
+| `thornwild` | overgrown wreck | wreck | footpath, to it | crates, rifle, tentacle, shrubs, bones, cables |
 <!-- themes:end -->
 
 ### Adding or changing a theme

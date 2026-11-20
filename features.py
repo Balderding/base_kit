@@ -131,7 +131,7 @@ def _build(s, z, layers):
                     ps = [x for x in polys_of(L[1]) if wide_enough(x, 0.92)]
                     if ps: gg.COL.setdefault(L[2] + "_pad", gg.COL.get(L[2], "#999999")); s.prism(ps, H - 0.12, L[2] + "_pad", z0=H - 0.8, foot=False)      # own kind: a stone standing in water is meant to be there
         except Exception as e:
-            print("  ! feature layer", t, type(e).__name__, str(e)[:70], flush=True)
+            __import__("kitlog").caught(f"feature layer {t}", e)
     return done
 
 
@@ -736,6 +736,7 @@ def extend(details_mod):
     """add the new details to each theme's pool (once) and hand the landmark table to details.anchors"""
     if NEW: return
     NEW.update(_new()); LANDMARKS.update(_landmarks())
+    __import__("newstyles").hook_features(globals())          # the styles kept one per file (style_<name>.py)
     for st, lst in NEW.items():
         if st in details_mod.DETAILS: details_mod.DETAILS[st] = list(details_mod.DETAILS[st]) + lst
 
@@ -754,7 +755,7 @@ def landmarks(s, style, rng):
         for kk in (k, 0.8 * k, 0.62 * k):                   # full size first; a little smaller if the base is already too full for it
             try:
                 if fn(s, rng, kk): placed += 1; break
-            except Exception as e: print("  ! landmark", style, type(e).__name__, str(e)[:80], flush=True); break
+            except Exception as e: __import__("kitlog").caught(f"landmark ({style})", e); break
     return placed
 
 def true_scale():

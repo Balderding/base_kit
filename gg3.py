@@ -345,7 +345,7 @@ def b_spiral(s, rng, lvl):        # petroglyph spiral on the highest flat rock t
     tops = [(op[3], p) for op in s.ops if op[0] == "prism" and op[-1] == "rock" for p in op[1] if wide_enough(p, 4.0)]
     if not tops: return
     zt, p = max(tops, key=lambda t: (t[0], t[1].area))
-    c = inset(p, 1.4).representative_point()
+    q = inset(p, 1.4); c = (q if not q.is_empty else p).representative_point()          # a narrower rock at figure scale: its own middle
     sp = spiral(c.x, c.y, rng.uniform(1.2, 1.7), 2.2, 0.4).intersection(inset(p, 0.4))
     topcut(s, [sp], zt, 0.3, "glyph")
 
@@ -819,6 +819,7 @@ ORIG = dict(gg2.STYLES)
 import details, styles2
 details.install(globals()); styles2.install(globals())
 ORIG.update(styles2.STYLES2); TIERS.update(styles2.TIERS2); details.DETAILS.update(styles2.DETAILS2)
+__import__("newstyles").hook_gg3(globals())          # the styles kept one per file (style_<name>.py)
 import features, scenes
 if CFG.get("new_details", True): features.extend(details)
 import style_details
@@ -908,7 +909,7 @@ def make(style, n):
         for fn in fns:
             if rep and mixr.random() < (0.75 if fn in SPARSE else 0.35): continue
             try: fn(s, rng, t)
-            except Exception as e: print("  !", style, n, getattr(fn, "__name__", "detail"), type(e).__name__, e, flush=True)
+            except Exception as e: __import__("kitlog").caught(f"tier detail {getattr(fn, '__name__', 'detail')}", e)
     if CFG.get("extra_details", True):       # random extras from the theme's detail library (details.py)
         details.install(globals()); details.apply(s, style, mixr, t)
     return s
@@ -1227,7 +1228,7 @@ def sheet(style, path):
     for n, ax in zip(range(1, 21), axs.flat):
         s = make(style, n)
         try: gg.build_cmds(s)          # same clean-up the real build does (pieces off the rim and off cuts, grouping)
-        except Exception as e: print("  ! preview clean-up", style, n, type(e).__name__, e, flush=True)
+        except Exception as e: __import__("kitlog").caught("preview clean-up", e)
         render(s, ax); ax.set_title(f"{style} {gg.BASE_MM:g} mm #{n}" + (f": {s.theme}" if getattr(s, "theme", "") else ""), fontsize=10)
     plt.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.005, wspace=0.04, hspace=0.36)
     for r in range(4):

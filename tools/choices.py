@@ -22,7 +22,7 @@ import kit_settings as _ks
 _sz = size.strip().lower().replace("mm", "").replace(" ", "").replace("*", "x")          # "60" round, "90x52" an oval (long x short): laid out round on its long size, cut to the oval
 if "x" in _sz: _a, _b = sorted((float(v) for v in _sz.split("x", 1)), reverse=True); oval = (_a, _b) if _a != _b else None
 else: _a = float(_sz); oval = None
-scale = float(opt("--scale", "") or _ks.CFG.get("scenery_scale", 1.0)); lay = _a if scale == 1.0 else round(max(30.0, _a / scale), 1)          # the scenery scale: the scene is laid out smaller and built larger (see run_set.py --scale)
+scale = _ks.figure_scale(_a, float(opt("--scale", "") or _ks.CFG.get("scenery_scale", 1.0))); lay = _a if scale == 1.0 else round(max(30.0, _a / scale), 1)          # the scenery scale: the scene is laid out smaller and built larger (see run_set.py --scale)
 jobs = int(opt("--jobs", str(max(1, (os.cpu_count() or 4) - 1)))); only = opt("--only", ""); px = int(opt("--px", "360")); JSON = flag("--json")          # jobs: one helper per choice, up to every core but one; only = opt("--only", ""); px = int(opt("--px", "360")); JSON = flag("--json")
 seed = opt("--seed", "") or "".join(random.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(5))
 style, out = a[0], os.path.abspath(a[1]); os.makedirs(out, exist_ok=True)
@@ -42,7 +42,7 @@ if not only and jobs > 1 and len(pl) > 1:          # several at once: each helpe
     say({"ev": "seed", "seed": seed}, f"SEED {seed}"); lock = threading.Lock(); ps = []
     def relay(p):
         for line in p.stdout:
-            if line.startswith(("CHOICE", "SKIP", '{"ev": "choice"', '{"ev": "skip"')):
+            if line.startswith(("CHOICE", "SKIP", "ERRORS", '{"ev": "choice"', '{"ev": "skip"', '{"ev": "log"')):
                 with lock: print(line.rstrip(), flush=True)
     for k in range(min(jobs, len(pl))):
         mine = ",".join(str(n) for n, _ in pl[k::jobs])
@@ -60,12 +60,16 @@ else: say({"ev": "seed", "seed": seed}, f"SEED {seed}")
 for n, tier in pl:
     try:
         os.environ["SALT"] = seed
+        import kitlog; kitlog.base(f"choice {seed} #{n}"); km = kitlog.mark()
         s = gg3.make(style, n)
         try: gg.build_cmds(s)
         except Exception: pass
         import mesher; png = os.path.join(out, f"c_{seed}_{n}.png"); mesher.draw2d(s, png, px, transparent=True)          # the same drawing as beside each STL (PIL: fast)
         theme = getattr(s, "theme", "") or style
         say({"ev": "choice", "seed": seed, "n": n, "img": png, "theme": theme, "tier": tier}, f"CHOICE {n} | {png} | {theme} | detail {tier}")
+        errs = kitlog.since(km)
+        if errs: say({"ev": "log", "text": f"choice {n}: {len(errs)} error(s) caught, first: {errs[0]} (all of them in out/kit_errors.log)"}, f"ERRORS {n} | {len(errs)} | {errs[0]}")
     except Exception as e:
+        import kitlog; kitlog.caught(f"choice {n}", e)
         say({"ev": "skip", "n": n, "why": f"{type(e).__name__}: {str(e)[:120]}"}, f"SKIP {n} | {type(e).__name__}: {str(e)[:120]}")
 if not only and not JSON: print("CHOICES DONE", flush=True)

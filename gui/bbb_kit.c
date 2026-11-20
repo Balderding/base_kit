@@ -5,16 +5,19 @@
    puts each through the print check, and the card shows the finished base. "More choices" adds another batch and keeps
    what you picked.
 
-   How it talks to Python: it starts  python tools\gui_job.py choices|build ...  hidden, and reads its output. Every
-   line is one JSON record with an "ev" field (choice, start, retry, built, done, log ...), so nothing is guessed from
-   printed text. Python and everything it starts sit in a job object: Stop, or closing the window, ends them all.
+   How it runs a job: the kit is C, inside this exe (cport\runner.c, cport\pipeline.c and the rest). A job
+   (choices|build ...) runs in this process on a worker thread (runner_main), which starts helper copies of this exe
+   for the layouts, the height fields and the pictures (bbb_kit.exe --core-...). Every line it gives out is one JSON
+   record with an "ev" field (choice, start, retry, built, done, log ...), so nothing is guessed from printed text.
+   The helpers sit in a job object: Stop, or closing the window, ends them all. No python.exe is ever started.
 
    Drawing: the whole window is painted by this file into one off-screen picture (no flicker), shapes and pictures
    with GDI+ (smooth edges), text with GDI (ClearType). No standard controls, so it looks the same everywhere and
    follows the monitor's scaling (per-monitor DPI). Colours: dark ground, teal for "yours / done", gold for "look here".
 
-   Where things are: the exe sits in the kit folder beside run_set.py; or bbb_kit_folder.txt beside the exe (one line)
-   or the BBB_KIT variable names the kit folder. Python: BBB_PYTHON if set, else C:\Python315\python.exe, else PATH.
+   Where things are: anywhere. Everything the kit needs is inside the exe (GEOS, the model packs, the settings
+   defaults, the fonts); a settings.json beside it may override settings, and the output goes to an "out" folder
+   beside it (bbb_kit_folder.txt beside the exe, one line, or the BBB_KIT variable may name another folder).
    Keys: Enter = the main button, Esc = stop, Ctrl+A = pick all, D = details, ? or F1 = the help page.
    Build: gui\build.cmd       Tests (no clicks, window off screen, each writes pictures and a .txt of what happened):
    --selftest <p.bmp> one pick then two;  --quicktest <p.bmp> build 2 straight away;  --resizetest <p.bmp> sizes, number
@@ -33,6 +36,8 @@
 #include <wchar.h>
 #include <math.h>
 #include "live.h"
+#include "runner.h"          /* cport\runner.c: the job runner (gui_job.py in C) */
+#include "pipeline.h"        /* cport\pipeline.c: bbb_kit.exe --core-layout */
 int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core-mesh and the other C parts of the kit */
 
 #define WM_LINE (WM_APP + 1)
@@ -68,16 +73,16 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_STONED 0xFF16181Eu
 enum { SIDE_W = 300, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
-typedef struct { char seed[16]; int n, tier, picked, state, retry; GpImage *img, *img3; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
+typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
 typedef struct { RECT r; int kind, idx; } Hit;
 static Cell cells[MAXC]; static int ncell;
 static Hit hits[400]; static int nhit, hovK, hovI = -1;
 static WCHAR *logv[MAXLOG]; static int nlog;
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
-static WCHAR kit[MAX_PATH], py[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
+static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
 static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1"; static int curSup, selScale = 3;
 static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, showDetails = 0;          /* selCount: how many bases, 1 to 20 */
 static int busy, wanted, doneN, nOK, nBad, scrollY, scrollMax, anim, selftest, stStep; static WCHAR stShot[MAX_PATH];
@@ -88,9 +93,10 @@ static int stSize = 8, demoShot; static RECT gridR, savedR; static int savedMax,
    font for labels, chips, buttons and the title. PX: one art pixel in screen pixels, a whole number from the monitor's
    scaling (2 at 100 %, 3 at 150 %, 4 at 200 %); FS: the pixel font's scale, also whole */
 static int lookPix = 1, lookTex = 1, lookFont = 1, PX = 2, FS = 1;
-/* speed: two switches, saved in out\bbb_kit.ini and handed to Python as KIT_THREADS / KIT_GPU (cmesh.py).
+static int colLast;          /* the colour view was last switched on: new built cards start in it too */
+/* speed: two switches, saved in out\bbb_kit.ini and handed to the job as KIT_THREADS / KIT_GPU.
    spThr: the height field and the mesh on as many CPU threads as the base needs (off = one core, the proven path). spGpu: the 3D pictures on
-   the video card (off = drawn by Python, much slower). */
+   the video card (off = drawn by Windows' software renderer, slower). */
 static int spThr = 1, spGpu = 1;
 /* the live view (docs\superpowers\specs\2026-11-19-live-build-view-design.md), saved in out\bbb_kit.ini. lvView: 0 Small (words, a bar, two
    meters), 1 Live card (the base taking shape in its card), 2 Big view (the base being built large, rows over time below). The parts,
@@ -103,7 +109,9 @@ static void meters_tick(void) { float pc[LIVE_MAXCORE]; ncpu = live_cpu(pc, LIVE
 static void speed_env(void) { WCHAR n[16]; DWORD c = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS); swprintf(n, 16, L"%lu", (unsigned long)(c > 1 ? c : 2)); SetEnvironmentVariableW(L"KIT_THREADS", spThr ? n : L"0"); SetEnvironmentVariableW(L"KIT_GPU", spGpu ? L"1" : L"0"); }
 
 static const char *STYLES[] = { "badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine", "swamp", "cynder", "targa",
-                                "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast" };
+                                "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast",
+                                "sundered", "ashveil", "ferrum", "thornwild", "obelis", "blight" };          /* the last six: the styles kept one per file (style_<name>.py) */
+#define NSTYLES ((int)(sizeof STYLES / sizeof STYLES[0]))
 static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50", "60", "65", "70", "80", "90", "100", "130", "160",          /* the common round bases; the kit itself takes any size from 20 to 200 */
                                 "60x35.5", "75x42", "90x52", "105x70", "120x92", "150x95", "170x109" };          /* then the common oval bases, long x short */
 enum { NROUND = 16, NSIZES = 23 };
@@ -146,39 +154,25 @@ static double jnum(const WCHAR *s, const WCHAR *key) { const WCHAR *p = jfind(s,
 static int jtrue(const WCHAR *s, const WCHAR *key) { const WCHAR *p = jfind(s, key); return p && !wcsncmp(p, L"true", 4); }
 static void narrow(const WCHAR *w, char *out, int cap) { int i; for (i = 0; w[i] && i < cap - 1; i++) out[i] = (char)w[i]; out[i] = 0; }
 
-/* ---------- running Python hidden ---------- */
-typedef struct { HANDLE rd, proc; int mode; } Run;
-static DWORD WINAPI reader(LPVOID p) {
-    Run *r = (Run *)p; char *buf = (char *)malloc(8192), *line = (char *)malloc(16384); int ll = 0; DWORD got, code = 0, i;
-    while (ReadFile(r->rd, buf, 8192, &got, NULL) && got) {
-        for (i = 0; i < got; i++) {
-            char c = buf[i];
-            if (c == '\n') {
-                WCHAR *w; int n;
-                if (ll && line[ll - 1] == '\r') ll--;
-                line[ll] = 0; n = MultiByteToWideChar(CP_UTF8, 0, line, -1, NULL, 0); w = (WCHAR *)malloc((n + 1) * sizeof(WCHAR));
-                MultiByteToWideChar(CP_UTF8, 0, line, -1, w, n); PostMessageW(hMain, WM_LINE, r->mode, (LPARAM)w); ll = 0;
-            } else if (ll < 16382) line[ll++] = c;
-        }
-    }
-    WaitForSingleObject(r->proc, 5000); GetExitCodeProcess(r->proc, &code);
-    CloseHandle(r->rd); CloseHandle(r->proc); PostMessageW(hMain, WM_ENDED, r->mode, code); free(buf); free(line); free(r); return 0;
+/* ---------- running a job: runner_main on a worker thread ---------- */
+typedef struct { int mode, argc; char *argv[64]; char buf[4096]; } Run;
+static void job_line(void *ctx, const char *line) {          /* one JSON record: to the window as a WM_LINE (the window frees it) */
+    Run *r = (Run *)ctx; int n = MultiByteToWideChar(CP_UTF8, 0, line, -1, NULL, 0); WCHAR *w = (WCHAR *)malloc((n + 1) * sizeof(WCHAR));
+    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, n); PostMessageW(hMain, WM_LINE, r->mode, (LPARAM)w);
 }
-static int run(const WCHAR *cmd, int mode) {
-    SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE }; HANDLE rd, wr, nul; STARTUPINFOW si; PROCESS_INFORMATION pi; static WCHAR c[2700], b[2800]; Run *r;
-    if (!CreatePipe(&rd, &wr, &sa, 1 << 16)) return 0;
-    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
-    nul = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
-    memset(&si, 0, sizeof si); si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES; si.hStdOutput = wr; si.hStdError = wr; si.hStdInput = nul;
-    wcsncpy(c, cmd, 2699); c[2699] = 0; swprintf(b, 2800, L"> %ls", c); logw(b);
-    if (!CreateProcessW(NULL, c, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, kit, &si, &pi)) {
-        swprintf(head, 200, L"Python could not be started"); swprintf(sub, 300, L"Windows error %lu. Looked for %ls", GetLastError(), py); logw(sub);
-        CloseHandle(rd); CloseHandle(wr); CloseHandle(nul); return 0;
-    }
-    if (hJob) AssignProcessToJobObject(hJob, pi.hProcess);
-    ResumeThread(pi.hThread); CloseHandle(pi.hThread); CloseHandle(wr); CloseHandle(nul);
-    r = (Run *)malloc(sizeof *r); r->rd = rd; r->proc = pi.hProcess; r->mode = mode;
-    CloseHandle(CreateThread(NULL, 0, reader, r, 0, NULL));
+static DWORD WINAPI job_thread(LPVOID p) {
+    Run *r = (Run *)p; int code = runner_main(r->argc, r->argv, job_line, r);
+    PostMessageW(hMain, WM_ENDED, r->mode, (DWORD)code); free(r); return 0;
+}
+static int run(const WCHAR *cmd, int mode) {          /* cmd: gui_job.py's arguments (choices|build <style> ...) */
+    static WCHAR b[2800]; Run *r = (Run *)calloc(1, sizeof *r); char *q; HANDLE th;
+    swprintf(b, 2800, L"> job %ls", cmd); logw(b);
+    WideCharToMultiByte(CP_UTF8, 0, cmd, -1, r->buf, sizeof r->buf, NULL, NULL);
+    for (q = strtok(r->buf, " "); q && r->argc < 63; q = strtok(NULL, " ")) r->argv[r->argc++] = q;
+    r->mode = mode; runner_stop = 0; runner_job = hJob;
+    th = CreateThread(NULL, 1 << 24, job_thread, r, 0, NULL);
+    if (!th) { swprintf(head, 200, L"The job could not be started"); swprintf(sub, 300, L"Windows error %lu.", GetLastError()); logw(sub); free(r); return 0; }
+    CloseHandle(th);
     busy = mode; anim = 0; SetTimer(hMain, 1, 60, NULL); return 1;
 }
 
@@ -285,7 +279,7 @@ static void live_left(const LiveC *L, double t, WCHAR *b, int cap) {          /*
     else swprintf(b, cap, L"%d s left", (int)(L->shownLeft + 0.99));
 }
 
-static void free_cell(Cell *c) { if (c->img) GdipDisposeImage(c->img); if (c->img3) GdipDisposeImage(c->img3); live_free(c->lv); memset(c, 0, sizeof *c); }
+static void free_cell(Cell *c) { if (c->img) GdipDisposeImage(c->img); if (c->img3) GdipDisposeImage(c->img3); if (c->img3c) GdipDisposeImage(c->img3c); live_free(c->lv); memset(c, 0, sizeof *c); }
 static void drop_pending(void) {
     int i, k = 0;
     for (i = 0; i < ncell; i++) { if (cells[i].state == ST_PENDING) continue; if (k != i) cells[k] = cells[i]; k++; }
@@ -306,7 +300,7 @@ static void ask_choices(int fresh) {
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
-    swprintf(cmd, 1200, L"\"%ls\" -u tools\\gui_job.py choices %hs --size %hs --detail %hs --count %d%ls", py, curStyle, curSize, curDetail, cnt, extra);
+    swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
         for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); cells[ncell++].state = ST_PENDING; }
         wanted = cnt; doneN = 0; swprintf(head, 200, L"Drawing %d %hs bases to choose from", cnt, curStyle); swprintf(sub, 300, L"%hs mm. They appear as they are ready; this takes about half a minute.", curSize);
@@ -322,7 +316,7 @@ static void build(void) {
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 20, L" --scale %hs", curScale);
-    swprintf(cmd, 2600, L"\"%ls\" -u tools\\gui_job.py build %hs --size %hs --picks %ls%ls", py, curStyle, curSize, picks, extra);
+    swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
     jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
     for (i = 0; i < ncell; i++) { live_free(cells[i].lv); cells[i].lv = NULL; }
     if (run(cmd, 2)) {
@@ -341,7 +335,7 @@ static void capture(const WCHAR *path);
 static void on_line(int mode, const WCHAR *t) {
     WCHAR ev[24], path[MAX_PATH]; Cell *c; int i;
     (void)mode;
-    if (t[0] != L'{' || !jstr(t, L"ev", ev, 24)) { if (t[0]) logw(t); return; }          /* not a record: something Python itself said (an error); keep it for Details */
+    if (t[0] != L'{' || !jstr(t, L"ev", ev, 24)) { if (t[0]) logw(t); return; }          /* not a record: something the job said that is not a record (an error); keep it for Details */
     if (!wcscmp(ev, L"log")) { static WCHAR b[4000]; jstr(t, L"text", b, 4000); logw(b); if (showDetails) redraw(); return; }
     if (!wcscmp(ev, L"error")) { jstr(t, L"text", sub, 300); wcscpy(head, L"That did not work"); logw(sub); redraw(); return; }
     if (!wcscmp(ev, L"folder")) { jstr(t, L"folder", outFolder, MAX_PATH); return; }
@@ -373,6 +367,8 @@ static void on_line(int mode, const WCHAR *t) {
         if (jtrue(t, L"ok")) {
             c->state = jtrue(t, L"variant") ? ST_VARIANT : ST_OK; c->secs = jnum(t, L"secs"); jstr(t, L"stl", c->stl, MAX_PATH); nOK++;
             if (jstr(t, L"img", path, MAX_PATH) && path[0]) GdipLoadImageFromFile(path, &c->img3);
+            if (jstr(t, L"img3c", path, MAX_PATH) && path[0]) GdipLoadImageFromFile(path, &c->img3c);          /* the colour view (the COLOUR toggle) */
+            c->col = colLast && c->img3c;
             if (jstr(t, L"img2", path, MAX_PATH) && path[0]) { GpImage *d2 = NULL; GdipLoadImageFromFile(path, &d2); if (d2) { if (c->img) GdipDisposeImage(c->img); c->img = d2; } }          /* the drawing of what was really built */
             if (c->state == ST_VARIANT) { WCHAR th[64]; if (jstr(t, L"theme", th, 64) && th[0]) wcscpy(c->theme, th); wcscpy(c->why, L"The picked design failed the print check, so the kit built a fresh variant in its place. Click to show its STL file."); }
         } else { c->state = ST_FAIL; jstr(t, L"why", c->why, 220); nBad++; }
@@ -382,7 +378,7 @@ static void on_line(int mode, const WCHAR *t) {
     }
 }
 static void capture(const WCHAR *path);
-/* the animation timer (1) runs while Python works; with the pixel look and textures it also runs, slower, while picked
+/* the animation timer (1) runs while a job works; with the pixel look and textures it also runs, slower, while picked
    cards are on show, to move their marching ants */
 static void anim_tick(void) {
     if (busy) return;
@@ -394,7 +390,7 @@ static void on_ended(int mode, DWORD code) {
     if (mode == 1) {
         drop_pending();
         if (ncell) { wcscpy(head, L"Click the bases you want"); wcscpy(sub, L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
-        else { wcscpy(head, L"No choices came back"); swprintf(sub, 300, L"Python ended with code %lu. Press Details to see what it said.", code); }
+        else { wcscpy(head, L"No choices came back"); swprintf(sub, 300, L"The job ended with code %lu. Press Details to see what it said.", code); }
     } else {
         for (i = 0; i < ncell; i++) if (cells[i].state == ST_BUILDING) { cells[i].state = ST_NONE; cells[i].retry = 0; }
         if (nBad) swprintf(head, 200, L"Done: %d built and checked, %d not built", nOK, nBad); else swprintf(head, 200, L"Done: %d built and checked", nOK);
@@ -423,8 +419,11 @@ static void on_ended(int mode, DWORD code) {
                stStep = 2; cells[1].picked = cells[2].picked = 1; build(); }                                                        /* then two more */
         else { FILE *f; WCHAR p[MAX_PATH]; int built = 0;
                for (i = 0; i < ncell; i++) built += cells[i].state == ST_OK || cells[i].state == ST_VARIANT;
-               hovK = H_NONE; capture(stShot); swprintf(p, MAX_PATH, L"%ls.txt", stShot); f = _wfopen(p, L"a");
-               if (f) { fprintf(f, "choices %d\nbuilt_cells %d\ntwo_pick_ok %d\ntwo_pick_failed %d\nfolder %ls\n", ncell, built, nOK, nBad, outFolder); fclose(f); }
+               int ncol = 0; hovK = H_NONE; capture(stShot);
+               for (i = 0; i < ncell; i++) if (cells[i].img3c) { cells[i].col = 1; ncol++; }          /* the colour view on every built card: a second picture */
+               if (ncol) { WCHAR q[MAX_PATH]; swprintf(q, MAX_PATH, L"%ls.colour.bmp", stShot); capture(q); }
+               swprintf(p, MAX_PATH, L"%ls.txt", stShot); f = _wfopen(p, L"a");
+               if (f) { fprintf(f, "choices %d\nbuilt_cells %d\ncolour_cells %d\ntwo_pick_ok %d\ntwo_pick_failed %d\nfolder %ls\n", ncell, built, ncol, nOK, nBad, outFolder); fclose(f); }
                PostQuitMessage(0); }
     }
 }
@@ -629,13 +628,14 @@ static void section(const WCHAR *label, int x, int y, int w, int h) {          /
         ltxt(label, X + 5 * PX, Y, Wd - 6 * PX, Hd, fLabel, C_BAR, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
     } else ltxt(label, x, y, w, h, fLabel, C_DIM, DT_LEFT | DT_SINGLELINE, 0, -1);
 }
+static int sideTight, sideNeed;          /* the side panel does not fit the window at full size: its chips are drawn a little shorter (sideNeed: its full height) */
 static void chips(const WCHAR *label, const char **items, int n, int cols, int sel, int kind, int *y) {
-    int x0 = S(16), wAll = S(SIDE_W - 32), gap = S(4), ch = S(24), cw = (wAll - (cols - 1) * gap) / cols, i; const int *r;
-    if (label) { section(label, x0, *y, wAll, S(18)); *y += S(20); }          /* no label: a second block of the same choice */
+    int x0 = S(16), wAll = S(SIDE_W - 32), gap = sideTight ? S(3) : S(4), ch = sideTight ? S(20) : S(24), cw = (wAll - (cols - 1) * gap) / cols, i; const int *r;
+    if (label) { section(label, x0, *y, wAll, S(18)); *y += sideTight ? S(19) : S(20); }          /* no label: a second block of the same choice */
     chipSpec = 0;
     if (lookFont) for (r = ROLES[0]; *r && !chipSpec; r++) { for (i = 0; i < n; i++) { WCHAR b[64]; swprintf(b, 64, L"%hs", items[i]); if (!spec_fits(*r, b, cw)) break; } if (i == n) chipSpec = *r; }
     for (i = 0; i < n; i++) chip(items[i], x0 + (i % cols) * (cw + gap), *y + (i / cols) * (ch + gap), cw, ch, i == sel, kind, i);
-    chipSpec = -1; *y += ((n + cols - 1) / cols) * (ch + gap) + S(6);
+    chipSpec = -1; *y += ((n + cols - 1) / cols) * (ch + gap) + (sideTight ? S(4) : S(6));
 }
 /* style: 0 quiet, 1 the main button (teal), 2 gold outline, 3 off */
 static void button(const WCHAR *label, int x, int y, int w, int h, int style, int kind) {
@@ -749,7 +749,8 @@ static void card(int i, int x, int y, int w, int h) {
         if (lookTex) ants(x, y, w, h);
     } else px_box(x, y, w, h, 2, hv ? C_CARDH : C_CARD, hv ? 0xFF4A5060u : C_EDGE, hv ? C_BEVHH : C_BEVH, C_BEVD);
     if ((c->state == ST_OK || c->state == ST_VARIANT) && c->img3) {          /* built: the 3D picture, with its 2D drawing small in the corner to check one against the other */
-        if (ovr > 1.01) image_fit(c->img3, x + pad, y + pad, iw, ih); else image_fit(c->img3, x + pad, y + pad + ih * 0.12, iw, ih * 0.88);
+        GpImage *p3 = c->col && c->img3c ? c->img3c : c->img3;          /* the COLOUR toggle: the same picture coloured as the 2D drawing */
+        if (ovr > 1.01) image_fit(p3, x + pad, y + pad, iw, ih); else image_fit(p3, x + pad, y + pad + ih * 0.12, iw, ih * 0.88);
         if (c->img) { double d = (iw < ih ? iw : ih) * 0.36, dw = ovr > 1.01 ? d * ovr : d;
             if (lookPix) px_box(x + pad - PX, y + pad - PX, dw + 2 * PX, d + 2 * PX, 1, C_CARD, C_LINE, 0, 0); else rr(x + pad - 1, y + pad - 1, dw + 2, d + 2, d / 2 + 1, C_CARD, C_LINE, 1);
             image_box(c->img, x + pad, y + pad, dw, d, ovr); }
@@ -792,11 +793,14 @@ static void card(int i, int x, int y, int w, int h) {
         if (c->retry) { WCHAR r2[160]; swprintf(r2, 160, L"new variant: %ls", st); wcscpy(st, r2); }
         txt(st, x + pad, capY + S(20), iw, S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); break; }
     case ST_OK: swprintf(b, 160, L"BUILT  %.0f s", c->secs); pill(b, x + pad, capY + S(20), S(96), S(18), C_ACC, C_ONACC); break;
-    case ST_VARIANT: pill(L"built as a new variant", x + pad, capY + S(20), iw < S(160) ? iw : S(160), S(18), C_GOLD, C_ONGOLD); break;
+    case ST_VARIANT: { int pw = c->img3c ? iw - S(86) : iw; pill(L"built as a new variant", x + pad, capY + S(20), pw < S(160) ? pw : S(160), S(18), C_GOLD, C_ONGOLD); break; }          /* room for the COLOUR toggle */
     case ST_FAIL: pill(L"not built: failed the check", x + pad, capY + S(20), iw < S(180) ? iw : S(180), S(18), C_GOLD, C_ONGOLD); break;
     default: swprintf(b, 160, L"detail %d of 4", c->tier); txt(b, x + pad, capY + S(20), iw, S(18), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE);
     }
     hit(x, y, w, h, H_CARD, i);
+    if ((c->state == ST_OK || c->state == ST_VARIANT) && c->img3c) {          /* the colour view toggle, beside the base's BUILT label (its hit is after the card's, so it wins) */
+        int tw = S(78), th = S(18); chip("COLOUR", x + w - pad - tw, capY + S(20), tw, th, c->col, H_COL, i);
+    }
 }
 static void help(int W, int H);
 /* the strip under the top bar: the PC's meters on the left (Small: one CPU and one video card bar; Live card and Big view:
@@ -918,7 +922,7 @@ static void paint(HDC out, int W, int H) {
         txt(L"Save time and money.", S(16), S(40), S(SIDE_W - 32), S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
     }
     y = S(68);
-    chips(L"STYLE", STYLES, 19, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 8, selSize, H_SIZE, &y); y -= S(4); chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, selSize - NROUND, H_OVAL, &y);
+    chips(L"STYLE", STYLES, NSTYLES, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 8, selSize, H_SIZE, &y); y -= S(4); chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, selSize - NROUND, H_OVAL, &y);
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
     chips(L"OBJECTS SIZED FOR FIGURES OF", SCALES, 4, 4, selScale, H_SCALE, &y);
     {          /* how many: a number from 1 to 20. Type it, or use the minus and plus */
@@ -941,6 +945,11 @@ static void paint(HDC out, int W, int H) {
     button(b, S(16), y, S(SIDE_W - 32), S(40), busy ? 3 : (!np ? 1 : 0), H_SHOW); y += S(46);
     swprintf(b, 200, selCount == 1 ? L"Or build 1 straight away" : L"Or build %d straight away", selCount);
     button(b, S(16), y, S(SIDE_W - 32), S(30), busy ? 3 : 0, H_QUICK);
+    {          /* the panel must fit: if the full size runs past the bottom, draw it tight; back to full size when it fits again */
+        int need = y + S(30) + S(8);
+        if (!sideTight) { sideNeed = need; if (need > H) { sideTight = 1; InvalidateRect(hMain, NULL, FALSE); } }
+        else if (sideNeed <= H) { sideTight = 0; InvalidateRect(hMain, NULL, FALSE); }
+    }
 
     /* the top: what is happening */
     {          /* the look switches, left of Help: Pixel (L), Textures (T), Pixel font (F) */
@@ -1031,7 +1040,7 @@ static void paint(HDC out, int W, int H) {
             rw = (shrinkFrom.right - shrinkFrom.left) + ((to->right - to->left) - (shrinkFrom.right - shrinkFrom.left)) * e;
             rh2 = (shrinkFrom.bottom - shrinkFrom.top) + ((to->bottom - to->top) - (shrinkFrom.bottom - shrinkFrom.top)) * e;
             if (lookPix) px_box(rx, ry, rw, rh2, 2, C_CARD, C_ACC, C_BEVH, C_BEVD); else rr(rx, ry, rw, rh2, S(12), C_CARD, C_ACC, S(2));
-            if (c->img3) image_fit(c->img3, rx + S(8), ry + S(8), rw - S(16), rh2 - S(16));
+            if (c->img3) image_fit(c->col && c->img3c ? c->img3c : c->img3, rx + S(8), ry + S(8), rw - S(16), rh2 - S(16));
             else if (c->lv && c->lv->plan) image_fit(c->lv->plan, rx + S(8), ry + S(8), rw - S(16), rh2 - S(16));
         }
     }
@@ -1092,8 +1101,8 @@ static void help(int W, int H) {
                               L"Objects sized for figures of:  \"classic\" (the default) makes every base a whole small scene, its things about a third of true size beside a 32 mm figure. 32 mm, 28 mm or 15 mm makes the things true to a figure of that height instead: a small base then shows only a part of a scene, a large base gets real ground (rises, gullies, pools), and the picture shows a post as tall as the figure. The spot where the miniature stands is always kept flat and on the base.\n"
                               L"How many bases:  1 to 20. Type the number or use the minus and plus. That many designs are drawn each time.\n"
                               L"Allow overhangs:  things may hang over (rounder barrels, arching ribs). The print then needs supports. Off: every base prints without supports.", x1, y, cwid);
-    y = para(L"WHERE THE FILES GO", L"The first time, the kit fetches the free model packs its details are made from (public domain, about 90 MB, once). The top line says so while it does, and Details shows from where. \"models_download\": false in settings.json stops it.\n"
-                              L"Every base you build is copied into one folder, out\\picked_<date>_<time> in the kit folder, named by style, size and theme: the STL, its 3D picture (_3d.png), its drawing from above (_2d.png) and its plan. Open folder takes you there.", x1, y, cwid);
+    y = para(L"WHERE THE FILES GO", L"Everything the kit needs is inside bbb_kit.exe, the free public-domain models its details are made from too: nothing is downloaded and nothing needs installing. It runs from any folder.\n"
+                              L"Every base you build is copied into one folder, out\\picked_<date>_<time> beside bbb_kit.exe, named by style, size and theme: the STL, its 3D picture (_3d.png, and in colour _3d_color.png), its drawing from above (_2d.png) and its plan. Open folder takes you there.", x1, y, cwid);
     y = para(L"WATCHING IT BUILD", L"The strip at the top: a bar for each of the kit's own working threads (only ours, idle ones hidden) and the video card. Small:  words and a time-left bar.  "
                               L"Live card:  the card shows the base taking shape, tile by tile.  Big view:  the base being built fills the middle; done, it goes back into its card.  "
                               L"Parts:  a switch each for Core bars, Video card meter, Base taking shape, Time left (from your earlier builds) and Rows over time.", x1, y, cwid);
@@ -1123,7 +1132,7 @@ static void capture(const WCHAR *path) {
     RECT r; HDC sdc, dc; HBITMAP bm; BITMAPINFO bi; BITMAPFILEHEADER fh; void *bits; int w, h; DWORD n, wr; HANDLE f; HGDIOBJ o;
     GetClientRect(hMain, &r); w = r.right; h = r.bottom; sdc = GetDC(NULL); dc = CreateCompatibleDC(sdc);
     memset(&bi, 0, sizeof bi); bi.bmiHeader.biSize = sizeof bi.bmiHeader; bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = h; bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 24;
-    bm = CreateDIBSection(sdc, &bi, DIB_RGB_COLORS, &bits, NULL, 0); o = SelectObject(dc, bm); paint(dc, w, h); GdiFlush();
+    bm = CreateDIBSection(sdc, &bi, DIB_RGB_COLORS, &bits, NULL, 0); o = SelectObject(dc, bm); { int t0 = sideTight; paint(dc, w, h); if (sideTight != t0) paint(dc, w, h); } GdiFlush();          /* the side panel may switch to tight on the first paint: paint again then */
     n = ((w * 3 + 3) & ~3) * h; memset(&fh, 0, sizeof fh); fh.bfType = 0x4D42; fh.bfOffBits = sizeof fh + sizeof bi.bmiHeader; fh.bfSize = fh.bfOffBits + n;
     f = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     if (f != INVALID_HANDLE_VALUE) { WriteFile(f, &fh, sizeof fh, &wr, NULL); WriteFile(f, &bi.bmiHeader, sizeof bi.bmiHeader, &wr, NULL); WriteFile(f, bits, n, &wr, NULL); CloseHandle(f); }
@@ -1159,13 +1168,14 @@ static void act2(int kind, int idx) {
     case H_SHOW: ask_choices(1); return;
     case H_MORE: ask_choices(0); return;
     case H_GO: build(); return;
-    case H_STOP: autoBuild = 0; if (busy && hJob) { TerminateJobObject(hJob, 1); logw(L"Stopped."); wcscpy(sub, L"Stopped."); } break;
+    case H_STOP: autoBuild = 0; if (busy) { runner_stop = 1; if (hJob) TerminateJobObject(hJob, 1); logw(L"Stopped."); wcscpy(sub, L"Stopped."); } break;
     case H_ALL: if (!busy) for (i = 0; i < ncell; i++) if (cells[i].state == ST_NONE) cells[i].picked = 1; break;
     case H_CLEAR: if (!busy) for (i = 0; i < ncell; i++) cells[i].picked = 0; break;
     case H_OPEN: open_folder(); return;
     case H_DETAILS: showDetails = !showDetails; break;
     case H_HELP: showHelp = !showHelp; break;
     case H_LOOK: if (idx == 0) lookPix = !lookPix; else if (idx == 1) lookTex = !lookTex; else lookFont = !lookFont; break;
+    case H_COL: if (idx >= 0 && idx < ncell && cells[idx].img3c) { cells[idx].col = !cells[idx].col; colLast = cells[idx].col; } break;
     case H_CARD: {
         Cell *c = &cells[idx]; int np;
         if (busy) { if (busy == 2 && c->state == ST_BUILDING) { bigPick = idx; if (lvView != 2) lvView = 2; } break; }          /* while building: watch that one in the Big view */
@@ -1191,7 +1201,7 @@ static void hover_at(int x, int y) {
         }
         if (k == H_SPEED) {          /* say what the speed switch under the mouse does */
             static const WCHAR *st[2] = { L"CPU threads: the height field and the mesh are made on as many CPU threads as the base needs (up to all of them), about 3 times faster for those steps. Off: one core, the proven path.",
-                                          L"Video card: the 3D pictures are drawn by the video card (Direct3D 11), in a fraction of a second. Off: drawn by Python, seconds per base." };
+                                          L"Video card: the 3D pictures are drawn by the video card (Direct3D 11), in a fraction of a second. Off: drawn by Windows' software renderer (all CPU cores), slower." };
             wcscpy(sub, st[id]);
         }
         if (k == H_VIEW) {          /* say what the view under the mouse shows */
@@ -1211,6 +1221,7 @@ static void hover_at(int x, int y) {
             else if (id == 11) wcscpy(sub, L"The kit's own working threads, one bar each, busiest first (other programs are not counted). Idle threads are not shown.");
             else if (id == 12) wcscpy(sub, gpuV < 0 ? L"The video card meter: Windows does not report the video card's use on this PC." : L"How much of the video card's 3D engine is in use (all programs). The kit draws its 3D pictures there.");
         }
+        if (k == H_COL) wcscpy(sub, L"Colour view: the finished 3D base coloured as its 2D drawing (the same colours), to check each part is where it should be. Click again for the plain grey picture.");
         if (k == H_CARD && !busy && cells[id].state != ST_PENDING) {          /* say what the card under the mouse is */
             Cell *c = &cells[id];
             if (c->why[0]) swprintf(sub, 300, L"%ls", c->why);
@@ -1229,7 +1240,7 @@ static void make_fonts(void) {
 }
 static void ini(int save) {
     WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu,
-                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows }; int lim[] = { 19, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2 }, i;
+                                              &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows }; int lim[] = { NSTYLES, NSIZES, 5, 13, 21, 2, 2, 4, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2 }, i;
     static const WCHAR *keys[] = { L"style", L"basesize", L"detail", L"mini", L"howmany", L"overhangs", L"details", L"look", L"pixel", L"textures", L"pixelfont", L"threads", L"videocard",
                                    L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows" };          /* "look": the figure size since classic became the default (the old key "figure" held 32 mm) */
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
@@ -1308,17 +1319,20 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     return DefWindowProcW(h, m, w, l);
 }
-static int find_python(void) {
-    WCHAR e[MAX_PATH];
-    if (GetEnvironmentVariableW(L"BBB_PYTHON", e, MAX_PATH) && GetFileAttributesW(e) != INVALID_FILE_ATTRIBUTES) { wcscpy(py, e); return 1; }
-    if (GetFileAttributesW(L"C:\\Python315\\python.exe") != INVALID_FILE_ATTRIBUTES) { wcscpy(py, L"C:\\Python315\\python.exe"); return 1; }
-    return SearchPathW(NULL, L"python.exe", NULL, MAX_PATH, py, NULL) > 0;
-}
 int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     WNDCLASSW wc; MSG msg; RECT wa, r; WCHAR t[MAX_PATH], e[MAX_PATH], *sl; FILE *f; int cw = 1290, chh = 896; JOBOBJECT_EXTENDED_LIMIT_INFORMATION ji; DWORD ex = 0; BOOL dark = TRUE;
     GdiplusStartupInput gin = { 1, NULL, FALSE, FALSE }; ULONG_PTR gtok; HMODULE u32 = GetModuleHandleW(L"user32.dll"), dwm; HDC sdc;
     (void)hp;
-    if (!strncmp(cmdA, "--core-", 7)) return bbb_core_main(cmdA);          /* the kit's C parts, for the Python builder: no window (cport\core.c) */
+    if (!strncmp(cmdA, "--core-layout", 13)) {          /* a layout helper of a job: --core-layout <choices|build> <style> (cport\pipeline.c) */
+        char md[16] = "", st[64] = ""; sscanf(cmdA + 13, " %15s %63s", md, st); return pipe_serve(md, st);
+    }
+    if (!strncmp(cmdA, "--core-", 7)) return bbb_core_main(cmdA);          /* the kit's other C parts: height field + mesh, pictures (cport\core.c); no window */
+    if (!strncmp(cmdA, "--job ", 6)) {          /* a job without the window: bbb_kit.exe --job choices|build <style> ... (gui_job.py's arguments); its JSON lines on stdout */
+        int n = 0, i; LPWSTR *wa = CommandLineToArgvW(GetCommandLineW(), &n); char **av = (char **)calloc((size_t)n + 1, sizeof(char *)); int code;
+        for (i = 2; i < n; i++) { int k = WideCharToMultiByte(CP_UTF8, 0, wa[i], -1, NULL, 0, NULL, NULL); av[i - 2] = (char *)malloc((size_t)k); WideCharToMultiByte(CP_UTF8, 0, wa[i], -1, av[i - 2], k, NULL, NULL); }
+        code = runner_main(n - 2 > 0 ? n - 2 : 0, av, NULL, NULL);
+        return code;
+    }
     if (!strncmp(cmdA, "--demotest", 10)) { selftest = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); }
     else if (!strncmp(cmdA, "--quicktest", 11)) { selftest = 1; stStep = 2; autoBuild = 1; stSize = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 11 + (cmdA[11] == ' ')); }
     else if (!strncmp(cmdA, "--resizetest", 12)) { selftest = 2; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
@@ -1328,11 +1342,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     swprintf(e, MAX_PATH, L"%ls\\bbb_kit_folder.txt", kit); f = _wfopen(e, L"r");
     if (f) { char a[MAX_PATH]; if (fgets(a, sizeof a, f)) { a[strcspn(a, "\r\n")] = 0; if (a[0]) swprintf(kit, MAX_PATH, L"%hs", a); } fclose(f); }
     if (GetEnvironmentVariableW(L"BBB_KIT", e, MAX_PATH)) wcscpy(kit, e);
-    swprintf(t, MAX_PATH, L"%ls\\run_set.py", kit);
-    if (GetFileAttributesW(t) == INVALID_FILE_ATTRIBUTES) { sl = wcsrchr(kit, L'\\'); if (sl) *sl = 0; swprintf(t, MAX_PATH, L"%ls\\run_set.py", kit); }      /* started from gui\ : the kit is one folder up */
-    if (GetFileAttributesW(t) == INVALID_FILE_ATTRIBUTES) { if (selftest) return 2; MessageBoxW(NULL, L"bbb_kit.exe must sit in the kit folder, beside run_set.py.", L"Balderding's Ballin Base Kit", MB_OK | MB_ICONINFORMATION); return 1; }
-    if (!find_python()) { if (selftest) return 3; MessageBoxW(NULL, L"Python was not found.\n\nInstall Python 3.10 or newer, or set the BBB_PYTHON variable to the full path of python.exe.", L"Balderding's Ballin Base Kit", MB_OK | MB_ICONINFORMATION); return 1; }
-    SetEnvironmentVariableW(L"PYTHONWARNINGS", L"ignore"); SetEnvironmentVariableW(L"PYTHONUNBUFFERED", L"1"); SetEnvironmentVariableW(L"PYTHONIOENCODING", L"utf-8");
+    (void)t; SetEnvironmentVariableW(L"BBB_KIT", kit);          /* the runner's kit folder: this one (its out folder is beside the exe) */
     hJob = CreateJobObjectW(NULL, NULL);
     if (hJob) { memset(&ji, 0, sizeof ji); ji.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE; SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &ji, sizeof ji); }
     { typedef BOOL(WINAPI *F)(HANDLE); F fn = (F)(void *)GetProcAddress(u32, "SetProcessDpiAwarenessContext"); if (!fn || !fn((HANDLE)-4)) SetProcessDPIAware(); }          /* sharp on every monitor */
@@ -1343,7 +1353,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if ((cw + 20) * SC > wa.right - wa.left) cw = (int)((wa.right - wa.left) / SC) - 20;
     if (!selftest) ini(0);
     swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
-    speed_env();          /* the speed switches, for every Python job started from here on */
+    speed_env();          /* the speed switches, for every job started from here on */
     make_fonts(); wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
     memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIcon(NULL, IDI_APPLICATION); RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);

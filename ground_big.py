@@ -29,6 +29,13 @@ def _u(gs):
     return unary_union(gs) if gs else Polygon()
 
 
+def _one_line(g):
+    """an offset curve as one line: when the offset splits into pieces (a tight bend), its longest piece; a single
+    line comes back as the same line it always was"""
+    if g.geom_type == "MultiLineString": g = max(g.geoms, key=lambda q: q.length)
+    return LineString(g.coords)
+
+
 def _biggest(g, polys_of):
     ps = polys_of(g)
     return max(ps, key=lambda q: q.area) if ps else None
@@ -74,13 +81,15 @@ class Ground:
         self.rises = []          # (polygon, height, run, profile exponent, foot z): the ground's own height there
         self.disc = Point(0, 0).buffer(self.R - 0.6, 96)
         self.made = 0
+        self.floors = _u([u.buffer(0.5, 8) for z, u in self.plates])          # the style's floors: no terrain goes over them (it wiped their joints and buried what stood there)
+        self.on_floors = False          # True for a floored style's own recipe (slabs and rubble meant for a floor)
 
     def floor_z(self, g):
         """the top of the floor (deck plates, flagstones, planks) that covers most of g, else the bare ground"""
         for z, pl in self.plates:
             try:
                 if pl.intersection(g).area > 0.3 * g.area: return max(self.H, z)
-            except Exception: pass
+            except Exception as e: __import__("kitlog").caught("ground_big.floor_z", e)
         return self.H
 
     # ------------------------------------------------------------------------------------------- where things may go
@@ -103,6 +112,7 @@ class Ground:
         if wet and not w.is_empty and g.intersects(w.buffer(0.5)): return False
         a = g.area
         if a <= 0 or g.intersection(self.disc).area < inside * a: return False
+        if not self.on_floors and not self.floors.is_empty and g.intersection(self.floors).area > 0.05 * a: return False          # open ground only
         return not any(g.distance(m) < gap for m in self.mine)
 
     def spot(self, u0, u1, t=None):
@@ -126,7 +136,7 @@ class Ground:
         """small loose pieces and grit under a new piece of ground go, and so do the top cuts there (floor joints,
         seams): a top cut takes everything above its floor, so one left under a rise would groove it right through"""
         try: self.S.clear_small(self.s, g.buffer(0.3)); self.G.evict(self.s, g)
-        except Exception: pass
+        except Exception as e: __import__("kitlog").caught("ground_big.clear_under", e)
         gb = g.buffer(0.3); out = []
         for ps, z0, z1, k in self.s.tcuts:
             qs = [q for p in ps for q in (self.G.polys_of(p.difference(gb)) if p.intersects(gb) else [p]) if q.area > 0.02]
@@ -447,7 +457,7 @@ class Ground:
             p1 = (p0[0] + Ln * math.cos(a), p0[1] + Ln * math.sin(a))
             line = self.path(p0, p1, Ln * 0.12, 8); ww = rng.uniform(*w)
             ch = self.ribbon(line, ww, ww * 0.35)
-            ban = [self.ribbon(LineString(line.offset_curve(sg * (ww * 0.5 + 1.3)).coords), 2.0, 1.0) for sg in (-1, 1)]
+            ban = [self.ribbon(_one_line(line.offset_curve(sg * (ww * 0.5 + 1.3))), 2.0, 1.0) for sg in (-1, 1)]
             ban = [b.difference(ch.buffer(0.45)) for b in ban if b is not None and not b.is_empty]
             foot = _u([ch] + ban)
             return (foot, ch, ban)
@@ -577,10 +587,10 @@ class Ground:
         if wall:
             kd = self.K(wall)
             for sg in (-1, 1):
-                lip = LineString(line.offset_curve(sg * (ww / 2 + 0.55)).coords).buffer(0.45, cap_style=2)
+                lip = _one_line(line.offset_curve(sg * (ww / 2 + 0.55))).buffer(0.45, cap_style=2)
                 self.s.prism([lip.difference(self.free.buffer(0.3))], self.H + 0.45, kd)
         if pipe and not self.terr and not any(ch.intersects(pl) for z, pl in self.S._plates(self.s)):
-            pp = LineString(line.offset_curve(rng.uniform(-0.2, 0.2) * ww).coords).buffer(min(0.5, ww * 0.25), cap_style=2).intersection(G.inset(ch, 0.25))
+            pp = _one_line(line.offset_curve(rng.uniform(-0.2, 0.2) * ww)).buffer(min(0.5, ww * 0.25), cap_style=2).intersection(G.inset(ch, 0.25))
             if not pp.is_empty:
                 self.gg.COL.setdefault(pipe + "_pad", self.gg.COL.get(pipe, "#6f747c"))
                 self.s.prism(G.polys_of(pp), self.H - 0.05, pipe + "_pad", z0=self.H - 0.8, foot=False)
@@ -604,7 +614,7 @@ class Ground:
         ring = self.disc.difference(self.free.buffer(0.6))
         if ring.is_empty: return 0
         want = cover * ring.area; done = Polygon(); centres = []; made = 0
-        block = _u([m.buffer(0.3) for m in self.mine] + ([self.wet.buffer(0.7)] if not self.wet.is_empty else []))
+        block = _u([m.buffer(0.3) for m in self.mine] + ([self.wet.buffer(0.7)] if not self.wet.is_empty else []) + ([self.floors] if not self.floors.is_empty else []))          # not over a floor
         for _ in range(n_max):
             best = None
             for _ in range(14):
@@ -712,6 +722,7 @@ def STYLE(style):
                        feats=[("mesa", 2, dict(kind="shelf", steps=(2, 4), h=(1.4, 3.0))), ("pool", 3, dict(kind="water", ripples=2, r=(0.07, 0.12))),
                               ("ridge", 2, dict(kind=E, h=(0.3, 0.8), w=(2.0, 3.0))), ("outcrop", 1, dict(kind="shelf"))]),
     }
+    T.update(__import__("newstyles").ground_big(E, B, P, scree, pebbles))          # the styles kept one per file
     return T.get(style, dict(field=(E, 0.3, 1.2, 0.5), feats=[("outcrop", 1, dict(kind="rock"))]))
 
 
@@ -734,7 +745,7 @@ def apply(sc):
     _kinds(g.gg, scenes, getattr(sc.s, "ground", "#777777") or "#777777")
     for k, v in {"ash": "#5c5552", "pipe": "#6f747c", "slot": "#0d1014"}.items(): g.gg.COL.setdefault(k, v)
     st = STYLE(sc.style); n0 = len(sc.s.ops)
-    if st.get("floored") and _floored(g): st = dict(st, **st["floored"])
+    if st.get("floored") and _floored(g): st = dict(st, **st["floored"]); g.on_floors = True          # the floor's own recipe: meant to lie on the floor
     todo = []
     for name, n, kw in st["feats"]:
         m = n * g.A; m = int(m) + (1 if g.rng.random() < m - int(m) else 0)
@@ -744,13 +755,13 @@ def apply(sc):
     g.rng.shuffle(rest)
     def run(name, kw):
         try: ok = getattr(g, "f_" + name)(**kw)
-        except Exception as e: ok = None; sc.log.append(f"ground_big {name}: {type(e).__name__} {str(e)[:60]}")
+        except Exception as e: ok = None; sc.log.append(__import__("kitlog").caught(f"ground_big {name}", e))
         if os.environ.get("GB_DEBUG"): print("  ground_big", name, ok, flush=True)
     for name, kw in tall: run(name, kw)
     if st.get("field"):
         kind, h0, h1, cover = st["field"]
         try: g.field(kind, (h0, h1), cover=cover * min(1.0, 0.75 + 0.25 * g.A), rocks=st.get("rocks"))
-        except Exception as e: sc.log.append(f"ground_big field: {type(e).__name__} {str(e)[:60]}")
+        except Exception as e: sc.log.append(__import__("kitlog").caught(f"ground_big field", e))
     for name, kw in rest: run(name, kw)
     if os.environ.get("GB_DEBUG"):
         new = [op for op in sc.s.ops[n0:]]

@@ -67,18 +67,31 @@ static int core_build(void) {
 }
 
 /* bbb_kit.exe --core-shot: stdin "BBS1", u32 w, h, mode (1 video card, 2 software), f64 elev, azim, u32 nv, nt,
-   nv x 3 f64, nt x 3 i32. stdout "BBI1", u32 w, h, u8 n + n bytes (what drew it), w*h*3 bytes RGB, rows top down. */
+   nv x 3 f64, nt x 3 i32. stdout "BBI1", u32 w, h, u8 n + n bytes (what drew it), w*h*3 bytes RGB, rows top down.
+   "BBS2": the same, then the colour view's 2D drawing: f64 x0 y0 x1 y1 (what it shows, in the mesh's mm), u32 tw, th,
+   tw*th*3 bytes RGB rows top down (shot.h shot_render_tex). */
 static int core_shot(void) {
     HANDLE in = GetStdHandle(STD_INPUT_HANDLE), out = GetStdHandle(STD_OUTPUT_HANDLE);
     size_t n; unsigned char *b = read_all(in, &n);
-    if (n < 40 || memcmp(b, "BBS1", 4)) { say("input not readable\n"); return 1; }
+    if (n < 40 || (memcmp(b, "BBS1", 4) && memcmp(b, "BBS2", 4))) { say("input not readable\n"); return 1; }
+    int col = !memcmp(b, "BBS2", 4);
     uint32_t w, h, mode, nv, nt; double el, az; const unsigned char *p = b + 4;
     memcpy(&w, p, 4); memcpy(&h, p + 4, 4); memcpy(&mode, p + 8, 4); memcpy(&el, p + 12, 8); memcpy(&az, p + 20, 8); memcpy(&nv, p + 28, 4); memcpy(&nt, p + 32, 4); p += 36;
     if ((size_t)(p - b) + 24 * (size_t)nv + 12 * (size_t)nt > n) { say("input too short\n"); return 1; }
-    double *V = malloc(24 * (size_t)(nv ? nv : 1)); int *F = malloc(12 * (size_t)(nt ? nt : 1)); memcpy(V, p, 24 * (size_t)nv); memcpy(F, p + 24 * (size_t)nv, 12 * (size_t)nt); free(b);
+    double *V = malloc(24 * (size_t)(nv ? nv : 1)); int *F = malloc(12 * (size_t)(nt ? nt : 1)); memcpy(V, p, 24 * (size_t)nv); memcpy(F, p + 24 * (size_t)nv, 12 * (size_t)nt);
+    double win[4] = { 0 }; uint32_t tw = 0, th = 0; unsigned char *tex = NULL;
+    if (col) {
+        const unsigned char *q = p + 24 * (size_t)nv + 12 * (size_t)nt;
+        if ((size_t)(q - b) + 40 > n) { say("colour drawing missing\n"); return 1; }
+        memcpy(win, q, 32); memcpy(&tw, q + 32, 4); memcpy(&th, q + 36, 4); q += 40;
+        if (tw < 1 || th < 1 || tw > 16384 || th > 16384 || (size_t)(q - b) + (size_t)tw * th * 3 > n) { say("colour drawing too short\n"); return 1; }
+        tex = malloc((size_t)tw * th * 3); if (!tex) { say("out of memory\n"); return 1; } memcpy(tex, q, (size_t)tw * th * 3);
+    }
+    free(b);
     for (uint32_t i = 0; i < 3 * nt; i++) if (F[i] < 0 || (uint32_t)F[i] >= nv) { say("triangle corner out of range\n"); return 1; }
     unsigned char *rgb = malloc((size_t)w * h * 3); char dev[160] = "", err[200] = "";
-    if (!rgb || !shot_render(V, (int)nv, F, (int)nt, (int)w, (int)h, el, az, (int)mode, rgb, dev, sizeof dev, err, sizeof err)) { say(err); say("\n"); return 1; }
+    if (!rgb || !shot_render_tex(V, (int)nv, F, (int)nt, (int)w, (int)h, el, az, (int)mode, tex, (int)tw, (int)th, col ? win : NULL, rgb, dev, sizeof dev, err, sizeof err)) { say(err); say("\n"); return 1; }
+    free(tex);
     uint32_t hd[2] = { w, h }; unsigned char dl = (unsigned char)strlen(dev);
     if (!write_all(out, "BBI1", 4) || !write_all(out, hd, 8) || !write_all(out, &dl, 1) || !write_all(out, dev, dl) || !write_all(out, rgb, (size_t)w * h * 3)) return 1;
     return 0;

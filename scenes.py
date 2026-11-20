@@ -1206,6 +1206,17 @@ def _bigs(s):
     cells = _cells(s)
     return [p for op in s.ops if op[-1] not in SOFT and op[-1] not in BRIDGE and op[-1] not in TERRK for p in op[1] if p.area >= 10 and id(p) not in cells and op[2] <= H + 0.05]
 
+def _top_at(s, x, y):
+    """the highest flat-topped raised piece under (x, y): (its top z, its outline), or None. Prisms (floors, plates,
+    blocks) and the placeholders of chamfered solids (their op keeps the solid's outline and top)."""
+    pt = Point(x, y); best = None
+    for op in s.ops:
+        top = op[3] if op[0] == "prism" else op[2] + op[3] if op[-1] == "rockc" else None
+        if top is None or top <= H + 0.05 or (best and top <= best[0]): continue
+        for p in op[1]:
+            if p.contains(pt) and p.area > 4.0: best = (top, p); break
+    return best
+
 def _plates(s):
     """floor plates by height: [(top z, union)]"""
     lv = {}
@@ -1213,11 +1224,13 @@ def _plates(s):
         if op[0] == "prism" and op[-1] in BRIDGE: lv.setdefault(round(op[3], 3), []).extend(op[1])
     return [(z, unary_union(ps)) for z, ps in sorted(lv.items(), reverse=True)]
 
+from shapely.geometry import box as _shapely_box
+
 def _strips(g, step=3.0):
     if g.is_empty: return []
     x0, y0, x1, y1 = g.bounds; out = []
     for x in np.arange(x0, x1, step):
-        for y in np.arange(y0, y1, step): out += polys_of(g.intersection(box(x, y, x + step, y + step)))
+        for y in np.arange(y0, y1, step): out += polys_of(g.intersection(_shapely_box(x, y, x + step, y + step)))          # shapely's box: in this file box() is the kit's own solid (it raised TypeError, and paths over terrain were dropped)
     return out
 
 
@@ -1693,7 +1706,7 @@ def place_subject(sc, plan, small=False, force=False):
                 elif past: front = _unit(-c[0], -c[1]) if off > 0.1 else (math.cos(fa), math.sin(fa))
                 else: front = _unit(p0[0] - c[0], p0[1] - c[1])
                 try: got = build(c[0], c[1], math.atan2(front[1], front[0]), _random.Random(seed), kk)
-                except Exception as e: sc.log.append(f"subject {sub['name']}: {type(e).__name__} {e}"); return False
+                except Exception as e: sc.log.append(__import__("kitlog").caught(f"subject {sub['name']}", e)); return False
                 if got is None or got[0] is None or got[0].is_empty: continue
                 foot, layers = got; solid = _solid_of(layers).intersection(sc.wide)
                 if small and foot.area > 0.30 * math.pi * R * R: return False
@@ -1728,7 +1741,7 @@ def lay_path(sc, plan):
         ctrl = (end[0] + front[0] * L * 0.5 + n[0] * bend * L, end[1] + front[1] * L * 0.5 + n[1] * bend * L)
         line = _curve(p0, ctrl, end); sc.start = p0; sc.q = p1
     try: g = PATHS[kind](sc, line, _random.Random(sc.mixr.random()))
-    except Exception as e: sc.log.append(f"path {kind}: {type(e).__name__} {e}"); g = None
+    except Exception as e: sc.log.append(__import__("kitlog").caught(f"path {kind}", e)); g = None
     if g is not None and not g.is_empty:
         sc.line = line; sc.pathg = line.buffer(hw, cap_style=2).intersection(sc.wide); sc.taken.append(sc.pathg)
 
@@ -1825,7 +1838,7 @@ def _run(sc, fn, at, aim_=None):
     s = sc.s; b = _snap(s)
     with focus(at, aim_):
         try: fn(s, sc.rng, sc.t)
-        except Exception as e: sc.log.append(f"{getattr(fn, '__qualname__', 'detail')}: {type(e).__name__} {str(e)[:60]}")
+        except Exception as e: sc.log.append(__import__("kitlog").caught(f"{getattr(fn, '__qualname__', 'detail')}", e))
     return _snap(s) != b
 
 def _bare(sc, lim):
@@ -1847,8 +1860,8 @@ def _bare_grid(sc, lim):
     for ps in [op[1] for op in s.ops] + [g[0] for g in s.gcuts] + [c[0] for c in s.tcuts]:
         for q in ps:
             if q is None or q.is_empty: continue
-            if q.area < big: small.append(q)
-            else: rings.append(q.exterior)          # a wide flat plate is only its edge: its middle is still plain
+            if q.area < big * 0.5 or q.buffer(-lim * 0.9, 4).is_empty: small.append(q)          # too narrow to hold a plain patch: it covers the ground
+            else: rings.append(q.exterior)          # a flat top wide enough for a plain patch is only its edge: its middle can still be plain
     r = gg.R0 - 1.0; st = lim / 3.0; xs = np.arange(-r + st / 2, r, st)
     gx, gy = np.meshgrid(xs, xs); keep = gx * gx + gy * gy <= r * r; P = np.column_stack([gx[keep], gy[keep]])
     if not len(P): return P, np.zeros(0)
@@ -1863,6 +1876,7 @@ def no_bare(sc, plan, marks_only=False, cracks=False):
     """the rule: no part of a base's top is plain smooth. Wherever a circle of bare ground is left (7 mm radius on a
     100 mm base, 3 mm on a 30 mm one), the style's own natural details go down there; a crack if nothing else fits."""
     if not CFG.get("no_bare_ground", True): return 0
+    __import__("kitlog").fault("no_bare")          # KIT_FAULT=no_bare: a test of the error log
     s = sc.s; _ts = F.true_scale(); lim = max(3.0, min(7.0, 0.07 * float(os.environ.get("KIT_FINAL_MM") or sc.mm))); lim = lim if _ts == 1.0 else max(1.7, lim / _ts); rr = _random.Random(sc.mixr.random()); put = 0          # built larger, a bare patch grows with it: so it is measured on the finished base
     by = {}
     for f in D.DETAILS.get(sc.style, []):
@@ -1883,7 +1897,9 @@ def no_bare(sc, plan, marks_only=False, cracks=False):
                 pts = [(x + (i / (n - 1) - 0.5) * L * math.cos(a) + rr.uniform(-1, 1) * lim * 0.16, y + (i / (n - 1) - 0.5) * L * math.sin(a) + rr.uniform(-1, 1) * lim * 0.16) for i in range(n)]
                 j = rr.randrange(1, n - 1); b = a + rr.choice((-1, 1)) * rr.uniform(0.6, 1.2)
                 g = _u([LineString(pts).buffer(0.3, 2), LineString([pts[j], (pts[j][0] + L * 0.4 * math.cos(b), pts[j][1] + L * 0.4 * math.sin(b))]).buffer(0.26, 2)])
-                s.gcut(polys_of(g), 0.4, "crack")
+                fl = _top_at(s, x, y)          # on a raised top (a floor plate, a pipe, a slab): cut into that top, or it never shows
+                if fl: s.tcut([q for q in polys_of(g.intersection(fl[1].buffer(-0.3))) if q.area > 0.05], fl[0] - 0.35, fl[0], "crack")
+                else: s.gcut(polys_of(g), 0.4, "crack")
             put += 1; free &= (P[:, 0] - x) ** 2 + (P[:, 1] - y) ** 2 > (lim * 1.2) ** 2
     return put
 
@@ -1911,7 +1927,7 @@ def place_also(sc, plan):
             x, y = at(sc.mixr); a = math.atan2(sc.q[1] - y, sc.q[0] - x)
             if math.hypot(x, y) > sc.R * 0.72 and i < 50: continue                # a second feature stands in the scene, not out on the edge
             try: got = build(x, y, a, _random.Random(seed), k * (1.0 if i < 40 else 0.8))
-            except Exception as e: sc.log.append(f"also {al['name']}: {type(e).__name__} {e}"); break
+            except Exception as e: sc.log.append(__import__("kitlog").caught(f"also {al['name']}", e)); break
             if got is None or got[0] is None: continue
             foot, layers = got
             if not _fits(sc, foot, _solid_of(layers), False): continue
@@ -2064,7 +2080,7 @@ def lay_bridge(sc, plan):
         x, y, a = _at(cline, cline.length / 2); deck = LineString([(x - (sw + 1.6) * math.cos(a), y - (sw + 1.6) * math.sin(a)), (x + (sw + 1.6) * math.cos(a), y + (sw + 1.6) * math.sin(a))])
         P_boards(sc, deck, rr); sc.core = deck.buffer(2.1, cap_style=2)
     try: PATHS[kind](sc, cline, rr)
-    except Exception as e: sc.log.append(f"bridge way {kind}: {type(e).__name__} {e}")
+    except Exception as e: sc.log.append(__import__("kitlog").caught(f"bridge way {kind}", e))
     sc.subj = Point(q).buffer(sw + 2.2, 24); sc.solid = Polygon(); sc.core = None
     sc.c = q; sc.front = d; sc.p1 = (q[0] + d[0] * (sw + 2.2), q[1] + d[1] * (sw + 2.2)); sc.q = sc.p1; sc.start = ca; sc.line = cline
     sc.pathg = _u([sline.buffer(PATH_W["stream"] + 0.6, cap_style=2), cline.buffer(PATH_W[kind], cap_style=2)]).intersection(sc.wide); sc.taken.append(sc.pathg)
@@ -2110,7 +2126,7 @@ def _style_made(sc, plan):
         import style_details
         n = style_details.scatter_made(sc, plan)
         if os.environ.get("SCENE_DEBUG"): print(f"  style details: {n} made things set down", flush=True)
-    except Exception as e: sc.log.append(f"style details: {type(e).__name__} {str(e)[:60]}")
+    except Exception as e: sc.log.append(__import__("kitlog").caught(f"style details", e))
 
 def compose(s, style, mixr, rng, t, fns):
     sc = Sc(s, style, mixr, rng, t); mm = sc.mm; n = _num(s.name); big = mm >= 59.9
@@ -2164,24 +2180,24 @@ def compose(s, style, mixr, rng, t, fns):
             s.keepout = list(getattr(s, "keepout", [])) + [clear]; sc.taken.append(clear)
             if float(os.environ.get("KIT_FINAL_MM") or 0) >= 49.9:          # a base is mostly ground: terrain at the scale of the base (ground_big.py), lower on smaller bases
                 try: import ground_big; ground_big.apply(sc)
-                except Exception as e: sc.log.append(f"ground_big: {type(e).__name__} {str(e)[:60]}")
+                except Exception as e: sc.log.append(__import__("kitlog").caught(f"ground_big", e))
         small_scene(sc, plan)
         _style_made(sc, plan)
         late = tier_features(sc, plan, fns); clutter(sc, plan, (1 + t) * sc.K * sc.K)
     marks(sc, plan, None if (scene and big) else (1 + t) * sc.K * sc.K * 0.6)
     try: nb = no_bare(sc, plan)          # the rule: the top is never plain smooth anywhere
-    except Exception as e: nb = 0; sc.log.append(f"no_bare: {type(e).__name__} {str(e)[:60]}")
+    except Exception as e: nb = 0; sc.log.append(__import__("kitlog").caught(f"no_bare", e))
     release(s)
     try: nb += no_bare(sc, plan, marks_only=True)          # the miniature's own patch: ground marks only, nothing raised
-    except Exception as e: sc.log.append(f"no_bare: {type(e).__name__} {str(e)[:60]}")
+    except Exception as e: sc.log.append(__import__("kitlog").caught(f"no_bare", e))
     if os.environ.get("SCENE_DEBUG"): print(f"  no bare ground: {nb} patches filled", flush=True)
     for fn in late:
         try: fn(s, rng, t)
-        except Exception as e: sc.log.append(f"{getattr(fn, '__qualname__', 'late')}: {type(e).__name__} {str(e)[:60]}")
+        except Exception as e: sc.log.append(__import__("kitlog").caught(f"{getattr(fn, '__qualname__', 'late')}", e))
     try: clear_edge(sc)
-    except Exception as e: sc.log.append(f"clear_edge: {type(e).__name__} {str(e)[:60]}")
+    except Exception as e: sc.log.append(__import__("kitlog").caught(f"clear_edge", e))
     try: no_bare(sc, plan, cracks=True)
-    except Exception as e: sc.log.append(f"no_bare: {type(e).__name__} {str(e)[:60]}")
+    except Exception as e: sc.log.append(__import__("kitlog").caught(f"no_bare", e))
     for op in s.ops: gg.COL.setdefault(op[-1], "#8a8a8a")
     plan["miniature"] = sc.mini
     s.theme = plan.get("theme", ""); s.plan = plan if scene else dict(plan, subject=None, path=None, also=[])
@@ -2191,4 +2207,5 @@ def compose(s, style, mixr, rng, t, fns):
     if os.environ.get("SCENE_DEBUG"): print("  " + s.plan_line, *("    ! " + l for l in sc.log), sep="\n", flush=True)
 
 
+__import__("newstyles").hook_scenes(globals())          # the styles kept one per file (style_<name>.py)
 _OWN = set(globals())

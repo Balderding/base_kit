@@ -797,7 +797,7 @@ def add_solids(s, m, skipped=None, rlim=None):
                         d = np.hypot(t3.vertices[:, 0], t3.vertices[:, 1]); out = d > rlim          # nothing reaches past the edge of the base's top: what would is pressed back to it
                         if out.any(): t3.vertices[out, :2] *= (rlim / d[out])[:, None]
                     extra.append(t3)
-                except Exception as e: (skipped if skipped is not None else []).append(f"solid {cid}: {type(e).__name__}")
+                except Exception as e: (skipped if skipped is not None else []).append(f"solid {cid}: {type(e).__name__}"); __import__("kitlog").caught(f"solid {cid} dropped", e)
         if extra: m = trimesh.util.concatenate([m] + extra)
     return m, extra
 
@@ -807,6 +807,7 @@ def build(style, n, path=None):
     ov0 = gg.oval()
     live.start(n, oval=f"{ov0[0]:g}x{ov0[1]:g}" if ov0 else "", mm=f"{gg.BASE_MM:g}", lay_r=f"{gg.R0:.3f}")          # the window's live view (only when it asks: KIT_LIVE)
     if live.on(): live.hook_layout()
+    _kl = __import__("kitlog"); _kl.base(os.environ.get("BASENAME") or f"{style} #{n}"); _km = _kl.mark()          # every error this base catches (out/kit_errors.log)
     s = gg3.make(style, n)
     if os.environ.get("BASENAME"): s.name = os.environ["BASENAME"]
     import hashlib
@@ -819,7 +820,7 @@ def build(style, n, path=None):
             D = os.environ.get("SETDIR", gg3.CFG["out_folder"]); os.makedirs(f"{D}/{style}", exist_ok=True); path = f"{D}/{style}/{s.name}.stl"
         if gg3.CFG.get("drawing_2d", True):
             try: draw2d(s, path[:-4] + "_2d.png"); drawn = path[:-4] + "_2d.png"; live.plan(drawn, PLAN_WIN)
-            except Exception: pass
+            except Exception as e: __import__("kitlog").caught("drawing from above (early)", e)
         live.note(stage="field", steps_total=len(groups), steps_done=0)
     fin = float(os.environ.get("KIT_FINAL_MM", 0) or 0); sc = float(os.environ.get("KIT_SCALE", 1) or 1)          # the scenery scale: laid out small, built sc times larger on the base that was asked for
     sp = scale_plan(s); ov = gg.oval()
@@ -832,7 +833,7 @@ def build(style, n, path=None):
             stand = None
             if sp and sp[4] is not None:
                 try: stand = (sp[4].buffer(1.2, 6), base["H"], sp[0])
-                except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
+                except Exception as e: skipped.append(f"standing place: {type(e).__name__}"); __import__("kitlog").caught("standing place", e)
             if live.on(): os.environ["KIT_LIVE_FILE"] = live._P[0]; live.note(threads=cmesh.threads(), steps_total=len(steps))          # the exe writes its tiles beside the note
             try: res = cmesh.build_c(base, steps, stand)
             finally: os.environ.pop("KIT_LIVE_FILE", None)
@@ -843,7 +844,7 @@ def build(style, n, path=None):
         F, R0, H, rim_tan, mag, skipped = field_from_cmds(groups)
         if sp and sp[4] is not None:
             try: stand_flat(F, sp[4].buffer(1.2, 6), H, sp[0])
-            except Exception as e: skipped.append(f"standing place: {type(e).__name__}")
+            except Exception as e: skipped.append(f"standing place: {type(e).__name__}"); __import__("kitlog").caught("standing place", e)
         live.note(stage="mesh", threads=1)
         got = cmesh.mesh(F, R0, H, rim_tan, mag)          # the C mesher (bbb_kit.exe): the same mesh, faster; None = use Python
         v, f = got if got is not None else mesh_from_field(F, R0, H, rim_tan, mag)
@@ -856,14 +857,14 @@ def build(style, n, path=None):
     m.export(path)
     if gg3.CFG.get("drawing_2d", True) and not drawn:          # the 2D drawing of this very base beside its STL, to check the 3D against
         try: draw2d(s, path[:-4] + "_2d.png")
-        except Exception: pass
+        except Exception as e: __import__("kitlog").caught("drawing from above", e)
     r = {"name": s.name, "secs": round(time.time() - t, 1), "skipped": skipped, "restarts": 0, "rock_fallbacks": 0, "sig": f"{style}{gg.BASE_MM:g}" + (f"o{ov[1]:g}" if ov else "") + sig,
          "variant": os.environ.get("RESEED", ""), "steps": len(groups), "slowest": "", "path": path, "cells": ncells, "tris": len(f), "watertight": bool(m.is_watertight),
          "top_mm": round(float(m.bounds[1][2]) - H, 1), "solids": len(extra), "mesher": ("C, " + cmesh.LAST.get("by", "")) if cmesh.LAST["used"] else ("Python" + (f" ({cmesh.LAST['error']})" if cmesh.LAST["error"] else ""))}
     try: r["want_mm"] = round(min(25.0, (max((float(op[3]) for op in s.ops if op[0] == "prism"), default=H) - H) * (sc if fin else 1.0)), 1)          # how high the tallest thing was designed to stand: the runner checks the mesh got there
     except Exception: r["want_mm"] = 0.0
     if sp and (ov or sp[1] / sp[0] < gg.BASE_MM - 0.05): r["want_mm"] = 0.0          # (an oval shows only the part of the round layout that lies on it)          # only a part of the layout is on the base: its tallest thing may be off it, so the height says nothing here
-    r.update(gg3.scene_report(s)); return r
+    r.update(gg3.scene_report(s)); r["errors"] = _kl.since(_km); return r
 
 
 
@@ -935,10 +936,12 @@ def _draw2d_pil(s, png, px=900, transparent=False):
         box = (x0, y0, x1, y1); lay.paste(Image.composite(Image.new("RGB", m.size, "black"), lay.crop(box), m), box)
     for ps, dep, kind in s.final_gcuts():
         for p in ps: fill(p, gg.CUTC.get(kind, "#222222"))
+    _chopk = {id(q): c["kind"] for c in getattr(s, "chops", []) for op in c.get("ops", []) for q in op[1]}          # a chamfered solid's outlines -> its own kind
     lw = max(1, int(round(0.3 / 72 * (px / 3) * SS)))
     for op in s.ops:
         if op[0] == "prism": _, ps, z0, top, kind = op; tier = z0 > gg.H
         else: _, ps, z0, hh, a, kind = op; top = z0 + hh; tier = z0 > gg.H - gg.SINK + 0.01
+        if kind == "rockc": kind = next((_chopk[id(q)] for q in ps if id(q) in _chopk), kind)          # a chamfered solid's placeholder: drawn in the solid's own material, not the placeholder's orange
         kk = 0.78 + 0.13 * (top - gg.H); col = gg.COL.get(kind, "#8a8a8a")
         for p in ps:
             if p is None or p.is_empty: continue

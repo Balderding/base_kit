@@ -2,3 +2,7 @@
 /* the pixel font (Silkscreen, SIL Open Font License 1.1, see docs/fonts/OFL.txt), baked by tools/bake_font.py: regular, bold */
 201 RCDATA "pixelfont.bin"
 202 RCDATA "pixelfont_bold.bin"
+/* the model files the kit uses (gui\used_models.json lists them; all public domain, CC0: see models\SOURCES.md),
+   packed and compressed by cport\models.c's mdl_pack into gui\models.bin, read in memory by cport\models.c
+   (mdl_blob_from_resource): no models folder, no download */
+MODELS_BIN RCDATA "models.bin"

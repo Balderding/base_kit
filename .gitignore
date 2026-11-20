@@ -28,3 +28,6 @@ gui/*.res
 bbbcore.dll
 cport/bin/
 cport/*.exe
+
+# built by cport/geos_static/build_geos.cmd (GEOS 3.14.1, static): not kept in git
+cport/geos_static/lib/

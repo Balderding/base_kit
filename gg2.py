@@ -203,12 +203,12 @@ def corridor_x(n):
     R = lambda u0, u1, v0, v1: Polygon([f(u0, v0), f(u1, v0), f(u1, v1), f(u0, v1)])
     keep = []                      # set-piece footprints (deck plates stay 0.5 mm clear of these)
     def free(p): return not keep or not p.buffer(0.4).intersects(unary_union(keep))
-    lanes = iter([off - 8.5, off + 8.5, off - 2.0, off + 4.5])    # parallel bands across the base for linear pieces
+    lanes = iter([off - 8.5, off + 8.5, off - 2.0, off + 4.5, off - 12.5, off + 12.5, off - 15.5, off + 15.5])    # parallel bands across the base for linear pieces (the last four only when a layout asks for more than four: it raised StopIteration)
     if "walk2" in F:               # grated walkway between two pipes (the build that worked best before)
         s.prism([R(-20, 20, off - 4.2, off - 3.1), R(-20, 20, off + 3.1, off + 4.2)], H + 0.9, "rail")
         s.prism([R(u, u + 0.95, off - 3.4, off + 3.4) for u in np.arange(-19, 19, 1.75)], H + 0.55, "metal", z0=H - 0.8, foot=False)
         s.gcut([R(-20, 20, off - 3.15, off + 3.15)], 0.6, "slot"); keep.append(R(-20, 20, off - 4.2, off + 4.2))
-        lanes = iter([off - 9.6, off + 9.6, off - 13.0, off + 13.0])
+        lanes = iter([off - 9.6, off + 9.6, off - 13.0, off + 13.0, off - 15.8, off + 15.8, off - 17.5, off + 17.5])          # the last four: only when more than four are asked for
         F = F + ["pipe", "pipe"]
     for k in range(F.count("pipe")):
         pv = next(lanes)

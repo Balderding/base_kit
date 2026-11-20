@@ -18,11 +18,12 @@ Output: out/<style>/*.stl + *_iso.png (3D picture) + *_2d.png (the drawing from 
 """
 import random, sys, os, json, time, csv, subprocess, argparse, signal, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from kit_settings import CFG, HERE
+from kit_settings import CFG, HERE, figure_scale
+import kitlog          # every error caught anywhere goes to out/kit_errors.log, a crash of this run too
 import live          # the window's live view: progress notes (nothing unless KIT_LIVE is set)
 
 ALL_STYLES = ["badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine",
-              "swamp", "cynder", "targa", "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast"]
+              "swamp", "cynder", "targa", "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast"] + __import__("newstyles").names()          # + the styles kept one per file (style_<name>.py)
 VARIANTS = ["", "r1", "r2", "r3", "r4", "r5", "r6", "r7"]
 
 
@@ -412,7 +413,10 @@ def one_base(style, n, stop):
                       "theme": r.get("theme", ""), "plan_line": r.get("plan_line", ""), "plan": json.dumps(r["plan"]) if r.get("plan") else "",
                       "dropped": ", ".join(sorted(set(r.get("skipped", [])))), "restarts": r.get("restarts", 0),
                       "note": "rim seam closed" if seam else "", "diff": r.get("diff", ""),
-                      "made": f"mesh: {r['mesher']}; pictures: {r.get('pictures', '-')}" if r.get("mesher") else ""})
+                      "made": f"mesh: {r['mesher']}; pictures: {r.get('pictures', '-')}" if r.get("mesher") else "",
+                      "errors": list(r.get("errors", []))})
+        if r.get("errors"):          # what went wrong inside the base (it was built without those parts); every detail in out/kit_errors.log
+            with _lock: print(f"  !    {nm(style, n)}: {len(r['errors'])} error(s) caught while making it, first: {r['errors'][0]}  (all of them in {kitlog._file()})", flush=True)
         if not reason: break
     ok = bool(tries) and not tries[-1]["reason"]
     live.finish(n)          # its live note goes: the window shows the finished card
@@ -430,7 +434,7 @@ def sheet(style, results):
         last = r["tries"][-1] if r["tries"] else {}
         note = "OK" if r["ok"] else "FLAGGED"
         if last.get("variant", "original") != "original": note += " (variant)"
-        ax.set_title(f"{r['base']}  detail {r.get('detail', '')}  {note}", fontsize=10, color="#222" if r["ok"] else "#c00")
+        ax.set_title(f"{r['base']}  detail {r.get('detail', '')}  {note}", fontsize=10, color="#222" if r["ok"] else "#1f3a93")          # a flagged base in navy (the same as cport/meshglue.h MG_SHEET_FLAG_RGB), never red (balderding cannot read red well)
     plt.tight_layout(); fig.savefig(os.path.join(CFG["out_folder"], f"{style}_sheet.png"), dpi=70); plt.close(fig)
 
 
@@ -526,6 +530,9 @@ def main():
     try: SCALE = float(a.scale or CFG.get("scenery_scale", 1.0))
     except ValueError: raise SystemExit("--scale must be a number, e.g. --scale 3")
     if not 1.0 <= SCALE <= 4.0: raise SystemExit("--scale must be between 1 and 4")
+    if SCALE != 1.0 and figure_scale(SIZE, SCALE) == 1.0:          # small bases keep the classic look and its detail (kit_settings.figure_scale)
+        print(f"scale  : x{SCALE:g} asked, but a {size_tag()} mm base is under {CFG.get('figure_scale_from_mm', 50):g} mm: built in the classic look, with its detail", flush=True)
+        SCALE = 1.0
     LAYOUT = SIZE if SCALE == 1.0 else round(max(30.0, SIZE / SCALE), 1)          # the size the scene is laid out at; below 30 mm the kit cannot lay one out, so a small base shows the middle of a 30 mm layout
     if SCALE != 1.0:
         os.environ.update({"KIT_FINAL_MM": f"{SIZE:g}", "KIT_SCALE": f"{SCALE:g}", "BASE_MM": f"{LAYOUT:g}"})
@@ -650,11 +657,11 @@ def run_style(style, nums, workers):
     results.sort(key=lambda r: r["base"])
     rep = os.path.join(CFG["out_folder"], f"{a.style}_report.csv")
     with open(rep, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f); w.writerow(["base", "result", "attempt", "variant", "build secs", "failure reason", "dropped pieces", "restarts", "note", "steps", "slowest steps", "% different from closest of last 10", "detail level", "theme", "made by", "plan from", "plan"])
+        w = csv.writer(f); w.writerow(["base", "result", "attempt", "variant", "build secs", "failure reason", "dropped pieces", "restarts", "note", "steps", "slowest steps", "% different from closest of last 10", "detail level", "theme", "made by", "errors caught", "plan from", "plan"])
         for r in results:
             for i, t in enumerate(r["tries"], 1):
                 res = ("OK" if not t["reason"] else ("FLAGGED" if i == len(r["tries"]) and not r["ok"] else "retried"))
-                w.writerow([r["base"], res, i, t["variant"], t["secs"], t["reason"] or "", t["dropped"], t["restarts"], t.get("note", ""), t.get("steps", ""), t.get("slowest", ""), t.get("diff", ""), r.get("detail", ""), t.get("theme", ""), t.get("made", ""), t.get("plan_line", ""), t.get("plan", "")])
+                w.writerow([r["base"], res, i, t["variant"], t["secs"], t["reason"] or "", t["dropped"], t["restarts"], t.get("note", ""), t.get("steps", ""), t.get("slowest", ""), t.get("diff", ""), r.get("detail", ""), t.get("theme", ""), t.get("made", ""), " | ".join(t.get("errors", [])), t.get("plan_line", ""), t.get("plan", "")])
     sheet(a.style, results)
     ok = sum(r["ok"] for r in results)
     print(f"DONE {a.style}: {ok}/{len(nums)} OK, {flagged} flagged, {round((time.time() - t0) / 60, 1)} min. "

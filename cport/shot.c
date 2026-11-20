@@ -15,10 +15,17 @@
 typedef HRESULT (WINAPI *PD3DCompile)(LPCVOID, SIZE_T, LPCSTR, const D3D_SHADER_MACRO *, ID3DInclude *, LPCSTR, LPCSTR, UINT, UINT, ID3DBlob **, ID3DBlob **);
 
 static const char HLSL[] =
-    "struct VI { float3 p : POSITION; float s : SHADE; };\n"
-    "struct VO { float4 p : SV_Position; nointerpolation float s : SHADE; };\n"
-    "VO vs(VI i) { VO o; o.p = float4(i.p, 1.0); o.s = i.s; return o; }\n"
-    "float4 ps(VO i) : SV_Target { return float4(i.s * 0.86, i.s * 0.84, i.s * 0.80, 1.0); }\n";
+    "struct VI { float3 p : POSITION; float s : SHADE; float2 uv : TEXCOORD; };\n"
+    "struct VO { float4 p : SV_Position; nointerpolation float s : SHADE; float2 uv : TEXCOORD; };\n"
+    "Texture2D tx : register(t0); SamplerState sp : register(s0);\n"
+    "VO vs(VI i) { VO o; o.p = float4(i.p, 1.0); o.s = i.s; o.uv = i.uv; return o; }\n"
+    "float4 ps(VO i) : SV_Target { return float4(i.s * 0.86, i.s * 0.84, i.s * 0.80, 1.0); }\n"
+    /* the colour view: the 2D drawing's colour straight above each point, lit by the same shade. Off the drawing, or on
+       its white surround, the grey of the plain picture */
+    "float4 pst(VO i) : SV_Target {\n"
+    "  float3 c = float3(0.86, 0.84, 0.80);\n"
+    "  if (i.uv.x >= 0 && i.uv.x <= 1 && i.uv.y >= 0 && i.uv.y <= 1) { float3 t = tx.Sample(sp, i.uv).rgb; if (!(t.r > 0.97 && t.g > 0.97 && t.b > 0.97)) c = t; }\n"
+    "  return float4(saturate(c * (0.40 + 0.70 * i.s)), 1.0); }\n";
 
 #define REL(x) do { if (x) { IUnknown_Release((IUnknown *)(x)); (x) = NULL; } } while (0)
 
@@ -26,6 +33,12 @@ static int fail(char *err, int n, const char *what, HRESULT hr) { snprintf(err, 
 
 int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, double elev, double azim, int mode,
                 unsigned char *rgb, char *dev, int devlen, char *err, int errlen) {
+    return shot_render_tex(V, nv, F, nt, w, h, elev, azim, mode, NULL, 0, 0, NULL, rgb, dev, devlen, err, errlen);
+}
+int shot_render_tex(const double *V, int nv, const int *F, int nt, int w, int h, double elev, double azim, int mode,
+                    const unsigned char *tex, int tw, int th, const double *win,
+                    unsigned char *rgb, char *dev, int devlen, char *err, int errlen) {
+    if (tex && (tw < 1 || th < 1 || tw > 16384 || th > 16384 || !win || !(win[2] > win[0]) || !(win[3] > win[1]))) return fail(err, errlen, "colour drawing", 0);
     if (w < 8 || h < 8 || w > 16384 || h > 16384) return fail(err, errlen, "picture size", 0);
     /* 1. the triangles on the screen, exactly as mesher.shot works them out */
     double e_ = elev * M_PI / 180.0, a_ = azim * M_PI / 180.0;
@@ -34,8 +47,8 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
     double L[3] = { -0.45, -0.35, 0.82 }, ll = sqrt(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]); L[0] /= ll; L[1] /= ll; L[2] /= ll;
     double r = 1.0; for (int i = 0; i < nv; i++) { double ax = fabs(V[3 * i]), ay = fabs(V[3 * i + 1]); if (ax > r) r = ax; if (ay > r) r = ay; }
     double sc1 = (w - 20) / (2 * r), sc2 = (h - 20) / (2 * r * sin(e_) + 10 * cos(e_)), sc = sc1 < sc2 ? sc1 : sc2;
-    float *buf = malloc(sizeof(float) * 12 * (size_t)(nt ? nt : 1)); double *XYZ = malloc(sizeof(double) * 9 * (size_t)(nt ? nt : 1)); float *sh = malloc(sizeof(float) * (nt ? nt : 1));
-    if (!buf || !XYZ || !sh) { free(buf); free(XYZ); free(sh); return fail(err, errlen, "out of memory", 0); }
+    float *buf = malloc(sizeof(float) * 18 * (size_t)(nt ? nt : 1)); double *XYZ = malloc(sizeof(double) * 9 * (size_t)(nt ? nt : 1)); const double **UVP = malloc(sizeof(double *) * 3 * (size_t)(nt ? nt : 1)); float *sh = malloc(sizeof(float) * (nt ? nt : 1));
+    if (!buf || !XYZ || !sh || !UVP) { free(buf); free(XYZ); free(sh); free(UVP); return fail(err, errlen, "out of memory", 0); }
     int n = 0; double ymin = 1e300, ymax = -1e300, zmin = 1e300, zmax = -1e300;
     for (int t = 0; t < nt; t++) {
         const double *A = V + 3 * F[3 * t], *B = V + 3 * F[3 * t + 1], *C = V + 3 * F[3 * t + 2];
@@ -48,7 +61,7 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
         const double *P3[3] = { A, B, C };
         for (int k = 0; k < 3; k++) {
             const double *p = P3[k]; double X = p[0] * right[0] + p[1] * right[1] + p[2] * right[2], Y = p[0] * up[0] + p[1] * up[1] + p[2] * up[2], Z = p[0] * cam[0] + p[1] * cam[1] + p[2] * cam[2];
-            XYZ[9 * n + 3 * k] = X; XYZ[9 * n + 3 * k + 1] = Y; XYZ[9 * n + 3 * k + 2] = Z;
+            XYZ[9 * n + 3 * k] = X; XYZ[9 * n + 3 * k + 1] = Y; XYZ[9 * n + 3 * k + 2] = Z; UVP[3 * n + k] = p;
             if (Y < ymin) ymin = Y; if (Y > ymax) ymax = Y; if (Z < zmin) zmin = Z; if (Z > zmax) zmax = Z;
         }
         n++;
@@ -56,13 +69,17 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
     double cy = (ymax + ymin) / 2, zr = zmax - zmin > 1e-9 ? zmax - zmin : 1.0;
     for (int t = 0; t < n; t++) for (int k = 0; k < 3; k++) {
         double X = XYZ[9 * t + 3 * k], Y = XYZ[9 * t + 3 * k + 1], Z = XYZ[9 * t + 3 * k + 2];
-        double PX = w / 2.0 + X * sc, PY = h / 2.0 - (Y - cy) * sc; float *o = buf + 12 * t + 4 * k;
+        double PX = w / 2.0 + X * sc, PY = h / 2.0 - (Y - cy) * sc; float *o = buf + 18 * t + 6 * k;
         o[0] = (float)(PX / w * 2.0 - 1.0); o[1] = (float)(1.0 - PY / h * 2.0); o[2] = (float)(0.01 + 0.98 * (Z - zmin) / zr); o[3] = sh[t];          /* depth: nearer = larger */
+        o[4] = o[5] = -1.0f;
+        if (tex) { const double *p = UVP[3 * t + k]; o[4] = (float)((p[0] - win[0]) / (win[2] - win[0])); o[5] = (float)((win[3] - p[1]) / (win[3] - win[1])); }          /* the drawing straight above: rows top down */
     }
+    free(UVP);
     free(XYZ); free(sh);
     /* 2. Direct3D 11 */
     ID3D11Device *D = NULL; ID3D11DeviceContext *X = NULL; ID3D11Texture2D *ct = NULL, *dt = NULL, *st = NULL; ID3D11RenderTargetView *rtv = NULL; ID3D11DepthStencilView *dsv = NULL;
     ID3D11Buffer *vb = NULL; ID3D11VertexShader *vs = NULL; ID3D11PixelShader *ps = NULL; ID3D11InputLayout *il = NULL; ID3D11DepthStencilState *dss = NULL; ID3D11RasterizerState *rs = NULL;
+    ID3D11Texture2D *tt = NULL; ID3D11ShaderResourceView *srv = NULL; ID3D11SamplerState *smp = NULL;
     ID3DBlob *bv = NULL, *bp = NULL, *be = NULL; HRESULT hr; int ok = 0; D3D_FEATURE_LEVEL fl;
     D3D_FEATURE_LEVEL want[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0 };
     hr = E_FAIL;
@@ -77,11 +94,12 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
     HMODULE dc = LoadLibraryA("d3dcompiler_47.dll"); PD3DCompile comp = dc ? (PD3DCompile)(void *)GetProcAddress(dc, "D3DCompile") : NULL;
     if (!comp) { fail(err, errlen, "d3dcompiler_47.dll missing", 0); goto done; }
     if (FAILED(hr = comp(HLSL, sizeof HLSL - 1, "shot", NULL, NULL, "vs", "vs_4_0", 0, 0, &bv, &be))) { fail(err, errlen, "vertex shader", hr); goto done; }
-    if (FAILED(hr = comp(HLSL, sizeof HLSL - 1, "shot", NULL, NULL, "ps", "ps_4_0", 0, 0, &bp, &be))) { fail(err, errlen, "pixel shader", hr); goto done; }
+    if (FAILED(hr = comp(HLSL, sizeof HLSL - 1, "shot", NULL, NULL, tex ? "pst" : "ps", "ps_4_0", 0, 0, &bp, &be))) { fail(err, errlen, "pixel shader", hr); goto done; }
     if (FAILED(hr = ID3D11Device_CreateVertexShader(D, ID3D10Blob_GetBufferPointer(bv), ID3D10Blob_GetBufferSize(bv), NULL, &vs))) { fail(err, errlen, "CreateVertexShader", hr); goto done; }
     if (FAILED(hr = ID3D11Device_CreatePixelShader(D, ID3D10Blob_GetBufferPointer(bp), ID3D10Blob_GetBufferSize(bp), NULL, &ps))) { fail(err, errlen, "CreatePixelShader", hr); goto done; }
-    D3D11_INPUT_ELEMENT_DESC ie[2] = { { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }, { "SHADE", 0, DXGI_FORMAT_R32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 } };
-    if (FAILED(hr = ID3D11Device_CreateInputLayout(D, ie, 2, ID3D10Blob_GetBufferPointer(bv), ID3D10Blob_GetBufferSize(bv), &il))) { fail(err, errlen, "CreateInputLayout", hr); goto done; }
+    D3D11_INPUT_ELEMENT_DESC ie[3] = { { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }, { "SHADE", 0, DXGI_FORMAT_R32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+                                       { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 } };
+    if (FAILED(hr = ID3D11Device_CreateInputLayout(D, ie, 3, ID3D10Blob_GetBufferPointer(bv), ID3D10Blob_GetBufferSize(bv), &il))) { fail(err, errlen, "CreateInputLayout", hr); goto done; }
     D3D11_TEXTURE2D_DESC td; memset(&td, 0, sizeof td); td.Width = w; td.Height = h; td.MipLevels = 1; td.ArraySize = 1; td.SampleDesc.Count = 1;
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
     if (FAILED(hr = ID3D11Device_CreateTexture2D(D, &td, NULL, &ct))) { fail(err, errlen, "colour target", hr); goto done; }
@@ -95,8 +113,20 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
     if (FAILED(hr = ID3D11Device_CreateDepthStencilState(D, &dd, &dss))) { fail(err, errlen, "depth state", hr); goto done; }
     D3D11_RASTERIZER_DESC rd; memset(&rd, 0, sizeof rd); rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;          /* turned-away faces are already gone */
     if (FAILED(hr = ID3D11Device_CreateRasterizerState(D, &rd, &rs))) { fail(err, errlen, "rasterizer state", hr); goto done; }
+    if (tex) {          /* the 2D drawing as a texture, each pixel as it is (point sampling: the drawing's own colours) */
+        unsigned char *t4 = malloc(4 * (size_t)tw * th); if (!t4) { fail(err, errlen, "out of memory", 0); goto done; }
+        for (size_t q = 0; q < (size_t)tw * th; q++) { t4[4 * q] = tex[3 * q]; t4[4 * q + 1] = tex[3 * q + 1]; t4[4 * q + 2] = tex[3 * q + 2]; t4[4 * q + 3] = 255; }
+        D3D11_TEXTURE2D_DESC xd; memset(&xd, 0, sizeof xd); xd.Width = tw; xd.Height = th; xd.MipLevels = 1; xd.ArraySize = 1; xd.SampleDesc.Count = 1;
+        xd.Format = DXGI_FORMAT_R8G8B8A8_UNORM; xd.Usage = D3D11_USAGE_IMMUTABLE; xd.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SUBRESOURCE_DATA xs; memset(&xs, 0, sizeof xs); xs.pSysMem = t4; xs.SysMemPitch = 4 * tw;
+        hr = ID3D11Device_CreateTexture2D(D, &xd, &xs, &tt); free(t4);
+        if (FAILED(hr)) { fail(err, errlen, "colour texture", hr); goto done; }
+        if (FAILED(hr = ID3D11Device_CreateShaderResourceView(D, (ID3D11Resource *)tt, NULL, &srv))) { fail(err, errlen, "colour texture view", hr); goto done; }
+        D3D11_SAMPLER_DESC sd2; memset(&sd2, 0, sizeof sd2); sd2.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT; sd2.AddressU = sd2.AddressV = sd2.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP; sd2.MaxLOD = D3D11_FLOAT32_MAX;
+        if (FAILED(hr = ID3D11Device_CreateSamplerState(D, &sd2, &smp))) { fail(err, errlen, "colour sampler", hr); goto done; }
+    }
     if (n) {
-        D3D11_BUFFER_DESC bd; memset(&bd, 0, sizeof bd); bd.ByteWidth = (UINT)(sizeof(float) * 12 * (size_t)n); bd.Usage = D3D11_USAGE_IMMUTABLE; bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        D3D11_BUFFER_DESC bd; memset(&bd, 0, sizeof bd); bd.ByteWidth = (UINT)(sizeof(float) * 18 * (size_t)n); bd.Usage = D3D11_USAGE_IMMUTABLE; bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
         D3D11_SUBRESOURCE_DATA sd; memset(&sd, 0, sizeof sd); sd.pSysMem = buf;
         if (FAILED(hr = ID3D11Device_CreateBuffer(D, &bd, &sd, &vb))) { fail(err, errlen, "vertex buffer", hr); goto done; }
     }
@@ -105,9 +135,10 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
     ID3D11DeviceContext_OMSetRenderTargets(X, 1, &rtv, dsv); ID3D11DeviceContext_OMSetDepthStencilState(X, dss, 0); ID3D11DeviceContext_RSSetState(X, rs);
     D3D11_VIEWPORT vp = { 0, 0, (float)w, (float)h, 0, 1 }; ID3D11DeviceContext_RSSetViewports(X, 1, &vp);
     if (n) {
-        UINT stride = 16, off = 0; ID3D11DeviceContext_IASetVertexBuffers(X, 0, 1, &vb, &stride, &off); ID3D11DeviceContext_IASetInputLayout(X, il);
+        UINT stride = 24, off = 0; ID3D11DeviceContext_IASetVertexBuffers(X, 0, 1, &vb, &stride, &off); ID3D11DeviceContext_IASetInputLayout(X, il);
         ID3D11DeviceContext_IASetPrimitiveTopology(X, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ID3D11DeviceContext_VSSetShader(X, vs, NULL, 0); ID3D11DeviceContext_PSSetShader(X, ps, NULL, 0);
+        if (tex) { ID3D11DeviceContext_PSSetShaderResources(X, 0, 1, &srv); ID3D11DeviceContext_PSSetSamplers(X, 0, 1, &smp); }
         ID3D11DeviceContext_Draw(X, (UINT)(3 * n), 0);
     }
     ID3D11DeviceContext_CopyResource(X, (ID3D11Resource *)st, (ID3D11Resource *)ct);
@@ -120,6 +151,6 @@ int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, dou
     ID3D11DeviceContext_Unmap(X, (ID3D11Resource *)st, 0);
     ok = 1;
 done:
-    REL(be); REL(bv); REL(bp); REL(rs); REL(dss); REL(il); REL(ps); REL(vs); REL(vb); REL(dsv); REL(rtv); REL(st); REL(dt); REL(ct); REL(X); REL(D);
+    REL(smp); REL(srv); REL(tt); REL(be); REL(bv); REL(bp); REL(rs); REL(dss); REL(il); REL(ps); REL(vs); REL(vb); REL(dsv); REL(rtv); REL(st); REL(dt); REL(ct); REL(X); REL(D);
     free(buf); return ok;
 }

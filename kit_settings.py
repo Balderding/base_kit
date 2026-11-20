@@ -35,3 +35,10 @@ def load():
     return cfg
 
 CFG = load()
+
+def figure_scale(size_mm, scale):
+    """the scenery scale a base of this size really gets: a figure scale (32, 28 or 15 mm figures) only from
+    "figure_scale_from_mm" (default 50) up. A smaller base keeps the classic look (scale 1), the whole small scene with
+    its detail on top: at figure scale a 30 mm base showed only a bare part of a scene. size_mm: the diameter, or an
+    oval's long side."""
+    return 1.0 if float(size_mm) < float(CFG.get("figure_scale_from_mm", 50)) - 1e-6 else float(scale)

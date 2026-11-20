@@ -8,7 +8,8 @@ SUBJ = {"wall": "ruined wall", "dais_brazier": "platform with a brazier", "dais_
         "crater": "crater", "colonnade": "colonnade", "hull": "wreck", "tree": "great stump", "circle": "ritual circle", "ruin": "ruined building", "pool": "pool", "nest": "great nest",
         "spires": "spires", "tentacles": "tentacle pit", "portal": "doorway on the rim", "shaft": "shaft with windlass", "camp": "camp fire and bedrolls", "depot": "stacked crates and barrels",
         "graves": "row of graves", "wagon": "broken wagon", "corral": "fenced ring", "machine": "machine", "emplacement": "sandbagged gun pit", "tent": "tent", "log": "fallen giant tree",
-        "well": "well", "statue": "plinth and fallen statue", "organ": "great organ with veins", "bridge": "stream with a crossing"}
+        "well": "well", "statue": "plinth and fallen statue", "organ": "great organ with veins", "bridge": "stream with a crossing",
+        "blight_thorns": "cluster of twisted thorns", "blight_rift": "rift torn in the ground", "blight_runes": "cracked rune ring"}
 PATH = {"ruts": "wagon ruts", "trail": "footpath", "track": "rail track", "boards": "boardwalk", "stream": "stream", "stones": "stepping stones", "way": "paved way", "pipe": "pipe run",
         "cable": "cables", "veins": "vein or root", "none": "none"}
 rows = ["| Style | Theme | Subject | Path | Belongs to it |", "|---|---|---|---|---|"]

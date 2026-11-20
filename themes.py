@@ -148,3 +148,4 @@ THEMES = {
     T("whale bones", "skeleton", "none", "wall:shrubs*2 back:pebbles*2 at:posts", ban=("crate", "iron")),
 ],
 }
+__import__("newstyles").hook_themes(THEMES)          # the styles kept one per file (style_<name>.py)
