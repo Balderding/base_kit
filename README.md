@@ -42,7 +42,14 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
-## Since 2.1.0 (not released yet): bases that make sense
+## What is new in 2.2: true-size bases, room for the model, outcrops, an icon
+
+![Sixteen bases built by 2.2](examples/sheet_2.2.0.png)
+
+- **An icon for the exe**: a 1950s badge (the kit's title card) where it is big, BBB in front of a red disc where
+  it is small (taskbar, title bar). `tools\make_icon.py` makes it.
+- **A bigger pixel font in the window** (twice the size, on the art grid). The side panel, the buttons and the
+  window's smallest size grew so every label fits.
 
 - **Things on top are their real size, on every base (the new default).** A crate is 14 mm, a barrel 11 mm and a
   skull about 4 mm beside a 32 mm man (1:56, which fits 28 and 32 mm games), whatever the base size. The base is laid
@@ -345,14 +352,14 @@ STL files; `python tools\make_examples.py` makes a fresh set).
 <!-- EXAMPLES -->
 | Size | | |
 |---|---|---|
-| **30 mm** | ![highland 30 mm](examples/030mm_1_highland.png)<br>highland: "standing stones" | ![coast 30 mm](examples/030mm_2_coast.png)<br>coast: "tide pool" |
-| **40 mm** | ![forest 40 mm](examples/040mm_1_forest.png)<br>forest: "fallen giant" | ![swamp 40 mm](examples/040mm_2_swamp.png)<br>swamp: "hunters' hide" |
-| **50 mm** | ![badlands 50 mm](examples/050mm_1_badlands.png)<br>badlands: "broken wagon" | targa: did not build |
-| **60 mm** | ![maahl 60 mm](examples/060mm_1_maahl.png)<br>maahl: "buried temple" | ![dungeon 60 mm](examples/060mm_2_dungeon.png)<br>dungeon: "summoning circle" |
-| **80 mm** | ![urban 80 mm](examples/080mm_1_urban.png)<br>urban: "tram stop" | ![trederra 80 mm](examples/080mm_2_trederra.png)<br>trederra: "field graves" |
-| **100 mm** | ![fortress 100 mm](examples/100mm_1_fortress.png)<br>fortress: "armoury" | ![infestation 100 mm](examples/100mm_2_infestation.png)<br>infestation: "egg chamber" |
-| **130 mm** | ![mine 130 mm](examples/130mm_1_mine.png)<br>mine: "shaft head" | ![temple 130 mm](examples/130mm_2_temple.png)<br>temple: "processional way" |
-| **160 mm** | ![graveyard 160 mm](examples/160mm_1_graveyard.png)<br>graveyard: "robbed tomb" | ![cynder 160 mm](examples/160mm_2_cynder.png)<br>cynder: "ash burial" |
+| **30 mm** | ![highland 30 mm](examples/030mm_1_highland.png)<br>highland: "ruined tower" | ![maahl 30 mm](examples/030mm_2_maahl.png)<br>maahl: "altar of sand" |
+| **40 mm** | ![frontier 40 mm](examples/040mm_1_frontier.png)<br>frontier: "water stop" | ![coast 40 mm](examples/040mm_2_coast.png)<br>coast: "jetty" |
+| **50 mm** | ![graveyard 50 mm](examples/050mm_1_graveyard.png)<br>graveyard: "fresh grave" | ![sundered 50 mm](examples/050mm_2_sundered.png)<br>sundered: "statue toppled in the square" |
+| **60 mm** | ![trederra 60 mm](examples/060mm_1_trederra.png)<br>trederra: "gun pit" | ![ferrum 60 mm](examples/060mm_2_ferrum.png)<br>ferrum: "slag heap" |
+| **80 mm** | ![cynder 80 mm](examples/080mm_1_cynder.png)<br>cynder: "obsidian field" | ![swamp 80 mm](examples/080mm_2_swamp.png)<br>swamp: "hanging tree" |
+| **100 mm** | ![ashveil 100 mm](examples/100mm_1_ashveil.png)<br>ashveil: "marker pylon" | ![thornwild 100 mm](examples/100mm_2_thornwild.png)<br>thornwild: "root tangle" |
+| **130 mm** | ![infestation 130 mm](examples/130mm_1_infestation.png)<br>infestation: "acid pool" | ![fortress 130 mm](examples/130mm_2_fortress.png)<br>fortress: "koi pond" |
+| **160 mm** | ![temple 160 mm](examples/160mm_1_temple.png)<br>temple: "sealed vault" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "broken wagon" |
 <!-- /EXAMPLES -->
 
 **Every base is one place.** A base is not a pile of objects: it has a subject (a mine shaft, a wreck, a shrine), a

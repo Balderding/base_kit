@@ -71,7 +71,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_BAR 0xFFC9D3E6u           /* label ink on a navy bar */
 #define C_STONEL 0xFF20242Bu        /* the stone texture's light and dark grain on the side panel */
 #define C_STONED 0xFF16181Eu
-enum { SIDE_W = 300, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
+enum { SIDE_W = 420, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
 enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ };
 
@@ -595,6 +595,12 @@ static int pf_width(const PFont *f, const WCHAR *s) {          /* from the pen t
    role 0: labels, chips, buttons (bold, else regular); 1: the main buttons (big if it fits); 2: numbers and titles, big bold first */
 static const int ROLES[3][5] = { { 2, 1, 0 }, { 3, 2, 1, 0 }, { 4, 3, 2, 1, 0 } };
 static int spec_fits(int sp, const WCHAR *s, int w) { const PFont *f = &pf[(sp - 1) & 1]; int sc = sp > 2 ? 2 * FS : FS; return f->gl && pf_width(f, s) * sc <= w - 2 * sc; }
+static int need_w(const WCHAR *s, int minw) { int w; if (!lookFont || !pf[1].gl) return minw; w = pf_width(&pf[1], s) * FS + 2 * FS + S(18); return w > minw ? w : minw; }          /* a button wide enough for its text in the bold pixel font */
+static int need_wa(const char *s, int minw) { WCHAR b[64]; swprintf(b, 64, L"%hs", s); return need_w(b, minw); }
+static int footFit = 1;          /* the bottom bar's buttons sized to the pixel font (0: the window is too narrow for that, old sizes and the plain font) */
+#define NW(s, m) (footFit ? need_w(s, m) : (m))
+static int foot_need(void) { int f = footFit, n; footFit = 1; n = NW(L"20 picked", S(84)) + S(4) + NW(L"Pick all", S(84)) + S(8) + NW(L"Clear", S(70)) + S(8) + NW(L"More choices", S(118)) + S(24)
+    + NW(L"Hide details", S(104)) + S(8) + NW(L"Open folder", S(110)) + S(10) + NW(L"Build the picked bases", S(220)) + S(44); footFit = f; return n; }          /* how wide the main area must be for the bottom bar */
 static int pick_spec(int role, const WCHAR *s, int w) { const int *r; if (!lookFont) return 0; for (r = ROLES[role]; *r; r++) if (spec_fits(*r, s, w)) return *r; return 0; }
 static void pf_draw(int sp, const WCHAR *s, int x, int y, int w, int h, ARGB c, UINT fl) {
     const PFont *f = &pf[(sp - 1) & 1]; int sc = sp > 2 ? 2 * FS : FS, tw = pf_width(f, s), bw = tw + 4, bh = f->rows, pen = 2, dx, dy, r, i; UINT32 *buf; GpBitmap *bm = NULL; const WCHAR *q;
@@ -617,6 +623,8 @@ static void pf_draw(int sp, const WCHAR *s, int x, int y, int w, int h, ARGB c, 
 static void ltxt(const WCHAR *s, int x, int y, int w, int h, HFONT fo, ARGB c, UINT fl, int role, int sp) {
     if (sp < 0) sp = pick_spec(role, s, w);
     if (sp && lookFont) pf_draw(sp, s, x, y, w, h, c, fl); else txt(s, x, y, w, h, fo, c, fl);
+    if (!sp && lookFont && role >= 0 && GetEnvironmentVariableA("BBB_FONT_MISS", NULL, 0)) {          /* a test: the texts that did not fit the pixel font */
+        char e[MAX_PATH]; FILE *f; GetEnvironmentVariableA("BBB_FONT_MISS", e, MAX_PATH); f = fopen(e, "a"); if (f) { fprintf(f, "%d %d %ls\n", w, role, s); fclose(f); } }
 }
 static int chipSpec = -1;          /* chips of one block share one font size, chosen so that every label of the block fits */
 static void chip(const char *label, int x, int y, int w, int h, int on, int kind, int idx) {
@@ -811,26 +819,27 @@ static void help(int W, int H);
 /* the strip under the top bar: the PC's meters on the left (Small: one CPU and one video card bar; Live card and Big view:
    one thin bar per core), the three views and the Parts button on the right */
 static const char *VIEWS[3] = { "Small", "Live card", "Big view" };
-static RECT partsR;          /* where the Parts button is, for its panel */
+static RECT partsR; static int lookW = 238;          /* how wide the three look switches came out (the title stops short of them) */          /* where the Parts button is, for its panel */
 static void meter_bar(int x, int y, int w, int h, double f, ARGB c) {
     if (lookPix) { px_box(x, y, w, h, 0, 0xFF262A33u, 0, 0, 0); if (f > 0) px_box(x, y, w * (f > 1 ? 1 : f), h, 0, c, 0, 0, 0); }
     else { rr(x, y, w, h, h / 2.0, 0xFF262A33u, 0, 0); if (f > 0.02) rr(x, y, w * (f > 1 ? 1 : f), h, h / 2.0, c, 0, 0); }
 }
 static void strip(int x, int y, int w, int h) {
-    int cw = S(78), gap = S(4), pw = S(64), rx = x + w - pw, i, gx; WCHAR b[64];
+    int cw = S(78), gap = S(4), pw = need_w(L"Parts", S(64)), rx = x + w - pw, i, gx, vl = need_w(L"VIDEO CARD", S(80)) - S(10); WCHAR b[64];
+    for (i = 0; i < 3; i++) cw = need_wa(VIEWS[i], cw);
     chipSpec = -1;
     button(L"Parts", rx, y, pw, h, lvParts ? 1 : 0, H_PARTS); SetRect(&partsR, rx, y, rx + pw, y + h);
     for (i = 2; i >= 0; i--) { rx -= cw + gap; chip(VIEWS[i], rx, y, cw, h, lvView == i, H_VIEW, i); }
     rx -= S(14); gx = rx;
-    if (lvGpu) {          /* the video card: its 3D engine, every program on the PC */
-        gx = rx - S(196);
-        ltxt(L"VIDEO CARD", gx, y, S(80), h, fLabel, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
-        if (gpuV < 0) txt(L"not available", gx + S(82), y, S(110), h, fSmall, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-        else { meter_bar(gx + S(82), y + h / 2 - S(5), S(70), S(10), gpuV, C_GOLD); swprintf(b, 64, L"%d%%", (int)(gpuV * 100 + 0.5)); txt(b, gx + S(156), y, S(40), h, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE); }
-        hit(gx, y, S(196), h, H_PARTS, 12);
+    if (lvGpu && rx - x > vl + S(116) + need_w(L"OUR CORES", S(64)) + S(240)) {          /* the video card: its 3D engine, every program on the PC (only with room left for our cores) */
+        gx = rx - S(116) - vl;
+        ltxt(L"VIDEO CARD", gx, y, vl, h, fLabel, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
+        if (gpuV < 0) txt(L"not available", gx + vl + S(2), y, S(110), h, fSmall, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        else { meter_bar(gx + vl + S(2), y + h / 2 - S(5), S(70), S(10), gpuV, C_GOLD); swprintf(b, 64, L"%d%%", (int)(gpuV * 100 + 0.5)); txt(b, gx + vl + S(76), y, S(40), h, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE); }
+        hit(gx, y, vl + S(116), h, H_PARTS, 12);
     }
     if (lvCores && ncpu) {          /* our own threads only: one bar each that is working, busiest first; idle ones are not shown */
-        int lw = S(64), ax = x + lw, aw = gx - S(120) - ax, n = nthr;          /* room for "12 of 36 cores" after the bars */
+        int lw = need_w(L"OUR CORES", S(64)) - S(8), ax = x + lw, aw = gx - S(120) - ax, n = nthr;          /* room for "12 of 36 cores" after the bars */
         ltxt(L"OUR CORES", x, y, lw, h, fLabel, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 0, -1);
         if (!busy && !n) txt(L"idle", ax, y, S(80), h, fSmall, C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         else if (lvView == 0 || aw < n * 3) {          /* Small (or too narrow for a bar each): one bar, how many of the PC's cores we use */
@@ -1011,7 +1020,7 @@ static void paint(HDC out, int W, int H) {
         swprintf(nb, 8, L"%d", selCount); ltxt(nb, x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, fBig, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, H_COUNT, 0);
         y += bh + S(8);
     }
-    chip("Allow overhangs (the print needs supports)", S(16), y, S(SIDE_W - 32), S(24), selSup, H_SUP, 0); y += S(30);
+    chip("Allow overhangs (needs supports)", S(16), y, S(SIDE_W - 32), S(24), selSup, H_SUP, 0); y += S(30);
     if (selSup) { chip("Join into one solid (Manifold)", S(16), y, S(SIDE_W - 32), S(24), selJoin, H_JOIN, 0); y += S(30); }          /* only with overhangs allowed */
     {          /* MANIFOLD: what the Manifold library does to each base, one switch each */
         int x0 = S(16), wAll = S(SIDE_W - 32), half = (wAll - S(6)) / 2, k;
@@ -1036,11 +1045,12 @@ static void paint(HDC out, int W, int H) {
 
     /* the top: what is happening */
     {          /* the look switches, left of Help: Pixel (L), Textures (T), Pixel font (F) */
-        static const char *LK[3] = { "Pixel", "Textures", "Pixel font" }; static const int LW[3] = { 58, 78, 86 }; int on[3], lx = W - S(22) - S(96) - S(10), k;
+        static const char *LK[3] = { "Pixel", "Textures", "Pixel font" }; static const int LW[3] = { 58, 78, 86 }; int on[3], lx = W - S(22) - S(96) - S(10), k, lw;
         on[0] = lookPix; on[1] = lookTex; on[2] = lookFont;
-        for (k = 2; k >= 0; k--) { lx -= S(LW[k]); chip(LK[k], lx, S(14), S(LW[k]), S(22), on[k], H_LOOK, k); lx -= S(4); }
+        for (k = 2; k >= 0; k--) { lw = need_wa(LK[k], S(LW[k])); lx -= lw; chip(LK[k], lx, S(14), lw, S(22), on[k], H_LOOK, k); lx -= S(4); }
+        lookW = W - S(22) - S(96) - S(10) - lx;
     }
-    txt(head, mx + S(22), S(14), mw - S(44) - S(110) - S(238), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+    txt(head, mx + S(22), S(14), mw - S(44) - S(110) - lookW - S(10), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     txt(sub, mx + S(22), S(42), mw - S(44) - S(110), S(20), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     button(L"Help   ?", W - S(22) - S(96), S(18), S(96), S(34), 0, H_HELP);
     strip(mx + S(22), S(HEAD_H) - S(8), mw - S(44), S(26));
@@ -1139,19 +1149,21 @@ static void paint(HDC out, int W, int H) {
     fillrect(mx + 1, fy, mw, S(FOOT_H), C_SIDE); if (lookPix && lookTex) texfill(mx + 1, fy, mw, S(FOOT_H), 2, C_STONEL, 0);
     fillrect(mx + 1, fy, mw, lookPix ? PX : 1, C_LINE);
     {
-        int by = fy + S(15), bh = S(36), x = mx + S(22), rx = W - S(22), btnw = S(220);
+        int by, bh, x, rx, btnw; footFit = foot_need() <= mw; by = fy + S(15); bh = S(36); x = mx + S(22); rx = W - S(22); btnw = NW(L"Build the picked bases", S(220));
         if (busy == 2) swprintf(b, 200, L"%d to go", wanted - doneN); else if (np == 1) wcscpy(b, L"1 picked"); else swprintf(b, 200, L"%d picked", np);
-        ltxt(b, x, by, S(84), bh, fBtn, np || busy == 2 ? C_ACC : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1, -1); x += S(88);
-        button(L"Pick all", x, by, S(84), bh, busy || !ncell ? 3 : 0, H_ALL); x += S(92);
-        button(L"Clear", x, by, S(70), bh, busy || !np ? 3 : 0, H_CLEAR); x += S(78);
-        button(L"More choices", x, by, S(118), bh, busy || !ncell ? 3 : 0, H_MORE);
+        { int lw0 = NW(L"20 picked", S(84)), w1 = NW(L"Pick all", S(84)), w2 = NW(L"Clear", S(70)), w3 = NW(L"More choices", S(118));
+        ltxt(b, x, by, lw0, bh, fBtn, np || busy == 2 ? C_ACC : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1, -1); x += lw0 + S(4);
+        button(L"Pick all", x, by, w1, bh, busy || !ncell ? 3 : 0, H_ALL); x += w1 + S(8);
+        button(L"Clear", x, by, w2, bh, busy || !np ? 3 : 0, H_CLEAR); x += w2 + S(8);
+        button(L"More choices", x, by, w3, bh, busy || !ncell ? 3 : 0, H_MORE); }
         if (busy) button(L"Stop", rx - btnw, by - S(3), btnw, bh + S(6), 2, H_STOP);
         else {
             if (np == 1) wcscpy(b, L"Build 1 base"); else if (np) swprintf(b, 200, L"Build %d bases", np); else wcscpy(b, L"Build the picked bases");
             button(b, rx - btnw, by - S(3), btnw, bh + S(6), np ? 1 : 3, H_GO);
         }
-        rx -= btnw + S(10); button(L"Open folder", rx - S(110), by, S(110), bh, 0, H_OPEN); rx -= S(118);
-        button(showDetails ? L"Hide details" : L"Details", rx - S(104), by, S(104), bh, 0, H_DETAILS);
+        { int wo = NW(L"Open folder", S(110)), wd = NW(L"Hide details", S(104));
+        rx -= btnw + S(10); button(L"Open folder", rx - wo, by, wo, bh, 0, H_OPEN); rx -= wo + S(8);
+        button(showDetails ? L"Hide details" : L"Details", rx - wd, by, wd, bh, 0, H_DETAILS); }
     }
     if (lvParts && !showHelp) parts_panel(W, H);
     if (showHelp) help(W, H);
@@ -1330,7 +1342,7 @@ static void make_fonts(void) {
     HFONT *fs[] = { &fTitle, &fLabel, &fUI, &fSmall, &fBig, &fBtn, &fMono }; int px[] = { 19, 11, 13, 12, 18, 15, 12 }, wt[] = { 700, 600, 400, 400, 600, 600, 400 }, i;
     for (i = 0; i < 7; i++) { if (*fs[i]) DeleteObject(*fs[i]); *fs[i] = CreateFontW(-S(px[i]), 0, 0, 0, wt[i], 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, i == 6 ? L"Consolas" : L"Segoe UI"); }
     PX = (int)(SC * 2 + 0.25); if (PX < 1) PX = 1;          /* the art pixel and the pixel font's scale follow the monitor's scaling */
-    FS = (int)(SC + 0.25); if (FS < 1) FS = 1;
+    FS = 2 * (int)(SC + 0.25); if (FS < 2) FS = 2;          /* the pixel font: two screen pixels a font pixel at 100 %, on the art grid (2026-11-20: was one) */
 }
 static void ini(int save) {
     WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu,
@@ -1407,7 +1419,8 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
     case WM_SIZE: redraw(); return 0;
-    case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, S(1190), S(890) }; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
+    case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, S(1190), S(890) }, wa2; int nw = S(SIDE_W) + foot_need(); SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa2, 0); if (nw > r.right && nw < wa2.right - wa2.left - 40) r.right = nw;          /* wide enough for the bottom bar in the pixel font, if the screen is */
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
     case 0x02E0: { RECT *r = (RECT *)l; SC = HIWORD(w) / 96.0; make_fonts(); SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
     case WM_DESTROY: if (hJob) TerminateJobObject(hJob, 1); if (!selftest) ini(1); PostQuitMessage(0); return 0;
     }
@@ -1448,7 +1461,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if (!selftest) ini(0);
     swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
     speed_env();          /* the speed switches, for every job started from here on */
-    make_fonts(); wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
+    make_fonts(); { int nw = (int)((S(SIDE_W) + foot_need()) / SC) + 2; if (nw > cw && (nw + 20) * SC <= wa.right - wa.left) cw = nw; }          /* start wide enough for the bottom bar */
+    wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
     memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     if (selftest) ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;

@@ -1,4 +1,5 @@
-"""tools/make_icon.py [font] [out.ico]: (default: Impact, gui/bbb_kit.ico) the exe's icon, drawn in code, in the 1950s poster look of the kit's title card: a red disc
+"""tools/make_icon.py [font] [out.ico]: (default: Impact, gui/bbb_kit.ico). 256 to 48 px: the badge (gui/icon_badge.png);
+32, 24, 16 px: the BBB disc below, drawn in code so it stays readable that small. the exe's icon, drawn in code, in the 1950s poster look of the kit's title card: a red disc
 with a soft halftone and sparkle stars, a checkered ring and a cream rim round it, and "BBB" in front, the middle B big and
 the outer two small: yellow letters with a thick dark outline and a dark drop shadow. No teal; no red letters.
 Drawn at 4x and reduced; writes the .ico (256 ... 16) and a preview sheet."""
@@ -65,12 +66,21 @@ def draw(S):
     return im.resize((S, S), Image.LANCZOS)
 
 
+def badge(S, path):
+    """the badge picture (gui/icon_badge.png, 1950s poster art) cut to its circle, the dark corners transparent, at S x S"""
+    im = Image.open(path).convert("RGBA"); W = im.size[0]; k = 4
+    m = Image.new("L", (W * k, W * k), 0); ImageDraw.Draw(m).ellipse((W * k / 2 - 0.493 * W * k, W * k / 2 - 0.493 * W * k, W * k / 2 + 0.493 * W * k, W * k / 2 + 0.493 * W * k), fill=255)
+    im.putalpha(m.resize((W, W), Image.LANCZOS))
+    return im.resize((S, S), Image.LANCZOS)
+
+
 if __name__ == "__main__":
     import os
     here = os.path.dirname(os.path.abspath(__file__))
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(here, "..", "gui", "bbb_kit.ico")
     sizes = [256, 128, 64, 48, 32, 24, 16]
-    ims = {s: draw(s) for s in sizes}
+    bp = os.path.join(here, "..", "gui", "icon_badge.png")
+    ims = {s: (badge(s, bp) if s >= 48 and os.path.exists(bp) else draw(s)) for s in sizes}          # the badge where it can be seen, BBB where it is small
     if out: ims[256].save(out, format="ICO", sizes=[(s, s) for s in sizes], append_images=[ims[s] for s in sizes[1:]])
     sheet = Image.new("RGB", (256 + 128 + 64 + 48 * 3 + 32 * 3 + 24 * 3 + 16 * 3 + 90, 270), (32, 34, 40)); x = 10
     for s in sizes:
