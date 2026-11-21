@@ -1085,12 +1085,13 @@ FAC(F_L_tentacles) { MK(L_tentacles, 2); b->s[0] = as_s(call, 0, "kind", "tendri
 int ft_track_cart(double cx, double cy, double a, PyRandom *rng, double gauge, const char *body, const char *wheel, Geo **foot, SoLayers *L) {
     Ar AR = { 0 }, *A = &AR; GL u = { 0 }; GEOSGeometry *box_, *wh, *d; double Ln, W; Frame ff; int R_ = SC_ERR;
     *foot = NULL;
-    Ln = py_uniform(rng, 3.8, 4.6); W = 2 * gauge - 0.2; ff = lf_frame(cx, cy, a); CK(box_ = Rect(A, cx, cy, Ln, W, a));
-    for (int su = -1; su <= 1; su += 2) for (int sv = -1; sv <= 1; sv += 2) { CK(d = RectF(A, &ff, su * (Ln / 2 - 0.9), sv * gauge, 1.3, 0.95, a)); gp(&u, d); }
+    double q = gauge / 1.15;          /* everything with the gauge: 1 for the classic track, about 4.7 for a true-size one */
+    Ln = py_uniform(rng, 3.8, 4.6) * q; W = 2 * gauge - 0.2 * q; ff = lf_frame(cx, cy, a); CK(box_ = Rect(A, cx, cy, Ln, W, a));
+    for (int su = -1; su <= 1; su += 2) for (int sv = -1; sv <= 1; sv += 2) { CK(d = RectF(A, &ff, su * (Ln / 2 - 0.9 * q), sv * gauge, 1.3 * q, 0.95 * q, a)); gp(&u, d); }
     CK(wh = U(A, &u));
-    CK(d = Rect(A, cx, cy, Ln, 2 * gauge + 1.0, a)); put_foot(foot, d);
-    L_up(L, wh, 1.3, wheel); L_up(L, box_, py_uniform(rng, 2.0, 2.4), body);
-    CK(d = Inset(A, box_, 0.5)); L_tcut(L, d, 1, 0.92);
+    CK(d = Rect(A, cx, cy, Ln, 2 * gauge + 1.0 * q, a)); put_foot(foot, d);
+    L_up(L, wh, 1.3 * (q > 1 ? q * 0.8 : 1), wheel); L_up(L, box_, py_uniform(rng, 2.0, 2.4) * (q > 1 ? q * 0.8 : 1), body);
+    CK(d = Inset(A, box_, 0.5 * q)); L_tcut(L, d, 1, 0.92 * (q > 1 ? q * 0.8 : 1));
     R_ = 0;
 fail: gfree(&u); ar_free(A); if (R_ < 0) { lyl_free(L); geo_unref(*foot); *foot = NULL; } return R_;
 }

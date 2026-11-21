@@ -38,6 +38,10 @@
 #include "live.h"
 #include "runner.h"          /* cport\runner.c: the job runner (gui_job.py in C) */
 #include "pipeline.h"        /* cport\pipeline.c: bbb_kit.exe --core-layout */
+#ifdef BBB_NK
+#include "nk_ui.h"          /* the Nuklear face (gui
+k): built with BBB_NK=1, still one exe */
+#endif
 int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core-mesh and the other C parts of the kit */
 
 #define WM_LINE (WM_APP + 1)
@@ -73,7 +77,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_STONED 0xFF16181Eu
 enum { SIDE_W = 420, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -81,6 +85,12 @@ typedef struct { RECT r; int kind, idx; } Hit;
 static Cell cells[MAXC]; static int ncell;
 static Hit hits[400]; static int nhit, hovK, hovI = -1;
 static WCHAR *logv[MAXLOG]; static int nlog;
+/* the scale follows the window (2026-11-20): the layout is drawn for DESIGN_W x DESIGN_H, and at any window size everything is
+   scaled so that size fits (larger on a big or 4K screen, smaller on a small one), in 5 % steps from 0.6 to 3; under that the side
+   panel scrolls (sideOff, sideMax) and the cards scroll as they always did */
+enum { DESIGN_W = 1650, DESIGN_H = 1030 };          /* DESIGN_H: the side panel's full height (measured with the UI check, compact mode) */
+static double fit_sc(int w, int h) { double s = fmin(w / (double)DESIGN_W, h / (double)DESIGN_H); s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
+static int sideOff, sideMax, hitDy, txtDy, titleH;          /* the side panel's scroll (px), how far it can go, and the shift its click areas get */
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
 static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1", curObj[16] = "3"; static int curSup, curJoin = 1, selScale = 0, selObj = 5, curFig = 32;          /* selScale: the game scale (GAMEMM), selObj: the slider (OBJM) */
@@ -456,10 +466,10 @@ static void fillrect(int x, int y, int w, int h, ARGB c) {
     GdipFillRectangleI(G, (GpBrush *)fillB, x, y, w, h);
 }
 static void txt(const WCHAR *s, int x, int y, int w, int h, HFONT f, ARGB c, UINT fl) {
-    RECT r = { x, y, x + w, y + h }; GdipFlush(G, FlushIntentionSync);
+    RECT r = { x, y + txtDy, x + w, y + h + txtDy }; GdipFlush(G, FlushIntentionSync);
     SelectObject(DC, f); SetTextColor(DC, RGB((c >> 16) & 255, (c >> 8) & 255, c & 255)); DrawTextW(DC, s, -1, &r, fl | DT_NOPREFIX);
 }
-static void hit(int x, int y, int w, int h, int kind, int idx) { if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
+static void hit(int x, int y, int w, int h, int kind, int idx) { y += hitDy; if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
 static int hov(int kind, int idx) { return hovK == kind && hovI == idx; }
 
 /* ---------- the pixel drawing kit: boxes with notched corners and a bevel, discs, dither textures made in code ----------
@@ -810,7 +820,7 @@ static void card(int i, int x, int y, int w, int h) {
     case ST_FAIL: pill(L"not built: failed the check", x + pad, capY + S(20), iw < S(180) ? iw : S(180), S(18), C_GOLD, C_ONGOLD); break;
     default: swprintf(b, 160, L"detail %d of 4", c->tier); txt(b, x + pad, capY + S(20), iw, S(18), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE);
     }
-    hit(x, y, w, h, H_CARD, i);
+    { RECT cr = { x, y, x + w, y + h }, vis; if (IntersectRect(&vis, &cr, &gridR)) hit(vis.left, vis.top, vis.right - vis.left, vis.bottom - vis.top, H_CARD, i); }          /* only the part of the card that shows (not under the bottom bar)  */
     if ((c->state == ST_OK || c->state == ST_VARIANT) && c->img3c) {          /* the colour view toggle, beside the base's BUILT label (its hit is after the card's, so it wins) */
         int tw = S(78), th = S(18); chip("COLOUR", x + w - pad - tw, capY + S(20), tw, th, c->col, H_COL, i);
     }
@@ -956,35 +966,40 @@ static void obj_slider(int *y) {
     else swprintf(b, 160, L"%ls crate %.0f mm, barrel %.0f mm, man %.0f mm", selObj == OBJ_TRUE ? L"True:" : selObj < OBJ_TRUE ? L"Smaller:" : L"Chunkier:", 0.8 * mpm, 0.6 * mpm, man);
     txt(b, x0, *y, wAll, S(28), fSmall, C_TEXT, DT_LEFT | DT_WORDBREAK);
     *y += S(30);
-    {          /* the picture: the base from above, the model's space, the things at their size; the man from the side */
+    if (!sideTight) {          /* the picture (left out when the panel is short of room: the line above still gives the sizes) */
         double pw = wAll - S(8), pk, bx, by, bw, bh, cx, cy, rad, hx, hy; int box; const char *mini = selMini ? MINIS[selMini] : "default";
         rr(x0, *y, wAll, ph, S(6), C_BG, C_LINE, 1);
-        pk = fmin((pw - S(34)) / A, (ph - S(22)) / fmax(B, man + 4));          /* px a mm */
-        bw = A * pk; bh = B * pk; bx = x0 + S(6); by = *y + S(16) + (ph - S(16) - bh) / 2; cx = bx + bw / 2; cy = by + bh / 2;
-        ell(bx, by, bw, bh, 0xFF5A5246u, C_EDGE, 1, 0);
-        ell(bx + S(2), by + S(2), bw - S(4), bh - S(4), 0xFF6E6656u, 0, 0, 0);
-        box = ms_space(A, fmin(A, B) / 2 * 0.97, mini, &rad, &hx, &hy);
-        if (A >= 39.9 && !obj_classic()) {
-            double ex = fmin(hx, bw / 2 / pk * 0.97);
-            if (box) boxl(cx - ex * pk, cy - hy * pk, 2 * ex * pk, 2 * hy * pk, 0, C_TEALL, S(1.5), 1);
-            else ell(cx - rad * pk, cy - rad * pk, 2 * rad * pk, 2 * rad * pk, 0, C_TEALL, S(1.5), 1);
-            txt(L"dashed: the model's space", x0 + S(8), *y + S(2), wAll - S(60), S(14), fSmall, C_TEALL, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
-        }
-        {          /* a crate, a barrel and a rock near the rim, where the kit puts them */
-            double cs = fmax(1, 0.8 * mpm * pk), bs = fmax(1, 0.6 * mpm * pk), rs = fmax(1, 0.5 * mpm * pk), gp = S(2), tw = cs + bs + 1.3 * rs + 2 * gp, ex = cx - tw / 2, ey = cy + bh * 0.5 - fmax(cs, bs) / 2 - S(5);          /* side by side, inside the rim at the front */
-            boxl(ex, ey - cs / 2, cs, cs, 0xFF9C6B3Bu, C_EDGE, 1, 0);
-            ell(ex + cs + gp, ey - bs / 2, bs, bs, 0xFF5D7A8Cu, C_EDGE, 1, 0);
-            ell(ex + cs + bs + 2 * gp, ey - rs / 2, rs * 1.3, rs, 0xFF8A7F74u, C_EDGE, 1, 0);
-        }
-        {          /* the man, from the side, to the right of the base */
-            double mh = man * pk, mx = x0 + wAll - S(18), my = *y + ph - S(6), mw = fmax(S(4), mh * 0.28);
-            rr(mx - mw / 2, my - mh * 0.82, mw, mh * 0.82, mw / 3, 0xFFD8D4CAu, C_EDGE, 1);
-            ell(mx - mw * 0.45, my - mh, mw * 0.9, mw * 0.9, 0xFFD8D4CAu, C_EDGE, 1, 0);
-            swprintf(b, 160, L"%.0f mm", man); txt(b, (int)(mx - S(20)), (int)(my - mh - S(16)), S(40), S(14), fSmall, C_DIM, DT_CENTER | DT_SINGLELINE);
+        {   /* one row on one ground line, all to one scale: the base (from above), a crate, a barrel and a rock, then the man (from the side) */
+            double g = 2.0, cm = 0.8 * mpm, bm = 0.6 * mpm, rm = 0.5 * mpm * 1.3, mwm = man * 0.3, tot = A + g * 4 + cm + bm + rm + mwm, gl = *y + ph - S(10), px;
+            pk = fmin((pw - S(8)) / tot, (ph - S(30)) / fmax(B, man));          /* px a mm: the whole row fits the box */
+            bw = A * pk; bh = B * pk; bx = x0 + S(8); by = gl - bh; cx = bx + bw / 2; cy = by + bh / 2;
+            ell(bx, by, bw, bh, 0xFF5A5246u, C_EDGE, 1, 0);
+            ell(bx + S(2), by + S(2), bw - S(4), bh - S(4), 0xFF6E6656u, 0, 0, 0);
+            box = ms_space(A, fmin(A, B) / 2 * 0.97, mini, &rad, &hx, &hy);
+            if (A >= 39.9 && !obj_classic()) {
+                double ex = fmin(hx, bw / 2 / pk * 0.97);
+                if (box) boxl(cx - ex * pk, cy - hy * pk, 2 * ex * pk, 2 * hy * pk, 0, C_TEALL, S(1.5), 1);
+                else ell(cx - rad * pk, cy - rad * pk, 2 * rad * pk, 2 * rad * pk, 0, C_TEALL, S(1.5), 1);
+                txt(L"dashed: the model's space", x0 + S(8), *y + S(2), wAll - S(16), S(14), fSmall, C_TEALL, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+            }
+            px = bx + bw + g * pk;
+            boxl(px, gl - cm * pk, cm * pk, cm * pk, 0xFF9C6B3Bu, C_EDGE, 1, 0); px += (cm + g) * pk;          /* the crate */
+            ell(px, gl - bm * pk, bm * pk, bm * pk, 0xFF5D7A8Cu, C_EDGE, 1, 0); px += (bm + g) * pk;          /* the barrel, from above */
+            ell(px, gl - rm * pk / 1.3, rm * pk, rm * pk / 1.3, 0xFF8A7F74u, C_EDGE, 1, 0); px += (rm + g) * pk;          /* a rock */
+            {   double mh = man * pk, mw = fmax(S(3), mwm * pk), mx = px + mw / 2;          /* the man, standing on the same line */
+                rr(mx - mw / 2, gl - mh * 0.82, mw, mh * 0.82, mw / 3, 0xFFD8D4CAu, C_EDGE, 1);
+                ell(mx - mw * 0.45, gl - mh, mw * 0.9, mw * 0.9, 0xFFD8D4CAu, C_EDGE, 1, 0);
+                swprintf(b, 160, L"%.0f mm", man); txt(b, (int)(mx - S(22)), (int)(gl - mh - S(15)), S(44), S(14), fSmall, C_DIM, DT_CENTER | DT_SINGLELINE); }
+            fillrect(x0 + S(4), (int)gl, wAll - S(8), 1, C_LINE);          /* the ground line */
         }
         *y += ph + S(8);
     }
 }
+#include "models_popup.c"          /* the Models preview window */
+#ifdef BBB_NK
+static void act(int kind, int idx);
+#include "nk_side.c"
+#endif
 static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
@@ -997,16 +1012,20 @@ static void paint(HDC out, int W, int H) {
         texfill(mx + 1, 0, mw, HH - 2 * PX, 1, 0xFF181A20u, 0);
     }
 
+#ifndef BBB_NK
+    if (sideOff > sideMax) sideOff = sideMax; if (sideOff < 0) sideOff = 0;          /* never past the end (sideMax from the last paint) */
+    GdipTranslateWorldTransform(G, 0, (REAL)-sideOff, MatrixOrderAppend); txtDy = hitDy = -sideOff;          /* GDI+ shapes by the transform, GDI text and click areas by the same shift */          /* the side panel, scrolled */
     /* the left side: what to make */
     if (lookFont && pick_spec(2, L"Balderding's Ballin Base Kit", S(SIDE_W - 24)) < 3 && pick_spec(2, L"Balderding's Ballin", S(SIDE_W - 24)) >= 3) {          /* the pixel title: on two lines, so it can be big */
         int sp = pick_spec(2, L"Balderding's Ballin", S(SIDE_W - 24));
-        pf_draw(sp, L"Balderding's Ballin", S(16), S(6), S(SIDE_W - 24), S(22), C_TEXT, DT_LEFT); pf_draw(sp, L"Base Kit", S(16), S(28), S(SIDE_W - 24), S(22), C_TEXT, DT_LEFT);
-        txt(L"Save time and money.", S(16), S(48), S(SIDE_W - 32), S(16), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
+        int lh = pf[(sp - 1) & 1].cap * (sp > 2 ? 2 * FS : FS) + S(6);          /* a line: the capitals' height at this size, and a gap */
+        pf_draw(sp, L"Balderding's Ballin", S(16), S(6), S(SIDE_W - 24), lh, C_TEXT, DT_LEFT); pf_draw(sp, L"Base Kit", S(16), S(6) + lh, S(SIDE_W - 24), lh, C_TEXT, DT_LEFT);
+        txt(L"Save time and money.", S(16), S(6) + 2 * lh, S(SIDE_W - 32), S(16), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE); titleH = S(6) + 2 * lh + S(18);
     } else {
         ltxt(L"Balderding's Ballin Base Kit", S(16), S(14), S(SIDE_W - 24), S(26), fTitle, C_TEXT, DT_LEFT | DT_SINGLELINE, 2, -1);
         txt(L"Save time and money.", S(16), S(40), S(SIDE_W - 32), S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
     }
-    y = S(68);
+    y = titleH > S(68) ? titleH : S(68); titleH = 0;
     chips(L"STYLE", STYLES, NSTYLES, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 8, selSize, H_SIZE, &y); y -= S(4); chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, selSize - NROUND, H_OVAL, &y);
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
     chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
@@ -1041,18 +1060,27 @@ static void paint(HDC out, int W, int H) {
         int need = y + S(30) + S(8);
         if (!sideTight) { sideNeed = need; if (need > H) { sideTight = 1; InvalidateRect(hMain, NULL, FALSE); } }
         else if (sideNeed <= H) { sideTight = 0; InvalidateRect(hMain, NULL, FALSE); }
+        sideMax = sideTight && need > H ? need - H + S(8) : 0; if (sideOff > sideMax) sideOff = sideMax;          /* still too tall when tight: it scrolls */
     }
+    GdipResetWorldTransform(G); txtDy = hitDy = 0;
+    if (sideMax > 0) { int th = (int)((double)H * H / (H + sideMax)), ty = (int)((double)sideOff / sideMax * (H - th)); fillrect(mx - S(7), 0, S(6), H, C_SIDE); rr(mx - S(6), ty + S(2), S(4), th - S(4), S(2), C_LINE, 0, 0); }          /* its scroll bar */
 
+#else
+    nkui_frame(); nk_side(H); nk_top(mx, mw); nkui_render(G); (void)y;          /* the side panel and the top row in Nuklear */
+#endif
     /* the top: what is happening */
+#ifndef BBB_NK
     {          /* the look switches, left of Help: Pixel (L), Textures (T), Pixel font (F) */
         static const char *LK[3] = { "Pixel", "Textures", "Pixel font" }; static const int LW[3] = { 58, 78, 86 }; int on[3], lx = W - S(22) - S(96) - S(10), k, lw;
         on[0] = lookPix; on[1] = lookTex; on[2] = lookFont;
         for (k = 2; k >= 0; k--) { lw = need_wa(LK[k], S(LW[k])); lx -= lw; chip(LK[k], lx, S(14), lw, S(22), on[k], H_LOOK, k); lx -= S(4); }
+        { int mw = need_w(L"Models", S(84)); lx -= S(6) + mw; button(L"Models", lx, S(12), mw, S(26), 0, H_MODELS); }          /* the Models preview */
         lookW = W - S(22) - S(96) - S(10) - lx;
     }
     txt(head, mx + S(22), S(14), mw - S(44) - S(110) - lookW - S(10), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     txt(sub, mx + S(22), S(42), mw - S(44) - S(110), S(20), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     button(L"Help   ?", W - S(22) - S(96), S(18), S(96), S(34), 0, H_HELP);
+#endif
     strip(mx + S(22), S(HEAD_H) - S(8), mw - S(44), S(26));
     if (!lookPix) {
         fillrect(mx + 1, HH - S(3), mw, S(3), C_LINE);
@@ -1167,6 +1195,9 @@ static void paint(HDC out, int W, int H) {
     }
     if (lvParts && !showHelp) parts_panel(W, H);
     if (showHelp) help(W, H);
+#ifdef BBB_NK
+    if (nkActed) { nkActed = 0; InvalidateRect(hMain, NULL, FALSE); }          /* a widget changed something: draw again with it */
+#endif
     GdipFlush(G, FlushIntentionSync); GdipDeleteGraphics(G); BitBlt(out, 0, 0, W, H, DC, 0, 0, SRCCOPY); SelectObject(DC, obm); DeleteObject(bm); DeleteDC(DC);
 }
 /* the help page: a panel over the window, opened with ? (Shift+/), F1 or the Help button, closed with Esc or a click */
@@ -1272,6 +1303,7 @@ static void act2(int kind, int idx) {
     case H_OPEN: open_folder(); return;
     case H_DETAILS: showDetails = !showDetails; break;
     case H_HELP: showHelp = !showHelp; break;
+    case H_MODELS: mv_open(); return;
     case H_LOOK: if (idx == 0) lookPix = !lookPix; else if (idx == 1) lookTex = !lookTex; else lookFont = !lookFont; break;
     case H_COL: if (idx >= 0 && idx < ncell && cells[idx].img3c) { cells[idx].col = !cells[idx].col; colLast = cells[idx].col; } break;
     case H_CARD: {
@@ -1342,7 +1374,7 @@ static void make_fonts(void) {
     HFONT *fs[] = { &fTitle, &fLabel, &fUI, &fSmall, &fBig, &fBtn, &fMono }; int px[] = { 19, 11, 13, 12, 18, 15, 12 }, wt[] = { 700, 600, 400, 400, 600, 600, 400 }, i;
     for (i = 0; i < 7; i++) { if (*fs[i]) DeleteObject(*fs[i]); *fs[i] = CreateFontW(-S(px[i]), 0, 0, 0, wt[i], 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, i == 6 ? L"Consolas" : L"Segoe UI"); }
     PX = (int)(SC * 2 + 0.25); if (PX < 1) PX = 1;          /* the art pixel and the pixel font's scale follow the monitor's scaling */
-    FS = 2 * (int)(SC + 0.25); if (FS < 2) FS = 2;          /* the pixel font: two screen pixels a font pixel at 100 %, on the art grid (2026-11-20: was one) */
+    FS = (int)(SC * 2 + 0.05); if (FS < 1) FS = 1;          /* rounded down: never larger than the layout around it */          /* the pixel font follows the scale: 2 screen pixels a font pixel at 100 %, 3 at 150 %, 1 at 60 % */          /* the pixel font: two screen pixels a font pixel at 100 %, on the art grid (2026-11-20: was one) */
 }
 static void ini(int save) {
     WCHAR p[MAX_PATH], v[16]; int *vals[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &showDetails, &selScale, &lookPix, &lookTex, &lookFont, &spThr, &spGpu,
@@ -1368,6 +1400,15 @@ static void ini(int save) {
     }
 }
 static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
+#ifdef BBB_NK
+    if (NK && (m == WM_MOUSEMOVE || m == WM_LBUTTONDOWN || m == WM_LBUTTONUP || m == WM_LBUTTONDBLCLK || m == WM_RBUTTONDOWN || m == WM_RBUTTONUP || m == WM_MOUSEWHEEL || m == WM_KEYDOWN || m == WM_KEYUP || m == WM_CHAR)) {          /* Nuklear sees every input; the side panel is its */
+        POINT pt; int side; nkui_event(h, m, w, l);
+        if (m == WM_MOUSEWHEEL) { pt.x = GET_X_LPARAM(l); pt.y = GET_Y_LPARAM(l); ScreenToClient(h, &pt); } else { pt.x = GET_X_LPARAM(l); pt.y = GET_Y_LPARAM(l); }
+        side = (m == WM_KEYDOWN || m == WM_KEYUP || m == WM_CHAR) ? 0 : (pt.x < S(SIDE_W) || pt.y < S(HEAD_H) - S(12));          /* the side panel and the top row are Nuklear's */
+        if (side) { if (m == WM_LBUTTONDOWN) SetCapture(h); if (m == WM_LBUTTONUP) ReleaseCapture(); redraw(); if (m != WM_MOUSEMOVE) return 0; hovK = H_NONE; hovI = -1; return 0; }
+        if (m == WM_LBUTTONUP && GetCapture() == h) { ReleaseCapture(); redraw(); }
+    }
+#endif
     switch (m) {
     case WM_LINE: on_line((int)w, (WCHAR *)l); free((void *)l); return 0;
     case WM_ENDED: on_ended((int)w, (DWORD)l); return 0;
@@ -1391,6 +1432,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
     case WM_LBUTTONDOWN: hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (hovK != H_NONE) act(hovK, hovI); return 0;
     case WM_MOUSEWHEEL:
+        { POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) }; ScreenToClient(h, &pt); if (pt.x < S(SIDE_W) && sideMax > 0) { sideOff -= GET_WHEEL_DELTA_WPARAM(w) * S(90) / 120; if (sideOff < 0) sideOff = 0; if (sideOff > sideMax) sideOff = sideMax; redraw(); return 0; } }
         scrollY -= GET_WHEEL_DELTA_WPARAM(w) * S(90) / 120;
         if (scrollY < 0) scrollY = 0;
         if (scrollY > scrollMax) scrollY = scrollMax;
@@ -1418,14 +1460,19 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
-    case WM_SIZE: redraw(); return 0;
-    case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, S(1190), S(890) }, wa2; int nw = S(SIDE_W) + foot_need(); SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa2, 0); if (nw > r.right && nw < wa2.right - wa2.left - 40) r.right = nw;          /* wide enough for the bottom bar in the pixel font, if the screen is */
+    case WM_SIZE: { RECT rc; GetClientRect(h, &rc); if (rc.right > 0 && rc.bottom > 0) { double s2 = fit_sc(rc.right, rc.bottom); if (fabs(s2 - SC) > 1e-6) { SC = s2; make_fonts();          /* the scale follows the window */
+#ifdef BBB_NK
+        if (NK) { nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme); }
+#endif
+        } } redraw(); return 0; }
+    case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, 900, 560 };          /* as small as 900 x 560 px: the scale follows the window, the side panel scrolls */
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
-    case 0x02E0: { RECT *r = (RECT *)l; SC = HIWORD(w) / 96.0; make_fonts(); SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
+    case 0x02E0: { RECT *r = (RECT *)l; SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
     case WM_DESTROY: if (hJob) TerminateJobObject(hJob, 1); if (!selftest) ini(1); PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(h, m, w, l);
 }
+#include "uicheck.c"          /* the UI check of --resizetest (BBB_TEST_UICHECK) */
 int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     WNDCLASSW wc; MSG msg; RECT wa, r; WCHAR t[MAX_PATH], e[MAX_PATH], *sl; FILE *f; int cw = 1290, chh = 896; JOBOBJECT_EXTENDED_LIMIT_INFORMATION ji; DWORD ex = 0; BOOL dark = TRUE;
     GdiplusStartupInput gin = { 1, NULL, FALSE, FALSE }; ULONG_PTR gtok; HMODULE u32 = GetModuleHandleW(L"user32.dll"), dwm; HDC sdc;
@@ -1443,6 +1490,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if (!strncmp(cmdA, "--demotest", 10)) { selftest = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); }
     else if (!strncmp(cmdA, "--quicktest", 11)) { selftest = 1; stStep = 2; autoBuild = 1; stSize = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 11 + (cmdA[11] == ' ')); }
     else if (!strncmp(cmdA, "--resizetest", 12)) { selftest = 2; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
+    else if (!strncmp(cmdA, "--modelstest", 12)) { selftest = 4; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
     else if (!strncmp(cmdA, "--selftest", 10)) { selftest = 1; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); if (!stShot[0]) wcscpy(stShot, L"bbb_selftest.bmp"); }
     GetModuleFileNameW(NULL, kit, MAX_PATH); sl = wcsrchr(kit, L'\\');
     if (sl) *sl = 0;
@@ -1456,12 +1504,17 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     GdiplusStartup(&gtok, &gin, NULL); pf_load();
     sdc = GetDC(NULL); SC = GetDeviceCaps(sdc, LOGPIXELSY) / 96.0; ReleaseDC(NULL, sdc);
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
-    if ((chh + 44) * SC > wa.bottom - wa.top) { chh = (int)((wa.bottom - wa.top) / SC) - 44; if (chh < 890) { chh = 890; SC = (wa.bottom - wa.top) / (double)(chh + 44); } }          /* a small screen: a lower window, and only then everything a little smaller */
-    if ((cw + 20) * SC > wa.right - wa.left) cw = (int)((wa.right - wa.left) / SC) - 20;
+    {   /* the first size: 85 % of the screen (a self-test: the design size at the screen's DPI), and the scale that fits it */
+        int tw = selftest ? (int)(DESIGN_W * SC) : (int)((wa.right - wa.left) * 0.85), th = selftest ? (int)(DESIGN_H * SC) : (int)((wa.bottom - wa.top) * 0.85);
+        SC = fit_sc(tw, th); cw = (int)(tw / SC + 0.5); chh = (int)(th / SC + 0.5);
+    }
     if (!selftest) ini(0);
     swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
     speed_env();          /* the speed switches, for every job started from here on */
-    make_fonts(); { int nw = (int)((S(SIDE_W) + foot_need()) / SC) + 2; if (nw > cw && (nw + 20) * SC <= wa.right - wa.left) cw = nw; }          /* start wide enough for the bottom bar */
+    make_fonts();
+#ifdef BBB_NK
+    NK = nkui_init("Segoe UI", S(13)); nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme);
+#endif
     wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
     memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
@@ -1477,6 +1530,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     }
     meters_tick(); SetTimer(hMain, 3, 500, NULL);          /* the PC's meters, twice a second */
     ShowWindow(hMain, selftest ? SW_SHOWNOACTIVATE : show); UpdateWindow(hMain);
+    if (selftest == 4) mv_open();          /* --modelstest: the Models window (its timer writes the pictures and quits) */
     if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_LOOK", e, sizeof e) >= 3) { lookPix = e[0] == '1'; lookTex = e[1] == '1'; lookFont = e[2] == '1'; } }          /* a test may ask for another look: 3 digits, pixel textures font */
     if (selftest == 2) {          /* --resizetest: make the window larger, then as small as it will go, and write down what it became */
         FILE *o; WCHAR q[MAX_PATH]; RECT a, b2, c2; LONG st = GetWindowLongW(hMain, GWL_STYLE); int i;
@@ -1489,12 +1543,24 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
             cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5;
             capture(stShot); busy = 0; for (i = 1; i < 8; i++) if (i != 5) cells[i].state = ST_NONE;
         } else capture(stShot);
+        if (GetEnvironmentVariableA("BBB_TEST_UICHECK", NULL, 0)) ui_check(L"large");
         SetWindowPos(hMain, NULL, 0, 0, 200, 200, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); GetClientRect(hMain, &c2);
+        { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SIDEOFF", e, sizeof e)) { capture(NULL); sideOff = atoi(e); } }          /* a test: the side panel scrolled (one paint first, so sideMax is known) */
         swprintf(q, MAX_PATH, L"%ls.small.bmp", stShot); capture(q);
+        if (GetEnvironmentVariableA("BBB_TEST_UICHECK", NULL, 0)) ui_check(L"small");
+        if (GetEnvironmentVariableA("BBB_TEST_SIDEOFF", NULL, 0)) {          /* a test: click Allow overhangs where it is drawn on the scrolled panel; did it switch? */
+            int k, was = selSup, hk = -1; FILE *tf; WCHAR p2[MAX_PATH];
+            for (k = 0; k < nhit; k++) if (hits[k].kind == H_SUP) { int cx = (hits[k].r.left + hits[k].r.right) / 2, cy = (hits[k].r.top + hits[k].r.bottom) / 2; hk = k;
+                SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(cx, cy)); break; }
+            swprintf(p2, MAX_PATH, L"%ls.click.bmp", stShot); capture(p2);
+            swprintf(p2, MAX_PATH, L"%ls.click.txt", stShot); tf = _wfopen(p2, L"w");
+            if (tf) { fprintf(tf, "side_off %d side_max %d found %d overhangs_before %d after %d\n", sideOff, sideMax, hk >= 0, was, selSup); fclose(tf); }
+        }
         SetWindowPos(hMain, NULL, 0, 0, S(1310), S(850), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); showHelp = 1; swprintf(q, MAX_PATH, L"%ls.help.bmp", stShot); capture(q); showHelp = 0; swprintf(q, MAX_PATH, L"%ls.txt", stShot); o = _wfopen(q, L"w");
         if (o) { fprintf(o, "how_many_after_typing_1_5 %d\n", selCount); fprintf(o, "thick_frame %d\nmaximize_box %d\nstart %ldx%ld\nlarger %ldx%ld\nsmallest %ldx%ld\nscroll_max_small %d\n", !!(st & WS_THICKFRAME), !!(st & WS_MAXIMIZEBOX), a.right, a.bottom, b2.right, b2.bottom, c2.right, c2.bottom, scrollMax); fclose(o); }
         return 0;
     }
+    if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SIDEOFF", e, sizeof e)) sideOff = atoi(e); }          /* a test: the side panel scrolled this far (clamped when drawn) */
     if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) % 3; }          /* a test may ask for another game scale: 0 = 32 mm, 1 = 28 mm, 2 = 15 mm */
     if (selftest) { char e[16]; int i; if (GetEnvironmentVariableA("BBB_TEST_SIZE", e, sizeof e)) for (i = 0; i < NSIZES; i++) if (!strcmp(e, SIZES[i])) stSize = i; }          /* and another base size, as written on its chip: 60, 90x52 ... */
     if (selftest == 3) { selStyle = 14; selSize = 8; selDetail = 4; selMini = 0; selCount = 8; selSup = 0; ask_choices(1); }

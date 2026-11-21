@@ -239,5 +239,6 @@ void bsdde_reg(const char *style, const char *cls, const char *kind, const char 
 int bsdde_replaced(void *ctx, double cx, double cy, double a, PyRandom *rng, int hs, double sc, Geo **foot, SoLayers *lay);   /* a stub: see bld_sd_models.c */
 /* the settings the model details read (bld_sd_models.c) */
 void bsdde_config(const char *models_root, double max_height);
+int bsdde_model_row(int i, const char **style, const char **name, const char **rel, double *mm);          /* the model table, for the Models preview */
 void bsdde_models_register(void);                       /* sd_r_models.py + sd_r_models_a..d.py, in their order */
 #endif

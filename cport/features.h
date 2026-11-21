@@ -118,7 +118,8 @@ int sdr_cache_get(const char *style, const char *name, double *k);          /* 1
 void sdr_scale_clear(void);
 void sdr_scale_put(const char *style, const char *name, double k);
 void sdr_scale_star(int has, double k);       /* SCALE["*"] set by code (the file can not) */
-double sdr_real_factor(const char *style, const char *name, const char *cls);           /* real_factor (cached) */
+double sdr_real_factor(const char *style, const char *name, const char *cls);
+int sdr_real_of(const char *style, const char *name, double *real_m, double *drawn_mm);          /* the real size (m) and drawn length (mm); 0: none */           /* real_factor (cached) */
 /* scaled(out, cx, cy, k): the footprint (NEW reference) and the layers made k times larger (out appended) */
 int sdr_scaled(Geo *foot, const SoLayers *layers, double cx, double cy, double k, Geo **foot_out, SoLayers *out);
 /* the register: d(style, cls, kind, name, r=10.5, ground=False)(f0) */

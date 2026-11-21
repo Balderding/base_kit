@@ -1,0 +1,2 @@
+bab18497df988c171fd0d82baad798e1e0e34259
+Local change: one short variable name in nuklear.h is spelled out as glyph_w (the name check flags short letter pairs).

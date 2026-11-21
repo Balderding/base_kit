@@ -372,6 +372,739 @@ static const MRow ROWS[] = {
     {"maahl", "m_shield", "base-meshes/glb/round_shield.glb", "brass", 9.333333333333332, 11.333333333333332, "b", "made", 0.0, 0.2, 0.1, 0.0, 0, 0, {}},          /* sd_r_models_d */
     {"maahl", "m_insect_leg", "base-meshes/glb/insect_leg.glb", "chitin", 69.23076923076923, 84.61538461538461, "b", "debris", 0.0, 0.0, 0.05, 0.0, 0, 0, {}},          /* sd_r_models_d */
     {"maahl", "m_horn", "base-meshes/glb/horn.glb", "chitin", 15.756302521008404, 18.907563025210084, "bf", "debris", 0.0, 0.2, 0.1, 0.0, 0, 0, {}},          /* sd_r_models_d */
+/* IMPORT 2026-11-20 BEGIN: work\import\apply.py */
+    {"graveyard", "m_round_headstone", "polyy-gravestones/obj/grave_01_classic_rounded.obj", "headstone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round-top headstone; reduced 7270 -> 3012 tris; stands on it */
+    {"frontier", "m_round_headstone", "polyy-gravestones/obj/grave_01_classic_rounded.obj", "rock", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round-top headstone; reduced 7270 -> 3012 tris; stands on it */
+    {"graveyard", "m_ring_cross", "polyy-gravestones/obj/grave_02_ring_cross.obj", "headstone", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ring cross; reduced 6749 -> 2827 tris; stands on its own gro */
+    {"highland", "m_ring_cross", "polyy-gravestones/obj/grave_02_ring_cross.obj", "slate", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ring cross; reduced 6749 -> 2827 tris; stands on its own gro */
+    {"graveyard", "m_tapered_obelisk", "polyy-gravestones/obj/grave_03_tapering_obelisk.obj", "headstone", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* obelisk on a plinth; reduced 7725 -> 2940 tris; stands on it */
+    {"obelis", "m_tapered_obelisk", "polyy-gravestones/obj/grave_03_tapering_obelisk.obj", "headstone", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* obelisk on a plinth; reduced 7725 -> 2940 tris; stands on it */
+    {"temple", "m_tapered_obelisk", "polyy-gravestones/obj/grave_03_tapering_obelisk.obj", "tcolumn", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* obelisk on a plinth; reduced 7725 -> 2940 tris; stands on it */
+    {"graveyard", "m_broken_column", "polyy-gravestones/obj/grave_04_broken_column.obj", "headstone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken column on a plinth; reduced 6459 -> 3101 tris; stands */
+    {"temple", "m_broken_column", "polyy-gravestones/obj/grave_04_broken_column.obj", "tcolumn", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken column on a plinth; reduced 6459 -> 3101 tris; stands */
+    {"sundered", "m_broken_column", "polyy-gravestones/obj/grave_04_broken_column.obj", "headstone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken column on a plinth; reduced 6459 -> 3101 tris; stands */
+    {"graveyard", "m_gothic_headstone", "polyy-gravestones/obj/grave_05_gothic_arch.obj", "headstone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* gothic arch headstone; reduced 5692 -> 3286 tris; stands on  */
+    {"sundered", "m_gothic_headstone", "polyy-gravestones/obj/grave_05_gothic_arch.obj", "headstone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* gothic arch headstone; reduced 5692 -> 3286 tris; stands on  */
+    {"graveyard", "m_ledger_slab", "polyy-gravestones/obj/grave_06_ledger_slab.obj", "headstone", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sunken ledger slab; reduced 7413 -> 3585 tris; stands on its */
+    {"dungeon", "m_ledger_slab", "polyy-gravestones/obj/grave_06_ledger_slab.obj", "flag", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sunken ledger slab; reduced 7413 -> 3585 tris; stands on its */
+    {"graveyard", "m_pillow_marker", "polyy-gravestones/obj/grave_07_pillow_marker.obj", "headstone", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low pillow marker; reduced 7942 -> 3278 tris; stands on its  */
+    {"graveyard", "m_weeping_angel", "polyy-gravestones/obj/grave_08_weeping_angel.obj", "headstone", 9.991, 11.729, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* weeping angel on a pedestal; reduced 6421 -> 3163 tris; stan */
+    {"sundered", "m_weeping_angel", "polyy-gravestones/obj/grave_08_weeping_angel.obj", "headstone", 9.991, 11.729, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* weeping angel on a pedestal; reduced 6421 -> 3163 tris; stan */
+    {"graveyard", "m_draped_urn", "polyy-gravestones/obj/grave_09_draped_urn.obj", "headstone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* draped urn on a pedestal; reduced 7392 -> 2715 tris; stands  */
+    {"temple", "m_draped_urn", "polyy-gravestones/obj/grave_09_draped_urn.obj", "tcolumn", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* draped urn on a pedestal; reduced 7392 -> 2715 tris; stands  */
+    {"graveyard", "m_chest_tomb", "polyy-gravestones/obj/grave_10_chest_tomb.obj", "headstone", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* chest tomb; reduced 7552 -> 3215 tris; stands on its own gro */
+    {"temple", "m_chest_tomb", "polyy-gravestones/obj/grave_10_chest_tomb.obj", "tcolumn", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* chest tomb; reduced 7552 -> 3215 tris; stands on its own gro */
+    {"dungeon", "m_chest_tomb", "polyy-gravestones/obj/grave_10_chest_tomb.obj", "flag", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* chest tomb; reduced 7552 -> 3215 tris; stands on its own gro */
+    {"graveyard", "m_leaning_slab", "polyy-gravestones/obj/grave_11_leaning_slab.obj", "headstone", 6.182, 7.258, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* leaning cracked slab; reduced 7658 -> 3522 tris; stands on i */
+    {"swamp", "m_leaning_slab", "polyy-gravestones/obj/grave_11_leaning_slab.obj", "tflag", 6.182, 7.258, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* leaning cracked slab; reduced 7658 -> 3522 tris; stands on i */
+    {"graveyard", "m_boulder_memorial", "polyy-gravestones/obj/grave_12_boulder_memorial.obj", "headstone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder with a polished face; reduced 7532 -> 3172 tris; sta */
+    {"highland", "m_boulder_memorial", "polyy-gravestones/obj/grave_12_boulder_memorial.obj", "slate", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder with a polished face; reduced 7532 -> 3172 tris; sta */
+    {"graveyard", "m_plank_cross", "polyy-gravestones/obj/grave_13_plank_cross.obj", "wood", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden plank cross; reduced 7420 -> 3145 tris; stands on its */
+    {"frontier", "m_plank_cross", "polyy-gravestones/obj/grave_13_plank_cross.obj", "wood", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden plank cross; reduced 7420 -> 3145 tris; stands on its */
+    {"badlands", "m_plank_cross", "polyy-gravestones/obj/grave_13_plank_cross.obj", "wood", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden plank cross; reduced 7420 -> 3145 tris; stands on its */
+    {"graveyard", "m_iron_cross", "polyy-gravestones/obj/grave_14_iron_cross.obj", "iron", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* iron grave cross; reduced 7332 -> 3212 tris; stands on its o */
+    {"frontier", "m_iron_cross", "polyy-gravestones/obj/grave_14_iron_cross.obj", "iron", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* iron grave cross; reduced 7332 -> 3212 tris; stands on its o */
+    {"trederra", "m_iron_cross", "polyy-gravestones/obj/grave_14_iron_cross.obj", "iron", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* iron grave cross; reduced 7332 -> 3212 tris; stands on its o */
+    {"graveyard", "m_stump_marker", "polyy-gravestones/obj/grave_15_stump_marker.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* carved tree-stump marker; reduced 7630 -> 3475 tris; stands  */
+    {"forest", "m_stump_marker", "polyy-gravestones/obj/grave_15_stump_marker.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* carved tree-stump marker; reduced 7630 -> 3475 tris; stands  */
+    {"graveyard", "m_scroll_headstone", "polyy-gravestones/obj/grave_16_scroll_top.obj", "headstone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* scroll-top stone; reduced 7776 -> 3442 tris; stands on its o */
+    {"graveyard", "m_stepped_cross", "polyy-gravestones/obj/grave_17_stepped_cross.obj", "headstone", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stepped calvary cross; reduced 5902 -> 3648 tris; stands on  */
+    {"sundered", "m_stepped_cross", "polyy-gravestones/obj/grave_17_stepped_cross.obj", "headstone", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stepped calvary cross; reduced 5902 -> 3648 tris; stands on  */
+    {"graveyard", "m_double_headstone", "polyy-gravestones/obj/grave_19_double_arch.obj", "headstone", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* double headstone; reduced 7182 -> 2867 tris; stands on its o */
+    {"graveyard", "m_bordered_slate", "polyy-gravestones/obj/grave_20_bordered_slate.obj", "headstone", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bordered slate stone; reduced 7558 -> 3676 tris; stands on i */
+    {"graveyard", "m_deaths_head_stone", "polyy-gravestones/obj/grave_21_winged_deaths_head.obj", "headstone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* winged death's-head stone; reduced 8057 -> 3103 tris; stands */
+    {"sundered", "m_deaths_head_stone", "polyy-gravestones/obj/grave_21_winged_deaths_head.obj", "headstone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* winged death's-head stone; reduced 8057 -> 3103 tris; stands */
+    {"graveyard", "m_sarcophagus", "polyy-gravestones/obj/grave_22_sarcophagus.obj", "headstone", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lidded sarcophagus; reduced 7790 -> 2997 tris; stands on its */
+    {"temple", "m_sarcophagus", "polyy-gravestones/obj/grave_22_sarcophagus.obj", "tcolumn", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lidded sarcophagus; reduced 7790 -> 2997 tris; stands on its */
+    {"dungeon", "m_sarcophagus", "polyy-gravestones/obj/grave_22_sarcophagus.obj", "flag", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lidded sarcophagus; reduced 7790 -> 2997 tris; stands on its */
+    {"obelis", "m_sarcophagus", "polyy-gravestones/obj/grave_22_sarcophagus.obj", "headstone", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lidded sarcophagus; reduced 7790 -> 2997 tris; stands on its */
+    {"graveyard", "m_toppled_stone", "polyy-gravestones/obj/grave_25_toppled_stone.obj", "headstone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* toppled broken stone on a ledger; reduced 7623 -> 3356 tris; */
+    {"sundered", "m_toppled_stone", "polyy-gravestones/obj/grave_25_toppled_stone.obj", "headstone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* toppled broken stone on a ledger; reduced 7623 -> 3356 tris; */
+    {"graveyard", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"dungeon", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"swamp", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"badlands", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"blight", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"ashveil", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"trederra", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"sundered", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"thornwild", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"urban", "m_human_skull", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* human skull */
+    {"graveyard", "m_cranium", "polyy-bones/obj/skull_02_cranium.obj", "bone", 1.104, 1.296, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cranium without jaw; reduced 6269 -> 3676 tris */
+    {"dungeon", "m_cranium", "polyy-bones/obj/skull_02_cranium.obj", "bone", 1.104, 1.296, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cranium without jaw; reduced 6269 -> 3676 tris */
+    {"blight", "m_cranium", "polyy-bones/obj/skull_02_cranium.obj", "bone", 1.104, 1.296, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cranium without jaw; reduced 6269 -> 3676 tris */
+    {"dungeon", "m_cracked_skull", "polyy-bones/obj/skull_03_cracked.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked skull; reduced 4761 -> 3405 tris */
+    {"badlands", "m_cracked_skull", "polyy-bones/obj/skull_03_cracked.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked skull; reduced 4761 -> 3405 tris */
+    {"urban", "m_cracked_skull", "polyy-bones/obj/skull_03_cracked.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked skull; reduced 4761 -> 3405 tris */
+    {"ashveil", "m_cracked_skull", "polyy-bones/obj/skull_03_cracked.obj", "bone", 1.214, 1.426, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked skull; reduced 4761 -> 3405 tris */
+    {"dungeon", "m_giant_skull", "polyy-bones/obj/skull_05_giant.obj", "bone", 2.76, 3.24, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant humanoid skull */
+    {"badlands", "m_giant_skull", "polyy-bones/obj/skull_05_giant.obj", "bone", 2.76, 3.24, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant humanoid skull */
+    {"maahl", "m_giant_skull", "polyy-bones/obj/skull_05_giant.obj", "bone", 2.76, 3.24, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant humanoid skull */
+    {"temple", "m_demon_skull", "polyy-bones/obj/skull_06_horned.obj", "bone", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horned skull; reduced 4816 -> 3682 tris */
+    {"dungeon", "m_demon_skull", "polyy-bones/obj/skull_06_horned.obj", "bone", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horned skull; reduced 4816 -> 3682 tris */
+    {"blight", "m_demon_skull", "polyy-bones/obj/skull_06_horned.obj", "bone", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horned skull; reduced 4816 -> 3682 tris */
+    {"cynder", "m_demon_skull", "polyy-bones/obj/skull_06_horned.obj", "tooth", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horned skull; reduced 4816 -> 3682 tris */
+    {"dungeon", "m_brute_skull", "polyy-bones/obj/skull_08_tusked.obj", "bone", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tusked brute skull */
+    {"badlands", "m_brute_skull", "polyy-bones/obj/skull_08_tusked.obj", "bone", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tusked brute skull */
+    {"blight", "m_brute_skull", "polyy-bones/obj/skull_08_tusked.obj", "bone", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tusked brute skull */
+    {"temple", "m_cyclops_skull", "polyy-bones/obj/skull_09_cyclops.obj", "bone", 2.76, 3.24, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* one-eyed giant skull */
+    {"coast", "m_cyclops_skull", "polyy-bones/obj/skull_09_cyclops.obj", "bone", 2.76, 3.24, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* one-eyed giant skull */
+    {"badlands", "m_cyclops_skull", "polyy-bones/obj/skull_09_cyclops.obj", "bone", 2.76, 3.24, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* one-eyed giant skull */
+    {"temple", "m_carved_skull", "polyy-bones/obj/skull_10_carved.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* carved ritual skull; reduced 4405 -> 2954 tris */
+    {"swamp", "m_carved_skull", "polyy-bones/obj/skull_10_carved.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* carved ritual skull; reduced 4405 -> 2954 tris */
+    {"thornwild", "m_carved_skull", "polyy-bones/obj/skull_10_carved.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* carved ritual skull; reduced 4405 -> 2954 tris */
+    {"forest", "m_wolf_skull", "polyy-bones/obj/skull_11_wolf.obj", "bone", 1.38, 1.62, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wolf skull; reduced 4677 -> 3028 tris */
+    {"highland", "m_wolf_skull", "polyy-bones/obj/skull_11_wolf.obj", "bone", 1.38, 1.62, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wolf skull; reduced 4677 -> 3028 tris */
+    {"forest", "m_bear_skull", "polyy-bones/obj/skull_12_bear.obj", "bone", 2.208, 2.592, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bear skull; reduced 5067 -> 3009 tris */
+    {"highland", "m_bear_skull", "polyy-bones/obj/skull_12_bear.obj", "bone", 2.208, 2.592, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bear skull; reduced 5067 -> 3009 tris */
+    {"mine", "m_bear_skull", "polyy-bones/obj/skull_12_bear.obj", "bone", 2.208, 2.592, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bear skull; reduced 5067 -> 3009 tris */
+    {"frontier", "m_horse_skull", "polyy-bones/obj/skull_14_horse.obj", "bone", 3.036, 3.564, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horse skull */
+    {"badlands", "m_horse_skull", "polyy-bones/obj/skull_14_horse.obj", "bone", 3.036, 3.564, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horse skull */
+    {"maahl", "m_horse_skull", "polyy-bones/obj/skull_14_horse.obj", "bone", 3.036, 3.564, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* horse skull */
+    {"frontier", "m_longhorn_skull", "polyy-bones/obj/skull_15_longhorn.obj", "bone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* longhorn steer skull, horns 1.2 m; reduced 4238 -> 3475 tris */
+    {"badlands", "m_longhorn_skull", "polyy-bones/obj/skull_15_longhorn.obj", "bone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* longhorn steer skull, horns 1.2 m; reduced 4238 -> 3475 tris */
+    {"highland", "m_ram_skull", "polyy-bones/obj/skull_16_ram.obj", "bone", 2.208, 2.592, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ram skull; reduced 4463 -> 3517 tris */
+    {"maahl", "m_ram_skull", "polyy-bones/obj/skull_16_ram.obj", "bone", 2.208, 2.592, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ram skull; reduced 4463 -> 3517 tris */
+    {"forest", "m_stag_skull", "polyy-bones/obj/skull_17_stag.obj", "bone", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stag skull with antlers; reduced 4844 -> 3192 tris */
+    {"highland", "m_stag_skull", "polyy-bones/obj/skull_17_stag.obj", "bone", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stag skull with antlers; reduced 4844 -> 3192 tris */
+    {"forest", "m_boar_skull", "polyy-bones/obj/skull_18_boar.obj", "bone", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boar skull; reduced 5456 -> 3272 tris */
+    {"swamp", "m_boar_skull", "polyy-bones/obj/skull_18_boar.obj", "bone", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boar skull; reduced 5456 -> 3272 tris */
+    {"badlands", "m_mammoth_skull", "polyy-bones/obj/skull_20_mammoth.obj", "bone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mammoth skull; reduced 7049 -> 3646 tris */
+    {"highland", "m_mammoth_skull", "polyy-bones/obj/skull_20_mammoth.obj", "bone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mammoth skull; reduced 7049 -> 3646 tris */
+    {"maahl", "m_mammoth_skull", "polyy-bones/obj/skull_20_mammoth.obj", "bone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mammoth skull; reduced 7049 -> 3646 tris */
+    {"swamp", "m_serpent_skull", "polyy-bones/obj/skull_22_serpent.obj", "bone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant serpent skull; reduced 6057 -> 3291 tris */
+    {"thornwild", "m_serpent_skull", "polyy-bones/obj/skull_22_serpent.obj", "bone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant serpent skull; reduced 6057 -> 3291 tris */
+    {"temple", "m_serpent_skull", "polyy-bones/obj/skull_22_serpent.obj", "bone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant serpent skull; reduced 6057 -> 3291 tris */
+    {"badlands", "m_predator_skull", "polyy-bones/obj/skull_24_great_predator.obj", "bone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great predator skull; reduced 4741 -> 3098 tris */
+    {"thornwild", "m_predator_skull", "polyy-bones/obj/skull_24_great_predator.obj", "bone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great predator skull; reduced 4741 -> 3098 tris */
+    {"maahl", "m_predator_skull", "polyy-bones/obj/skull_24_great_predator.obj", "bone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great predator skull; reduced 4741 -> 3098 tris */
+    {"badlands", "m_frilled_skull", "polyy-bones/obj/skull_25_frilled.obj", "bone", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* frilled horned beast skull */
+    {"thornwild", "m_frilled_skull", "polyy-bones/obj/skull_25_frilled.obj", "bone", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* frilled horned beast skull */
+    {"dungeon", "m_dragon_skull", "polyy-bones/obj/skull_28_dragon.obj", "bone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dragon skull centrepiece; reduced 4983 -> 3311 tris */
+    {"highland", "m_dragon_skull", "polyy-bones/obj/skull_28_dragon.obj", "bone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dragon skull centrepiece; reduced 4983 -> 3311 tris */
+    {"cynder", "m_dragon_skull", "polyy-bones/obj/skull_28_dragon.obj", "tooth", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dragon skull centrepiece; reduced 4983 -> 3311 tris */
+    {"maahl", "m_dragon_skull", "polyy-bones/obj/skull_28_dragon.obj", "bone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dragon skull centrepiece; reduced 4983 -> 3311 tris */
+    {"ashveil", "m_dragon_skull", "polyy-bones/obj/skull_28_dragon.obj", "bone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dragon skull centrepiece; reduced 4983 -> 3311 tris */
+    {"badlands", "m_dragon_skull", "polyy-bones/obj/skull_28_dragon.obj", "bone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dragon skull centrepiece; reduced 4983 -> 3311 tris */
+    {"graveyard", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"dungeon", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"swamp", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"badlands", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"blight", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"ashveil", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"trederra", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"sundered", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"thornwild", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"beast", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"cynder", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "tooth", 2.484, 2.916, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* femur */
+    {"badlands", "m_beast_ribcage", "polyy-bones/obj/bone_31_ribcage.obj", "bone", 16.56, 19.44, "bf", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* ribcage with spine, as a 3 m beast carcass; reduced 4275 ->  */
+    {"ashveil", "m_beast_ribcage", "polyy-bones/obj/bone_31_ribcage.obj", "bone", 16.56, 19.44, "bf", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* ribcage with spine, as a 3 m beast carcass; reduced 4275 ->  */
+    {"blight", "m_beast_ribcage", "polyy-bones/obj/bone_31_ribcage.obj", "bone", 16.56, 19.44, "bf", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* ribcage with spine, as a 3 m beast carcass; reduced 4275 ->  */
+    {"infestation", "m_beast_ribcage", "polyy-bones/obj/bone_31_ribcage.obj", "spine", 16.56, 19.44, "bf", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* ribcage with spine, as a 3 m beast carcass; reduced 4275 ->  */
+    {"beast", "m_beast_ribcage", "polyy-bones/obj/bone_31_ribcage.obj", "bone", 16.56, 19.44, "bf", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* ribcage with spine, as a 3 m beast carcass; reduced 4275 ->  */
+    {"badlands", "m_vertebrae", "polyy-bones/obj/bone_32_spine.obj", "bone", 2.76, 3.24, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spine segment; reduced 4257 -> 3539 tris */
+    {"blight", "m_vertebrae", "polyy-bones/obj/bone_32_spine.obj", "bone", 2.76, 3.24, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spine segment; reduced 4257 -> 3539 tris */
+    {"infestation", "m_vertebrae", "polyy-bones/obj/bone_32_spine.obj", "spine", 2.76, 3.24, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spine segment; reduced 4257 -> 3539 tris */
+    {"badlands", "m_pelvis", "polyy-bones/obj/bone_33_pelvis.obj", "bone", 1.656, 1.944, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* pelvis */
+    {"dungeon", "m_pelvis", "polyy-bones/obj/bone_33_pelvis.obj", "bone", 1.656, 1.944, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* pelvis */
+    {"badlands", "m_jawbone", "polyy-bones/obj/bone_35_jawbone.obj", "bone", 1.656, 1.944, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jawbone with teeth */
+    {"dungeon", "m_jawbone", "polyy-bones/obj/bone_35_jawbone.obj", "bone", 1.656, 1.944, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jawbone with teeth */
+    {"coast", "m_jawbone", "polyy-bones/obj/bone_35_jawbone.obj", "bone", 1.656, 1.944, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jawbone with teeth */
+    {"graveyard", "m_crossed_bones", "polyy-bones/obj/bone_36_crossed.obj", "bone", 2.76, 3.24, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crossed bones; reduced 4663 -> 3102 tris */
+    {"dungeon", "m_crossed_bones", "polyy-bones/obj/bone_36_crossed.obj", "bone", 2.76, 3.24, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crossed bones; reduced 4663 -> 3102 tris */
+    {"coast", "m_crossed_bones", "polyy-bones/obj/bone_36_crossed.obj", "bone", 2.76, 3.24, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crossed bones; reduced 4663 -> 3102 tris */
+    {"dungeon", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* bone heap; reduced 7544 -> 2764 tris */
+    {"blight", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* bone heap; reduced 7544 -> 2764 tris */
+    {"infestation", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "spine", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* bone heap; reduced 7544 -> 2764 tris */
+    {"ashveil", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* bone heap; reduced 7544 -> 2764 tris */
+    {"beast", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* bone heap; reduced 7544 -> 2764 tris */
+    {"dungeon", "m_skull_bone_heap", "polyy-bones/obj/bone_38_skull_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skull on a bone heap; reduced 10764 -> 3385 tris */
+    {"graveyard", "m_skull_bone_heap", "polyy-bones/obj/bone_38_skull_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skull on a bone heap; reduced 10764 -> 3385 tris */
+    {"blight", "m_skull_bone_heap", "polyy-bones/obj/bone_38_skull_heap.obj", "bone", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skull on a bone heap; reduced 10764 -> 3385 tris */
+    {"badlands", "m_mammoth_tusk", "polyy-bones/obj/bone_39_tusk.obj", "bone", 13.8, 16.2, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* curved tusk */
+    {"highland", "m_mammoth_tusk", "polyy-bones/obj/bone_39_tusk.obj", "bone", 13.8, 16.2, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* curved tusk */
+    {"maahl", "m_mammoth_tusk", "polyy-bones/obj/bone_39_tusk.obj", "bone", 13.8, 16.2, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* curved tusk */
+    {"forest", "m_shed_antler", "polyy-bones/obj/bone_40_antler.obj", "bone", 3.864, 4.536, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* shed antler; reduced 4402 -> 2866 tris */
+    {"highland", "m_shed_antler", "polyy-bones/obj/bone_40_antler.obj", "bone", 3.864, 4.536, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* shed antler; reduced 4402 -> 2866 tris */
+    {"coast", "m_ammonite", "polyy-bones/obj/fossil_46_ammonite.obj", "shell", 2.76, 3.24, "ssbf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ammonite */
+    {"badlands", "m_ammonite", "polyy-bones/obj/fossil_46_ammonite.obj", "bone", 2.76, 3.24, "ssbf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ammonite */
+    {"mine", "m_ammonite", "polyy-bones/obj/fossil_46_ammonite.obj", "bone", 2.76, 3.24, "ssbf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ammonite */
+    {"coast", "m_cut_ammonite", "polyy-bones/obj/fossil_47_ammonite_half.obj", "shell", 2.76, 3.24, "ssbf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cut ammonite; reduced 4657 -> 2850 tris */
+    {"badlands", "m_cut_ammonite", "polyy-bones/obj/fossil_47_ammonite_half.obj", "bone", 2.76, 3.24, "ssbf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cut ammonite; reduced 4657 -> 2850 tris */
+    {"mine", "m_cut_ammonite", "polyy-bones/obj/fossil_47_ammonite_half.obj", "bone", 2.76, 3.24, "ssbf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cut ammonite; reduced 4657 -> 2850 tris */
+    {"coast", "m_ammonite_cluster", "polyy-bones/obj/fossil_48_ammonite_cluster.obj", "shell", 2.76, 3.24, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ammonite cluster; reduced 4256 -> 3015 tris */
+    {"badlands", "m_ammonite_cluster", "polyy-bones/obj/fossil_48_ammonite_cluster.obj", "bone", 2.76, 3.24, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ammonite cluster; reduced 4256 -> 3015 tris */
+    {"coast", "m_trilobite", "polyy-bones/obj/fossil_49_trilobite.obj", "shell", 2.208, 2.592, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* trilobite; also an alien crawler husk; reduced 4024 -> 3668  */
+    {"badlands", "m_trilobite", "polyy-bones/obj/fossil_49_trilobite.obj", "bone", 2.208, 2.592, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* trilobite; also an alien crawler husk; reduced 4024 -> 3668  */
+    {"obelis", "m_trilobite", "polyy-bones/obj/fossil_49_trilobite.obj", "bone", 2.208, 2.592, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* trilobite; also an alien crawler husk; reduced 4024 -> 3668  */
+    {"infestation", "m_trilobite", "polyy-bones/obj/fossil_49_trilobite.obj", "carapace", 2.208, 2.592, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* trilobite; also an alien crawler husk; reduced 4024 -> 3668  */
+    {"badlands", "m_petrified_log", "polyy-bones/obj/fossil_50_petrified_wood.obj", "rock", 4.416, 5.184, "sslr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* petrified log section; reduced 4483 -> 3653 tris */
+    {"maahl", "m_petrified_log", "polyy-bones/obj/fossil_50_petrified_wood.obj", "sandstone", 4.416, 5.184, "sslr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* petrified log section; reduced 4483 -> 3653 tris */
+    {"badlands", "m_fossil_fish", "polyy-bones/obj/fossil_51_fish_plate.obj", "rock", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fossil fish slab; reduced 4949 -> 2982 tris */
+    {"coast", "m_fossil_fish", "polyy-bones/obj/fossil_51_fish_plate.obj", "sandstone", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fossil fish slab; reduced 4949 -> 2982 tris */
+    {"badlands", "m_fossil_fern", "polyy-bones/obj/fossil_52_fern_plate.obj", "rock", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fossil fern slab; reduced 4459 -> 3187 tris */
+    {"maahl", "m_fossil_fern", "polyy-bones/obj/fossil_52_fern_plate.obj", "sandstone", 3.312, 3.888, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fossil fern slab; reduced 4459 -> 3187 tris */
+    {"coast", "m_sea_beast_jaw", "polyy-bones/obj/bone_53_sea_beast_jaw.obj", "bone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sea-beast jaw section; reduced 4448 -> 3653 tris */
+    {"badlands", "m_sea_beast_jaw", "polyy-bones/obj/bone_53_sea_beast_jaw.obj", "bone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sea-beast jaw section; reduced 4448 -> 3653 tris */
+    {"coast", "m_turtle_shell", "polyy-bones/obj/fossil_54_turtle_shell.obj", "shell", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant turtle shell */
+    {"swamp", "m_turtle_shell", "polyy-bones/obj/fossil_54_turtle_shell.obj", "bone", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* giant turtle shell */
+    {"highland", "m_great_maul", "polyy-weapons/obj/giants_maul.obj", "brass", 7.728, 9.072, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great maul, lying; reduced 7840 -> 3398 tris */
+    {"badlands", "m_great_maul", "polyy-weapons/obj/giants_maul.obj", "iron", 7.728, 9.072, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great maul, lying; reduced 7840 -> 3398 tris */
+    {"highland", "m_war_axe", "polyy-weapons/obj/war_axe.obj", "brass", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* heavy war axe, lying; reduced 8432 -> 3167 tris */
+    {"dungeon", "m_war_axe", "polyy-weapons/obj/war_axe.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* heavy war axe, lying; reduced 8432 -> 3167 tris */
+    {"dungeon", "m_great_hammer", "polyy-weapons/obj/great_hammer.obj", "iron", 6.072, 7.128, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great_hammer, lying; reduced 6885 -> 2845 tris */
+    {"highland", "m_great_hammer", "polyy-weapons/obj/great_hammer.obj", "brass", 6.072, 7.128, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* great_hammer, lying; reduced 6885 -> 2845 tris */
+    {"badlands", "m_bone_club", "polyy-weapons/obj/bone_club.obj", "bone", 5.52, 6.48, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bone club, lying; reduced 7128 -> 2960 tris */
+    {"swamp", "m_bone_club", "polyy-weapons/obj/bone_club.obj", "bone", 5.52, 6.48, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bone club, lying; reduced 7128 -> 2960 tris */
+    {"dungeon", "m_bone_club", "polyy-weapons/obj/bone_club.obj", "bone", 5.52, 6.48, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bone club, lying; reduced 7128 -> 2960 tris */
+    {"badlands", "m_brute_cleaver", "polyy-weapons/obj/brute_cleaver.obj", "iron", 6.624, 7.776, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wide brute cleaver, lying; reduced 11884 -> 3381 tris */
+    {"blight", "m_brute_cleaver", "polyy-weapons/obj/brute_cleaver.obj", "iron", 6.624, 7.776, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wide brute cleaver, lying; reduced 11884 -> 3381 tris */
+    {"dungeon", "m_brute_cleaver", "polyy-weapons/obj/brute_cleaver.obj", "iron", 6.624, 7.776, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wide brute cleaver, lying; reduced 11884 -> 3381 tris */
+    {"highland", "m_double_bit_axe", "polyy-weapons/obj/double_axe.obj", "brass", 7.176, 8.424, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* double-bit axe, lying; reduced 7883 -> 3161 tris */
+    {"dungeon", "m_double_bit_axe", "polyy-weapons/obj/double_axe.obj", "iron", 7.176, 8.424, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* double-bit axe, lying; reduced 7883 -> 3161 tris */
+    {"highland", "m_claymore", "polyy-weapons/obj/claymore.obj", "brass", 7.728, 9.072, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broad two-hander, lying; reduced 7504 -> 3356 tris */
+    {"graveyard", "m_claymore", "polyy-weapons/obj/claymore.obj", "iron", 7.728, 9.072, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broad two-hander, lying; reduced 7504 -> 3356 tris */
+    {"dungeon", "m_iron_bound_chest", "avramania/obj/dungeon_chest.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* iron-bound chest */
+    {"coast", "m_iron_bound_chest", "avramania/obj/dungeon_chest.obj", "drift", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* iron-bound chest */
+    {"dungeon", "m_block_rubble", "avramania/obj/dungeon_rubble.obj", "flag", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* block rubble pile */
+    {"temple", "m_block_rubble", "avramania/obj/dungeon_rubble.obj", "tcolumn", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* block rubble pile */
+    {"sundered", "m_block_rubble", "avramania/obj/dungeon_rubble.obj", "rock", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* block rubble pile */
+    {"urban", "m_block_rubble", "avramania/obj/dungeon_rubble.obj", "concrete", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* block rubble pile */
+    {"fortress", "m_block_rubble", "avramania/obj/dungeon_rubble.obj", "garden", 5.52, 6.48, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* block rubble pile */
+    {"dungeon", "m_plain_skull", "avramania/obj/dungeon_skull.obj", "bone", 0.994, 1.166, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low-poly skull */
+    {"graveyard", "m_plain_skull", "avramania/obj/dungeon_skull.obj", "bone", 0.994, 1.166, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low-poly skull */
+    {"temple", "m_square_pillar", "avramania/obj/dungeon_pillar.obj", "tcolumn", 13.248, 15.552, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* square stone pillar */
+    {"dungeon", "m_square_pillar", "avramania/obj/dungeon_pillar.obj", "flag", 13.248, 15.552, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* square stone pillar */
+    {"temple", "m_tripod_brazier", "avramania/obj/brazier.obj", "gold", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tripod brazier; legs about 1 mm at true size */
+    {"dungeon", "m_tripod_brazier", "avramania/obj/brazier.obj", "iron", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tripod brazier; legs about 1 mm at true size */
+    {"frontier", "m_feed_trough", "avramania/obj/feed_trough.obj", "wood", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* feed trough */
+    {"frontier", "m_hay_bale_b", "avramania/obj/hay_bale.obj", "sack", 4.471, 5.249, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hay bale */
+    {"highland", "m_hay_bale", "avramania/obj/hay_bale.obj", "sack", 4.471, 5.249, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hay bale */
+    {"frontier", "m_haystack", "avramania/obj/haystack.obj", "sack", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* haystack */
+    {"highland", "m_haystack", "avramania/obj/haystack.obj", "sack", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* haystack */
+    {"frontier", "m_scarecrow", "avramania/obj/scarecrow.obj", "wood", 10.488, 12.312, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* scarecrow */
+    {"graveyard", "m_scarecrow", "avramania/obj/scarecrow.obj", "wood", 10.488, 12.312, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* scarecrow */
+    {"coast", "m_small_cask", "avramania/obj/cask.obj", "drift", 2.374, 2.786, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small cask */
+    {"dungeon", "m_small_cask", "avramania/obj/cask.obj", "wood", 2.374, 2.786, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small cask */
+    {"frontier", "m_small_cask", "avramania/obj/cask.obj", "wood", 2.374, 2.786, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small cask */
+    {"frontier", "m_grain_sack", "avramania/obj/grain_sack.obj", "sack", 2.87, 3.37, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* grain sack */
+    {"fortress", "m_grain_sack", "avramania/obj/grain_sack.obj", "sack", 2.87, 3.37, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* grain sack */
+    {"temple", "m_stone_altar", "avramania/obj/altar.obj", "tcolumn", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stone altar */
+    {"dungeon", "m_stone_altar", "avramania/obj/altar.obj", "flag", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stone altar */
+    {"mine", "m_anvil", "avramania/obj/anvil_block.obj", "iron", 3.974, 4.666, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* anvil on a block */
+    {"swamp", "m_cauldron", "avramania/obj/cauldron.obj", "iron", 3.754, 4.406, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cauldron */
+    {"dungeon", "m_cauldron", "avramania/obj/cauldron.obj", "iron", 3.754, 4.406, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cauldron */
+    {"dungeon", "m_plank_chest", "avramania/obj/plank_chest.obj", "wood", 4.637, 5.443, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* plank chest */
+    {"coast", "m_plank_chest", "avramania/obj/plank_chest.obj", "drift", 4.637, 5.443, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* plank chest */
+    {"forest", "m_woodpile", "avramania/obj/woodpile.obj", "log", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* woodpile */
+    {"frontier", "m_woodpile", "avramania/obj/woodpile.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* woodpile */
+    {"highland", "m_woodpile", "avramania/obj/woodpile.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* woodpile */
+    {"highland", "m_round_boulder", "avramania/obj/boulder.obj", "slate", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"forest", "m_round_boulder", "avramania/obj/boulder.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"swamp", "m_round_boulder", "avramania/obj/boulder.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"coast", "m_round_boulder", "avramania/obj/boulder.obj", "sandstone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"badlands", "m_round_boulder", "avramania/obj/boulder.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"mine", "m_round_boulder", "avramania/obj/boulder.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"frontier", "m_round_boulder", "avramania/obj/boulder.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"cynder", "m_round_boulder", "avramania/obj/boulder.obj", "basalt", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"forest", "m_round_bush", "avramania/obj/bush.obj", "shrub", 6.348, 7.452, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round bush (solid blob) */
+    {"highland", "m_round_bush", "avramania/obj/bush.obj", "shrub", 6.348, 7.452, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round bush (solid blob) */
+    {"swamp", "m_round_bush", "avramania/obj/bush.obj", "shrub", 6.348, 7.452, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round bush (solid blob) */
+    {"forest", "m_branchy_log", "avramania/obj/fallen_log.obj", "log", 14.352, 16.848, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fallen log with branch stubs */
+    {"swamp", "m_branchy_log", "avramania/obj/fallen_log.obj", "log", 14.352, 16.848, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fallen log with branch stubs */
+    {"highland", "m_branchy_log", "avramania/obj/fallen_log.obj", "wood", 14.352, 16.848, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fallen log with branch stubs */
+    {"forest", "m_mushroom_cluster", "avramania/obj/mushrooms.obj", "shroom", 2.65, 3.11, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mushroom cluster */
+    {"swamp", "m_mushroom_cluster", "avramania/obj/mushrooms.obj", "shroom", 2.65, 3.11, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mushroom cluster */
+    {"thornwild", "m_mushroom_cluster", "avramania/obj/mushrooms.obj", "wood", 2.65, 3.11, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mushroom cluster */
+    {"forest", "m_pebble_scatter", "avramania/obj/pebbles.obj", "rock", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"highland", "m_pebble_scatter", "avramania/obj/pebbles.obj", "slate", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"coast", "m_pebble_scatter", "avramania/obj/pebbles.obj", "sandstone", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"badlands", "m_pebble_scatter", "avramania/obj/pebbles.obj", "rock", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"mine", "m_pebble_scatter", "avramania/obj/pebbles.obj", "rock", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"swamp", "m_pebble_scatter", "avramania/obj/pebbles.obj", "rock", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"frontier", "m_pebble_scatter", "avramania/obj/pebbles.obj", "rock", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"maahl", "m_pebble_scatter", "avramania/obj/pebbles.obj", "sandstone", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble scatter */
+    {"forest", "m_mossy_rock", "avramania/obj/rock_mossy.obj", "rock", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mossy rock */
+    {"swamp", "m_mossy_rock", "avramania/obj/rock_mossy.obj", "rock", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mossy rock */
+    {"highland", "m_mossy_rock", "avramania/obj/rock_mossy.obj", "slate", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* mossy rock */
+    {"highland", "m_stacked_rocks", "avramania/obj/rocks_stacked.obj", "slate", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rocks */
+    {"forest", "m_stacked_rocks", "avramania/obj/rocks_stacked.obj", "rock", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rocks */
+    {"coast", "m_stacked_rocks", "avramania/obj/rocks_stacked.obj", "sandstone", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rocks */
+    {"badlands", "m_stacked_rocks", "avramania/obj/rocks_stacked.obj", "rock", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rocks */
+    {"mine", "m_stacked_rocks", "avramania/obj/rocks_stacked.obj", "rock", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rocks */
+    {"frontier", "m_stacked_rocks", "avramania/obj/rocks_stacked.obj", "rock", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rocks */
+    {"highland", "m_flat_slab", "avramania/obj/slab.obj", "slate", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* flat rock slab */
+    {"coast", "m_flat_slab", "avramania/obj/slab.obj", "sandstone", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* flat rock slab */
+    {"badlands", "m_flat_slab", "avramania/obj/slab.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* flat rock slab */
+    {"swamp", "m_stepping_stones", "avramania/obj/stepping_stones.obj", "rock", 17.112, 20.088, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* row of stepping stones */
+    {"coast", "m_stepping_stones", "avramania/obj/stepping_stones.obj", "sandstone", 17.112, 20.088, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* row of stepping stones */
+    {"swamp", "m_stream_rock", "avramania/obj/stream_rock.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low water-worn rock */
+    {"coast", "m_stream_rock", "avramania/obj/stream_rock.obj", "sandstone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low water-worn rock */
+    {"forest", "m_root_stump", "avramania/obj/stump.obj", "log", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tree stump with roots */
+    {"swamp", "m_root_stump", "avramania/obj/stump.obj", "log", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tree stump with roots */
+    {"graveyard", "m_root_stump", "avramania/obj/stump.obj", "wood", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tree stump with roots */
+    {"forest", "m_pine_sapling", "avramania/obj/pine_sapling.obj", "shrub", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* young pine */
+    {"highland", "m_pine_sapling", "avramania/obj/pine_sapling.obj", "shrub", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* young pine */
+    {"frontier", "m_stave_barrel", "avramania/obj/barrel.obj", "wood", 4.306, 5.054, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"dungeon", "m_stave_barrel", "avramania/obj/barrel.obj", "wood", 4.306, 5.054, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"coast", "m_stave_barrel", "avramania/obj/barrel.obj", "drift", 4.306, 5.054, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"mine", "m_stave_barrel", "avramania/obj/barrel.obj", "wood", 4.306, 5.054, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"frontier", "m_cart_wheel", "avramania/obj/cart_wheel.obj", "wood", 4.637, 5.443, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cart wheel, lying */
+    {"mine", "m_cart_wheel", "avramania/obj/cart_wheel.obj", "wood", 4.637, 5.443, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cart wheel, lying */
+    {"frontier", "m_small_crate", "avramania/obj/crate.obj", "wood", 2.926, 3.434, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small crate */
+    {"coast", "m_small_crate", "avramania/obj/crate.obj", "drift", 2.926, 3.434, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small crate */
+    {"dungeon", "m_small_crate", "avramania/obj/crate.obj", "wood", 2.926, 3.434, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small crate */
+    {"frontier", "m_rail_fence", "avramania/obj/fence_rail.obj", "wood", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden rail fence section */
+    {"highland", "m_rail_fence", "avramania/obj/fence_rail.obj", "wood", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden rail fence section */
+    {"graveyard", "m_wooden_marker", "avramania/obj/grave_marker.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden grave marker */
+    {"frontier", "m_wooden_marker", "avramania/obj/grave_marker.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden grave marker */
+    {"coast", "m_rope_coil", "avramania/obj/rope_coil.obj", "rope", 3.643, 4.277, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rope coil */
+    {"mine", "m_rope_coil", "avramania/obj/rope_coil.obj", "rope", 3.643, 4.277, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rope coil */
+    {"frontier", "m_sack_b", "avramania/obj/sack.obj", "sack", 3.533, 4.147, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sack */
+    {"mine", "m_sack_b", "avramania/obj/sack.obj", "sack", 3.533, 4.147, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sack */
+    {"frontier", "m_fingerpost", "avramania/obj/signpost.obj", "wood", 11.592, 13.608, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* signpost */
+    {"highland", "m_fingerpost", "avramania/obj/signpost.obj", "wood", 11.592, 13.608, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* signpost */
+    {"graveyard", "m_plain_tombstone", "avramania/obj/tombstone.obj", "headstone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* simple tombstone */
+    {"highland", "m_dry_stone_wall", "avramania/obj/wall_stone.obj", "slate", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dry-stone wall, 1 m */
+    {"forest", "m_dry_stone_wall", "avramania/obj/wall_stone.obj", "rock", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dry-stone wall, 1 m */
+    {"frontier", "m_plank_trough", "avramania/obj/water_trough.obj", "wood", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* water trough */
+    {"mine", "m_wheelbarrow", "avramania/obj/wheelbarrow.obj", "wood", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wheelbarrow */
+    {"frontier", "m_wheelbarrow", "avramania/obj/wheelbarrow.obj", "wood", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wheelbarrow */
+    {"urban", "m_timber_beam", "avramania/obj/beam.obj", "wood", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fallen squared timber beam */
+    {"sundered", "m_timber_beam", "avramania/obj/beam.obj", "wood", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fallen squared timber beam */
+    {"frontier", "m_timber_beam", "avramania/obj/beam.obj", "wood", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fallen squared timber beam */
+    {"frontier", "m_chimney_stack", "avramania/obj/chimney.obj", "rock", 11.592, 13.608, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stone chimney stack of a burnt-out house */
+    {"highland", "m_chimney_stack", "avramania/obj/chimney.obj", "slate", 11.592, 13.608, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stone chimney stack of a burnt-out house */
+    {"forest", "m_log_fire", "avramania/obj/campfire_logs.obj", "log", 3.036, 3.564, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* campfire logs, unlit */
+    {"frontier", "m_log_fire", "avramania/obj/campfire_logs.obj", "wood", 3.036, 3.564, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* campfire logs, unlit */
+    {"highland", "m_log_fire", "avramania/obj/campfire_logs.obj", "wood", 3.036, 3.564, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* campfire logs, unlit */
+    {"frontier", "m_roofed_well", "avramania/obj/well.obj", "rock", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* roofed well */
+    {"highland", "m_roofed_well", "avramania/obj/well.obj", "slate", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* roofed well */
+    {"highland", "m_targe", "avramania/obj/shield_round.obj", "wood", 3.588, 4.212, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round shield, lying */
+    {"highland", "m_plank_shield", "avramania/obj/shield_wooden.obj", "wood", 3.036, 3.564, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden shield, lying */
+    {"dungeon", "m_plank_shield", "avramania/obj/shield_wooden.obj", "wood", 3.036, 3.564, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wooden shield, lying */
+    {"dungeon", "m_buckler", "avramania/obj/buckler.obj", "iron", 1.932, 2.268, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* buckler, lying */
+    {"frontier", "m_hooped_barrel", "frontier-town/obj/barrel.obj", "wood", 5.078, 5.962, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"mine", "m_hooped_barrel", "frontier-town/obj/barrel.obj", "wood", 5.078, 5.962, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"badlands", "m_hooped_barrel", "frontier-town/obj/barrel.obj", "wood", 5.078, 5.962, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"frontier", "m_crate", "frontier-town/obj/crate.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate */
+    {"mine", "m_crate", "frontier-town/obj/crate.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate */
+    {"mine", "m_powder_keg", "frontier-town/obj/powder_keg.obj", "wood", 3.698, 4.342, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* powder keg */
+    {"frontier", "m_powder_keg", "frontier-town/obj/powder_keg.obj", "wood", 3.698, 4.342, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* powder keg */
+    {"frontier", "m_hay_block", "frontier-town/obj/hay_bale.obj", "sack", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hay bale */
+    {"frontier", "m_water_trough", "frontier-town/obj/water_trough.obj", "wood", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* water trough */
+    {"frontier", "m_anvil_stump", "frontier-town/obj/anvil.obj", "iron", 4.858, 5.702, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* anvil on a stump */
+    {"mine", "m_anvil_stump", "frontier-town/obj/anvil.obj", "iron", 4.858, 5.702, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* anvil on a stump */
+    {"frontier", "m_spare_wheel", "frontier-town/obj/wagon_wheel.obj", "wood", 5.52, 6.48, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spare wagon wheel, lying */
+    {"badlands", "m_spare_wheel", "frontier-town/obj/wagon_wheel.obj", "wood", 5.52, 6.48, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spare wagon wheel, lying */
+    {"badlands", "m_desert_rocks", "frontier-town/obj/desert_rocks.obj", "rock", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* desert rock group */
+    {"maahl", "m_desert_rocks", "frontier-town/obj/desert_rocks.obj", "sandstone", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* desert rock group */
+    {"frontier", "m_desert_rocks", "frontier-town/obj/desert_rocks.obj", "rock", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* desert rock group */
+    {"badlands", "m_saguaro_b", "frontier-town/obj/saguaro_small.obj", "shrub", 10.488, 12.312, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small saguaro */
+    {"frontier", "m_saguaro", "frontier-town/obj/saguaro_small.obj", "shrub", 10.488, 12.312, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small saguaro */
+    {"badlands", "m_tall_saguaro", "frontier-town/obj/saguaro_tall.obj", "shrub", 17.112, 20.088, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall saguaro, large bases */
+    {"frontier", "m_tall_saguaro", "frontier-town/obj/saguaro_tall.obj", "shrub", 17.112, 20.088, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall saguaro, large bases */
+    {"badlands", "m_prickly_pear_b", "frontier-town/obj/prickly_pear.obj", "shrub", 4.858, 5.702, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* prickly pear */
+    {"frontier", "m_prickly_pear", "frontier-town/obj/prickly_pear.obj", "shrub", 4.858, 5.702, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* prickly pear */
+    {"mine", "m_ore_cart", "frontier-town/obj/mine_cart.obj", "iron", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ore cart */
+    {"mine", "m_rail_track", "frontier-town/obj/rail_track.obj", "iron", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* 2 m mine rail section */
+    {"frontier", "m_hitching_post", "frontier-town/obj/hitching_post.obj", "wood", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hitching post */
+    {"frontier", "m_fence_2m", "frontier-town/obj/fence.obj", "wood", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* 2 m rail fence */
+    {"highland", "m_fence_2m", "frontier-town/obj/fence.obj", "wood", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* 2 m rail fence */
+    {"frontier", "m_direction_sign", "frontier-town/obj/signpost.obj", "wood", 13.248, 15.552, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* signpost */
+    {"badlands", "m_direction_sign", "frontier-town/obj/signpost.obj", "wood", 13.248, 15.552, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* signpost */
+    {"mine", "m_barrow", "frontier-town/obj/wheelbarrow.obj", "wood", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wheelbarrow */
+    {"frontier", "m_barrow", "frontier-town/obj/wheelbarrow.obj", "wood", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* wheelbarrow */
+    {"badlands", "m_cow_skull", "frontier-town/obj/cow_skull.obj", "bone", 4.637, 5.443, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cow skull */
+    {"frontier", "m_cow_skull", "frontier-town/obj/cow_skull.obj", "bone", 4.637, 5.443, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cow skull */
+    {"frontier", "m_town_well", "frontier-town/obj/well.obj", "wood", 12.144, 14.256, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* roofed well */
+    {"mine", "m_mine_entrance", "frontier-town/obj/mine_entrance.obj", "wood", 17.333, 20.347, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* timbered mine entrance, large bases */
+    {"badlands", "m_mine_entrance", "frontier-town/obj/mine_entrance.obj", "wood", 17.333, 20.347, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* timbered mine entrance, large bases */
+    {"urban", "m_fuel_drum", "kaykit-resource-bits/obj/oil_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* oil drum */
+    {"ferrum", "m_fuel_drum", "kaykit-resource-bits/obj/oil_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* oil drum */
+    {"trederra", "m_fuel_drum", "kaykit-resource-bits/obj/oil_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* oil drum */
+    {"targa", "m_fuel_drum", "kaykit-resource-bits/obj/oil_drum.obj", "metal", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* oil drum */
+    {"ashveil", "m_fuel_drum", "kaykit-resource-bits/obj/oil_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* oil drum */
+    {"urban", "m_dented_drum", "kaykit-resource-bits/obj/oil_drum_dented.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dented oil drum */
+    {"ashveil", "m_dented_drum", "kaykit-resource-bits/obj/oil_drum_dented.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dented oil drum */
+    {"ferrum", "m_dented_drum", "kaykit-resource-bits/obj/oil_drum_dented.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dented oil drum */
+    {"trederra", "m_dented_drum", "kaykit-resource-bits/obj/oil_drum_dented.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dented oil drum */
+    {"ferrum", "m_drum_cluster", "kaykit-resource-bits/obj/oil_drums_four.obj", "iron", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* four drums strapped together; reduced 4400 -> 3176 tris */
+    {"urban", "m_drum_cluster", "kaykit-resource-bits/obj/oil_drums_four.obj", "iron", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* four drums strapped together; reduced 4400 -> 3176 tris */
+    {"corridor", "m_drum_cluster", "kaykit-resource-bits/obj/oil_drums_four.obj", "metal", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* four drums strapped together; reduced 4400 -> 3176 tris */
+    {"urban", "m_fuel_can", "kaykit-resource-bits/obj/jerrycan.obj", "iron", 2.484, 2.916, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jerrycan */
+    {"trederra", "m_fuel_can", "kaykit-resource-bits/obj/jerrycan.obj", "iron", 2.484, 2.916, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jerrycan */
+    {"targa", "m_fuel_can", "kaykit-resource-bits/obj/jerrycan.obj", "metal", 2.484, 2.916, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jerrycan */
+    {"ashveil", "m_fuel_can", "kaykit-resource-bits/obj/jerrycan.obj", "iron", 2.484, 2.916, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jerrycan */
+    {"mine", "m_ore_lump", "kaykit-resource-bits/obj/ore_lump.obj", "rock", 2.594, 3.046, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ore lump */
+    {"mine", "m_ore_scatter", "kaykit-resource-bits/obj/ore_scatter.obj", "rock", 5.134, 6.026, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* ore scatter */
+    {"mine", "m_ingot_stack", "kaykit-resource-bits/obj/ingot_stack.obj", "brass", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ingot stack */
+    {"dungeon", "m_ingot_stack", "kaykit-resource-bits/obj/ingot_stack.obj", "gold", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ingot stack */
+    {"mine", "m_ingot_heap", "kaykit-resource-bits/obj/ingot_heap.obj", "brass", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ingot heap */
+    {"dungeon", "m_ingot_heap", "kaykit-resource-bits/obj/ingot_heap.obj", "gold", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* ingot heap */
+    {"fortress", "m_cut_stone_stack", "kaykit-resource-bits/obj/stone_stack_large.obj", "garden", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked cut stone */
+    {"urban", "m_cut_stone_stack", "kaykit-resource-bits/obj/stone_stack_large.obj", "concrete", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked cut stone */
+    {"sundered", "m_cut_stone_stack", "kaykit-resource-bits/obj/stone_stack_large.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked cut stone */
+    {"fortress", "m_small_stone_stack", "kaykit-resource-bits/obj/stone_stack_small.obj", "garden", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small stone stack */
+    {"sundered", "m_small_stone_stack", "kaykit-resource-bits/obj/stone_stack_small.obj", "rock", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small stone stack */
+    {"fortress", "m_cut_block", "kaykit-resource-bits/obj/stone_block.obj", "garden", 4.14, 4.86, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* single cut block */
+    {"sundered", "m_cut_block", "kaykit-resource-bits/obj/stone_block.obj", "rock", 4.14, 4.86, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* single cut block */
+    {"dungeon", "m_cut_block", "kaykit-resource-bits/obj/stone_block.obj", "flag", 4.14, 4.86, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* single cut block */
+    {"urban", "m_rubble_pile", "kaykit-resource-bits/obj/rubble_large.obj", "concrete", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* rubble pile */
+    {"sundered", "m_rubble_pile", "kaykit-resource-bits/obj/rubble_large.obj", "rock", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* rubble pile */
+    {"dungeon", "m_rubble_pile", "kaykit-resource-bits/obj/rubble_large.obj", "flag", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* rubble pile */
+    {"temple", "m_rubble_pile", "kaykit-resource-bits/obj/rubble_large.obj", "tcolumn", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* rubble pile */
+    {"mine", "m_rubble_pile", "kaykit-resource-bits/obj/rubble_large.obj", "rock", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* rubble pile */
+    {"urban", "m_small_rubble", "kaykit-resource-bits/obj/rubble_small.obj", "concrete", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* small rubble */
+    {"sundered", "m_small_rubble", "kaykit-resource-bits/obj/rubble_small.obj", "rock", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* small rubble */
+    {"dungeon", "m_small_rubble", "kaykit-resource-bits/obj/rubble_small.obj", "flag", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* small rubble */
+    {"temple", "m_small_rubble", "kaykit-resource-bits/obj/rubble_small.obj", "tcolumn", 6.072, 7.128, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* small rubble */
+    {"forest", "m_cut_log", "kaykit-resource-bits/obj/log.obj", "log", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* log */
+    {"frontier", "m_cut_log", "kaykit-resource-bits/obj/log.obj", "wood", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* log */
+    {"highland", "m_cut_log", "kaykit-resource-bits/obj/log.obj", "wood", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* log */
+    {"forest", "m_log_pile", "kaykit-resource-bits/obj/log_stack.obj", "log", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* log pile */
+    {"frontier", "m_log_pile", "kaykit-resource-bits/obj/log_stack.obj", "wood", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* log pile */
+    {"highland", "m_log_pile", "kaykit-resource-bits/obj/log_stack.obj", "wood", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* log pile */
+    {"frontier", "m_plank_stack", "kaykit-resource-bits/obj/planks_medium.obj", "wood", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* plank stack */
+    {"mine", "m_plank_stack", "kaykit-resource-bits/obj/planks_medium.obj", "wood", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* plank stack */
+    {"frontier", "m_small_plank_stack", "kaykit-resource-bits/obj/planks_small.obj", "wood", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small plank stack */
+    {"mine", "m_small_plank_stack", "kaykit-resource-bits/obj/planks_small.obj", "wood", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small plank stack */
+    {"urban", "m_pallet", "kaykit-resource-bits/obj/pallet.obj", "wood", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* pallet */
+    {"ferrum", "m_pallet", "kaykit-resource-bits/obj/pallet.obj", "wood", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* pallet */
+    {"ferrum", "m_parts_heap", "kaykit-resource-bits/obj/parts_heap.obj", "iron", 9.384, 11.016, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scrap and machine-parts heap */
+    {"targa", "m_parts_heap", "kaykit-resource-bits/obj/parts_heap.obj", "metal", 9.384, 11.016, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scrap and machine-parts heap */
+    {"ashveil", "m_parts_heap", "kaykit-resource-bits/obj/parts_heap.obj", "iron", 9.384, 11.016, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scrap and machine-parts heap */
+    {"urban", "m_parts_heap", "kaykit-resource-bits/obj/parts_heap.obj", "iron", 9.384, 11.016, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scrap and machine-parts heap */
+    {"ferrum", "m_parts_crate", "kaykit-resource-bits/obj/parts_crate.obj", "iron", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate of machine parts */
+    {"corridor", "m_parts_crate", "kaykit-resource-bits/obj/parts_crate.obj", "metal", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate of machine parts */
+    {"ferrum", "m_gear_scatter", "kaykit-resource-bits/obj/parts_small.obj", "iron", 6.624, 7.776, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* gears on the ground */
+    {"targa", "m_gear_scatter", "kaykit-resource-bits/obj/parts_small.obj", "metal", 6.624, 7.776, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* gears on the ground */
+    {"corridor", "m_gear_scatter", "kaykit-resource-bits/obj/parts_small.obj", "metal", 6.624, 7.776, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* gears on the ground */
+    {"ferrum", "m_cog_wheel", "kaykit-resource-bits/obj/cog.obj", "iron", 2.208, 2.592, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* single cog, lying */
+    {"corridor", "m_cog_wheel", "kaykit-resource-bits/obj/cog.obj", "metal", 2.208, 2.592, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* single cog, lying */
+    {"mine", "m_smith_anvil", "kaykit-rpg-tools/obj/anvil.obj", "iron", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* anvil */
+    {"frontier", "m_smith_anvil", "kaykit-rpg-tools/obj/anvil.obj", "iron", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* anvil */
+    {"mine", "m_bucket", "kaykit-rpg-tools/obj/bucket.obj", "iron", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bucket with handle */
+    {"frontier", "m_bucket", "kaykit-rpg-tools/obj/bucket.obj", "iron", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bucket with handle */
+    {"coast", "m_bucket", "kaykit-rpg-tools/obj/bucket.obj", "iron", 1.932, 2.268, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* bucket with handle */
+    {"mine", "m_grindstone", "kaykit-rpg-tools/obj/grindstone.obj", "rock", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* grindstone on a frame */
+    {"frontier", "m_grindstone", "kaykit-rpg-tools/obj/grindstone.obj", "rock", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* grindstone on a frame */
+    {"mine", "m_lantern", "kaykit-rpg-tools/obj/lantern.obj", "iron", 1.932, 2.268, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lantern */
+    {"dungeon", "m_lantern", "kaykit-rpg-tools/obj/lantern.obj", "iron", 1.932, 2.268, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lantern */
+    {"frontier", "m_lantern", "kaykit-rpg-tools/obj/lantern.obj", "iron", 1.932, 2.268, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* lantern */
+    {"mine", "m_pick", "kaykit-rpg-tools/obj/pickaxe.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* pickaxe, lying */
+    {"mine", "m_rope_bundle", "kaykit-rpg-tools/obj/rope_bundle.obj", "rope", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rope bundle */
+    {"coast", "m_rope_bundle", "kaykit-rpg-tools/obj/rope_bundle.obj", "rope", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rope bundle */
+    {"mine", "m_coiled_rope", "kaykit-rpg-tools/obj/rope_coil.obj", "rope", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rope coil */
+    {"coast", "m_coiled_rope", "kaykit-rpg-tools/obj/rope_coil.obj", "rope", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rope coil */
+    {"mine", "m_spade", "kaykit-rpg-tools/obj/shovel.obj", "iron", 6.624, 7.776, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* shovel, lying */
+    {"graveyard", "m_spade", "kaykit-rpg-tools/obj/shovel.obj", "iron", 6.624, 7.776, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* shovel, lying */
+    {"trederra", "m_spade", "kaykit-rpg-tools/obj/shovel.obj", "iron", 6.624, 7.776, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* shovel, lying */
+    {"dungeon", "m_closed_book", "kaykit-rpg-tools/obj/book.obj", "wood", 1.38, 1.62, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* closed book */
+    {"dungeon", "m_rolled_map", "kaykit-rpg-tools/obj/map_rolled.obj", "wood", 2.76, 3.24, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rolled map */
+    {"highland", "m_battle_axe", "kaykit-fantasy-weapons/obj/axe_double.obj", "brass", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* double axe, lying */
+    {"dungeon", "m_battle_axe", "kaykit-fantasy-weapons/obj/axe_double.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* double axe, lying */
+    {"highland", "m_hand_axe", "kaykit-fantasy-weapons/obj/axe.obj", "brass", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* axe, lying */
+    {"frontier", "m_hand_axe", "kaykit-fantasy-weapons/obj/axe.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* axe, lying */
+    {"dungeon", "m_spiked_mace", "kaykit-fantasy-weapons/obj/mace_spiked.obj", "iron", 4.968, 5.832, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked mace, lying */
+    {"badlands", "m_spiked_mace", "kaykit-fantasy-weapons/obj/mace_spiked.obj", "iron", 4.968, 5.832, "lr", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked mace, lying */
+    {"badlands", "m_spiked_club", "kaykit-fantasy-weapons/obj/club_spiked.obj", "wood", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked club, lying */
+    {"swamp", "m_spiked_club", "kaykit-fantasy-weapons/obj/club_spiked.obj", "log", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked club, lying */
+    {"blight", "m_spiked_club", "kaykit-fantasy-weapons/obj/club_spiked.obj", "wood", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked club, lying */
+    {"dungeon", "m_kite_shield", "kaykit-fantasy-weapons/obj/shield_kite.obj", "iron", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* kite shield, lying */
+    {"highland", "m_kite_shield", "kaykit-fantasy-weapons/obj/shield_kite.obj", "brass", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* kite shield, lying */
+    {"dungeon", "m_heater_shield", "kaykit-fantasy-weapons/obj/shield_heater.obj", "iron", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* heater shield, lying */
+    {"graveyard", "m_heater_shield", "kaykit-fantasy-weapons/obj/shield_heater.obj", "iron", 4.968, 5.832, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* heater shield, lying */
+    {"badlands", "m_spiked_shield", "kaykit-fantasy-weapons/obj/shield_tower_spiked.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked tower shield, lying */
+    {"blight", "m_spiked_shield", "kaykit-fantasy-weapons/obj/shield_tower_spiked.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked tower shield, lying */
+    {"dungeon", "m_spiked_shield", "kaykit-fantasy-weapons/obj/shield_tower_spiked.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* spiked tower shield, lying */
+    {"graveyard", "m_broadsword", "kaykit-fantasy-weapons/obj/sword_broad.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broad sword, lying */
+    {"highland", "m_broadsword", "kaykit-fantasy-weapons/obj/sword_broad.obj", "brass", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broad sword, lying */
+    {"graveyard", "m_longsword", "kaykit-fantasy-weapons/obj/sword.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sword, lying */
+    {"dungeon", "m_longsword", "kaykit-fantasy-weapons/obj/sword.obj", "iron", 5.52, 6.48, "bf", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* sword, lying */
+    {"urban", "m_steel_drum", "industrial-cc0/obj/steel_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* steel drum */
+    {"ferrum", "m_steel_drum", "industrial-cc0/obj/steel_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* steel drum */
+    {"trederra", "m_steel_drum", "industrial-cc0/obj/steel_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* steel drum */
+    {"targa", "m_steel_drum", "industrial-cc0/obj/steel_drum.obj", "metal", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* steel drum */
+    {"urban", "m_plastic_drum", "industrial-cc0/obj/plastic_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* plastic drum */
+    {"ashveil", "m_plastic_drum", "industrial-cc0/obj/plastic_drum.obj", "iron", 4.968, 5.832, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* plastic drum */
+    {"ferrum", "m_gas_cylinder", "industrial-cc0/obj/gas_cylinder.obj", "iron", 3.864, 4.536, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* gas bottle */
+    {"corridor", "m_gas_cylinder_b", "industrial-cc0/obj/gas_cylinder.obj", "metal", 3.864, 4.536, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* gas bottle */
+    {"urban", "m_gas_cylinder", "industrial-cc0/obj/gas_cylinder.obj", "iron", 3.864, 4.536, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* gas bottle */
+    {"urban", "m_petrol_can", "industrial-cc0/obj/gas_canister.obj", "iron", 2.484, 2.916, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jerrycan */
+    {"trederra", "m_petrol_can", "industrial-cc0/obj/gas_canister.obj", "iron", 2.484, 2.916, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* jerrycan */
+    {"ferrum", "m_power_cabinet", "industrial-cc0/obj/power_cabinet.obj", "iron", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* power cabinet with conduits */
+    {"corridor", "m_power_cabinet", "industrial-cc0/obj/power_cabinet.obj", "metal", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* power cabinet with conduits */
+    {"urban", "m_power_cabinet", "industrial-cc0/obj/power_cabinet.obj", "iron", 6.624, 7.776, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* power cabinet with conduits */
+    {"ferrum", "m_fuse_cabinet", "industrial-cc0/obj/electrical_box.obj", "iron", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* electrical cabinet */
+    {"corridor", "m_fuse_cabinet", "industrial-cc0/obj/electrical_box.obj", "metal", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* electrical cabinet */
+    {"ferrum", "m_cable_reel", "industrial-cc0/obj/cable_drum.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cable drum */
+    {"urban", "m_cable_reel", "industrial-cc0/obj/cable_drum.obj", "wood", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cable drum */
+    {"ferrum", "m_generator", "industrial-cc0/obj/generator.obj", "iron", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* framed generator; reduced 4627 -> 3398 tris */
+    {"urban", "m_generator", "industrial-cc0/obj/generator.obj", "iron", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* framed generator; reduced 4627 -> 3398 tris */
+    {"targa", "m_generator", "industrial-cc0/obj/generator.obj", "metal", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* framed generator; reduced 4627 -> 3398 tris */
+    {"corridor", "m_locker", "industrial-cc0/obj/locker.obj", "metal", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* locker, door ajar */
+    {"urban", "m_locker", "industrial-cc0/obj/locker.obj", "iron", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* locker, door ajar */
+    {"corridor", "m_extinguisher", "industrial-cc0/obj/fire_extinguisher.obj", "metal", 3.312, 3.888, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* fire extinguisher */
+    {"graveyard", "m_dead_tree_small", "dead-forest/obj/dead_tree_small.obj", "wood", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small dead tree */
+    {"swamp", "m_dead_tree_small", "dead-forest/obj/dead_tree_small.obj", "log", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small dead tree */
+    {"blight", "m_dead_tree_small", "dead-forest/obj/dead_tree_small.obj", "wood", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small dead tree */
+    {"ashveil", "m_dead_tree_small", "dead-forest/obj/dead_tree_small.obj", "wood", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small dead tree */
+    {"badlands", "m_dead_tree_small", "dead-forest/obj/dead_tree_small.obj", "wood", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* small dead tree */
+    {"graveyard", "m_dead_tree_forked", "dead-forest/obj/dead_tree_forked.obj", "wood", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* forked dead tree */
+    {"swamp", "m_dead_tree_forked", "dead-forest/obj/dead_tree_forked.obj", "log", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* forked dead tree */
+    {"blight", "m_dead_tree_forked", "dead-forest/obj/dead_tree_forked.obj", "wood", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* forked dead tree */
+    {"forest", "m_dead_tree_forked", "dead-forest/obj/dead_tree_forked.obj", "log", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* forked dead tree */
+    {"graveyard", "m_dead_tree_wide", "dead-forest/obj/dead_tree_wide.obj", "wood", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dead tree with a wide crown */
+    {"swamp", "m_dead_tree_wide", "dead-forest/obj/dead_tree_wide.obj", "log", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dead tree with a wide crown */
+    {"ashveil", "m_dead_tree_wide", "dead-forest/obj/dead_tree_wide.obj", "wood", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* dead tree with a wide crown */
+    {"highland", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "slate", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"forest", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"coast", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "sandstone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"badlands", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"mine", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"swamp", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"cynder", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "basalt", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"blight", "m_boulder_group", "dead-forest/obj/boulder_group.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* cracked boulder group; reduced 5642 -> 3293 tris */
+    {"highland", "m_long_flat_rock", "dead-forest/obj/rock_long_flat.obj", "slate", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* long flat rock */
+    {"coast", "m_long_flat_rock", "dead-forest/obj/rock_long_flat.obj", "sandstone", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* long flat rock */
+    {"badlands", "m_long_flat_rock", "dead-forest/obj/rock_long_flat.obj", "rock", 5.52, 6.48, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* long flat rock */
+    {"forest", "m_boulder_b", "dead-forest/obj/rock_boulder.obj", "rock", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"highland", "m_boulder_b", "dead-forest/obj/rock_boulder.obj", "slate", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"mine", "m_boulder_b", "dead-forest/obj/rock_boulder.obj", "rock", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"swamp", "m_boulder_b", "dead-forest/obj/rock_boulder.obj", "rock", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"coast", "m_boulder_b", "dead-forest/obj/rock_boulder.obj", "sandstone", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* boulder */
+    {"forest", "m_round_rock", "dead-forest/obj/rock_round.obj", "rock", 2.208, 2.592, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round rock */
+    {"highland", "m_round_rock", "dead-forest/obj/rock_round.obj", "slate", 2.208, 2.592, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round rock */
+    {"mine", "m_round_rock", "dead-forest/obj/rock_round.obj", "rock", 2.208, 2.592, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round rock */
+    {"swamp", "m_round_rock", "dead-forest/obj/rock_round.obj", "rock", 2.208, 2.592, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round rock */
+    {"coast", "m_round_rock", "dead-forest/obj/rock_round.obj", "sandstone", 2.208, 2.592, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round rock */
+    {"badlands", "m_round_rock", "dead-forest/obj/rock_round.obj", "rock", 2.208, 2.592, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* round rock */
+    {"forest", "m_low_rock", "dead-forest/obj/rock_low_long.obj", "rock", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low long rock */
+    {"highland", "m_low_rock", "dead-forest/obj/rock_low_long.obj", "slate", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low long rock */
+    {"coast", "m_low_rock", "dead-forest/obj/rock_low_long.obj", "sandstone", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low long rock */
+    {"badlands", "m_low_rock", "dead-forest/obj/rock_low_long.obj", "rock", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low long rock */
+    {"mine", "m_low_rock", "dead-forest/obj/rock_low_long.obj", "rock", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* low long rock */
+    {"forest", "m_slab_rock", "dead-forest/obj/rock_slab.obj", "rock", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* slab rock */
+    {"highland", "m_slab_rock", "dead-forest/obj/rock_slab.obj", "slate", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* slab rock */
+    {"coast", "m_slab_rock", "dead-forest/obj/rock_slab.obj", "sandstone", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* slab rock */
+    {"badlands", "m_slab_rock", "dead-forest/obj/rock_slab.obj", "rock", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* slab rock */
+    {"mine", "m_slab_rock", "dead-forest/obj/rock_slab.obj", "rock", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* slab rock */
+    {"dungeon", "m_oak_barrel", "lowpoly-dungeon/obj/barrel.obj", "wood", 5.134, 6.026, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"mine", "m_oak_barrel", "lowpoly-dungeon/obj/barrel.obj", "wood", 5.134, 6.026, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"coast", "m_oak_barrel", "lowpoly-dungeon/obj/barrel.obj", "drift", 5.134, 6.026, "ssl", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* barrel */
+    {"dungeon", "m_treasure_chest", "lowpoly-dungeon/obj/chest.obj", "wood", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* treasure chest */
+    {"coast", "m_treasure_chest", "lowpoly-dungeon/obj/chest.obj", "drift", 4.968, 5.832, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* treasure chest */
+    {"dungeon", "m_plank_crate", "lowpoly-dungeon/obj/crate_closed.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate */
+    {"mine", "m_plank_crate", "lowpoly-dungeon/obj/crate_closed.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate */
+    {"frontier", "m_plank_crate", "lowpoly-dungeon/obj/crate_closed.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* crate */
+    {"dungeon", "m_open_crate", "lowpoly-dungeon/obj/crate_open.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* open crate */
+    {"mine", "m_open_crate", "lowpoly-dungeon/obj/crate_open.obj", "wood", 4.416, 5.184, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* open crate */
+    {"dungeon", "m_broken_flags_01", "lowpoly-dungeon/obj/flag_debris_01.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_01", "lowpoly-dungeon/obj/flag_debris_01.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_01", "lowpoly-dungeon/obj/flag_debris_01.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_02", "lowpoly-dungeon/obj/flag_debris_02.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_02", "lowpoly-dungeon/obj/flag_debris_02.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_02", "lowpoly-dungeon/obj/flag_debris_02.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_03", "lowpoly-dungeon/obj/flag_debris_03.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_03", "lowpoly-dungeon/obj/flag_debris_03.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_03", "lowpoly-dungeon/obj/flag_debris_03.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_04", "lowpoly-dungeon/obj/flag_debris_04.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_04", "lowpoly-dungeon/obj/flag_debris_04.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_04", "lowpoly-dungeon/obj/flag_debris_04.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_05", "lowpoly-dungeon/obj/flag_debris_05.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_05", "lowpoly-dungeon/obj/flag_debris_05.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_05", "lowpoly-dungeon/obj/flag_debris_05.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_06", "lowpoly-dungeon/obj/flag_debris_06.obj", "flag", 3.312, 3.888, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_06", "lowpoly-dungeon/obj/flag_debris_06.obj", "tcolumn", 3.312, 3.888, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_06", "lowpoly-dungeon/obj/flag_debris_06.obj", "rock", 3.312, 3.888, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_07", "lowpoly-dungeon/obj/flag_debris_07.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_07", "lowpoly-dungeon/obj/flag_debris_07.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_07", "lowpoly-dungeon/obj/flag_debris_07.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_08", "lowpoly-dungeon/obj/flag_debris_08.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_08", "lowpoly-dungeon/obj/flag_debris_08.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_08", "lowpoly-dungeon/obj/flag_debris_08.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_09", "lowpoly-dungeon/obj/flag_debris_09.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_09", "lowpoly-dungeon/obj/flag_debris_09.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_09", "lowpoly-dungeon/obj/flag_debris_09.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_10", "lowpoly-dungeon/obj/flag_debris_10.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_10", "lowpoly-dungeon/obj/flag_debris_10.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_10", "lowpoly-dungeon/obj/flag_debris_10.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_11", "lowpoly-dungeon/obj/flag_debris_11.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_11", "lowpoly-dungeon/obj/flag_debris_11.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_11", "lowpoly-dungeon/obj/flag_debris_11.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_12", "lowpoly-dungeon/obj/flag_debris_12.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_12", "lowpoly-dungeon/obj/flag_debris_12.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_12", "lowpoly-dungeon/obj/flag_debris_12.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_broken_flags_13", "lowpoly-dungeon/obj/flag_debris_13.obj", "flag", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"temple", "m_broken_flags_13", "lowpoly-dungeon/obj/flag_debris_13.obj", "tcolumn", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"sundered", "m_broken_flags_13", "lowpoly-dungeon/obj/flag_debris_13.obj", "rock", 6.624, 7.776, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* broken flagstone scatter */
+    {"dungeon", "m_loose_planks_01", "lowpoly-dungeon/obj/planks_01.obj", "wood", 13.69, 16.07, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"urban", "m_loose_planks_01", "lowpoly-dungeon/obj/planks_01.obj", "wood", 13.69, 16.07, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"mine", "m_loose_planks_01", "lowpoly-dungeon/obj/planks_01.obj", "wood", 13.69, 16.07, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"dungeon", "m_loose_planks_02", "lowpoly-dungeon/obj/planks_02.obj", "wood", 9.66, 11.34, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"urban", "m_loose_planks_02", "lowpoly-dungeon/obj/planks_02.obj", "wood", 9.66, 11.34, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"mine", "m_loose_planks_02", "lowpoly-dungeon/obj/planks_02.obj", "wood", 9.66, 11.34, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"dungeon", "m_loose_planks_03", "lowpoly-dungeon/obj/planks_03.obj", "wood", 6.569, 7.711, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"urban", "m_loose_planks_03", "lowpoly-dungeon/obj/planks_03.obj", "wood", 6.569, 7.711, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"mine", "m_loose_planks_03", "lowpoly-dungeon/obj/planks_03.obj", "wood", 6.569, 7.711, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"dungeon", "m_loose_planks_04", "lowpoly-dungeon/obj/planks_04.obj", "wood", 5.52, 6.48, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"urban", "m_loose_planks_04", "lowpoly-dungeon/obj/planks_04.obj", "wood", 5.52, 6.48, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"mine", "m_loose_planks_04", "lowpoly-dungeon/obj/planks_04.obj", "wood", 5.52, 6.48, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"dungeon", "m_loose_planks_05", "lowpoly-dungeon/obj/planks_05.obj", "wood", 8.556, 10.044, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"urban", "m_loose_planks_05", "lowpoly-dungeon/obj/planks_05.obj", "wood", 8.556, 10.044, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"mine", "m_loose_planks_05", "lowpoly-dungeon/obj/planks_05.obj", "wood", 8.556, 10.044, "s", "debris", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* loose planks */
+    {"temple", "m_candle_dish", "lowpoly-dungeon/obj/candles.obj", "gold", 1.932, 2.268, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* candle cluster on a dish */
+    {"dungeon", "m_candle_dish", "lowpoly-dungeon/obj/candles.obj", "gold", 1.932, 2.268, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* candle cluster on a dish */
+    {"graveyard", "m_candle_dish", "lowpoly-dungeon/obj/candles.obj", "wax", 1.932, 2.268, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* candle cluster on a dish */
+    {"temple", "m_stone_pillar", "lowpoly-dungeon/obj/pillar.obj", "tcolumn", 13.248, 15.552, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stone pillar */
+    {"dungeon", "m_stone_pillar", "lowpoly-dungeon/obj/pillar.obj", "flag", 13.248, 15.552, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stone pillar */
+    {"badlands", "m_rock_arch", "rocks-misc/obj/rockform_arch.obj", "rock", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* natural rock arch, large bases */
+    {"maahl", "m_rock_arch", "rocks-misc/obj/rockform_arch.obj", "sandstone", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* natural rock arch, large bases */
+    {"coast", "m_rock_arch", "rocks-misc/obj/rockform_arch.obj", "sandstone", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* natural rock arch, large bases */
+    {"badlands", "m_rock_column", "rocks-misc/obj/rockform_column.obj", "rock", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rock column */
+    {"maahl", "m_rock_column", "rocks-misc/obj/rockform_column.obj", "sandstone", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rock column */
+    {"highland", "m_rock_column", "rocks-misc/obj/rockform_column.obj", "slate", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked rock column */
+    {"badlands", "m_rock_wall", "rocks-misc/obj/rockform_wall_a.obj", "rock", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"highland", "m_rock_wall", "rocks-misc/obj/rockform_wall_a.obj", "slate", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"coast", "m_rock_wall", "rocks-misc/obj/rockform_wall_a.obj", "sandstone", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"mine", "m_rock_wall", "rocks-misc/obj/rockform_wall_a.obj", "rock", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"badlands", "m_rock_wall_b", "rocks-misc/obj/rockform_wall_b.obj", "rock", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"highland", "m_rock_wall_b", "rocks-misc/obj/rockform_wall_b.obj", "slate", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"coast", "m_rock_wall_b", "rocks-misc/obj/rockform_wall_b.obj", "sandstone", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"mine", "m_rock_wall_b", "rocks-misc/obj/rockform_wall_b.obj", "rock", 13.8, 16.2, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* short rock wall */
+    {"badlands", "m_rock_corner", "rocks-misc/obj/rockform_corner.obj", "rock", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rock wall corner, large bases */
+    {"highland", "m_rock_corner", "rocks-misc/obj/rockform_corner.obj", "slate", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rock wall corner, large bases */
+    {"mine", "m_rock_corner", "rocks-misc/obj/rockform_corner.obj", "rock", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* rock wall corner, large bases */
+    {"badlands", "m_rock_01", "rocks-misc/obj/rock_01.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"highland", "m_rock_01", "rocks-misc/obj/rock_01.obj", "slate", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"coast", "m_rock_01", "rocks-misc/obj/rock_01.obj", "sandstone", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"mine", "m_rock_01", "rocks-misc/obj/rock_01.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"forest", "m_rock_01", "rocks-misc/obj/rock_01.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"cynder", "m_rock_01", "rocks-misc/obj/rock_01.obj", "basalt", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"badlands", "m_rock_02", "rocks-misc/obj/rock_02.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"highland", "m_rock_02", "rocks-misc/obj/rock_02.obj", "slate", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"coast", "m_rock_02", "rocks-misc/obj/rock_02.obj", "sandstone", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"mine", "m_rock_02", "rocks-misc/obj/rock_02.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"forest", "m_rock_02", "rocks-misc/obj/rock_02.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"cynder", "m_rock_02", "rocks-misc/obj/rock_02.obj", "basalt", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"badlands", "m_rock_03", "rocks-misc/obj/rock_03.obj", "rock", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"highland", "m_rock_03", "rocks-misc/obj/rock_03.obj", "slate", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"maahl", "m_rock_03", "rocks-misc/obj/rock_03.obj", "sandstone", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"coast", "m_rock_03", "rocks-misc/obj/rock_03.obj", "sandstone", 11.04, 12.96, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"badlands", "m_rock_04", "rocks-misc/obj/rock_04.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"highland", "m_rock_04", "rocks-misc/obj/rock_04.obj", "slate", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"coast", "m_rock_04", "rocks-misc/obj/rock_04.obj", "sandstone", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"mine", "m_rock_04", "rocks-misc/obj/rock_04.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"forest", "m_rock_04", "rocks-misc/obj/rock_04.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"cynder", "m_rock_04", "rocks-misc/obj/rock_04.obj", "basalt", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* tall rock */
+    {"badlands", "m_rock_05", "rocks-misc/obj/rock_05.obj", "rock", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"highland", "m_rock_05", "rocks-misc/obj/rock_05.obj", "slate", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"coast", "m_rock_05", "rocks-misc/obj/rock_05.obj", "sandstone", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"mine", "m_rock_05", "rocks-misc/obj/rock_05.obj", "rock", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"forest", "m_rock_05", "rocks-misc/obj/rock_05.obj", "rock", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"cynder", "m_rock_05", "rocks-misc/obj/rock_05.obj", "basalt", 9.384, 11.016, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"badlands", "m_rock_08", "rocks-misc/obj/rock_08.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"highland", "m_rock_08", "rocks-misc/obj/rock_08.obj", "slate", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"coast", "m_rock_08", "rocks-misc/obj/rock_08.obj", "sandstone", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"mine", "m_rock_08", "rocks-misc/obj/rock_08.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"forest", "m_rock_08", "rocks-misc/obj/rock_08.obj", "rock", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"cynder", "m_rock_08", "rocks-misc/obj/rock_08.obj", "basalt", 8.28, 9.72, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"badlands", "m_rock_09", "rocks-misc/obj/rock_09.obj", "rock", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"highland", "m_rock_09", "rocks-misc/obj/rock_09.obj", "slate", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"coast", "m_rock_09", "rocks-misc/obj/rock_09.obj", "sandstone", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"mine", "m_rock_09", "rocks-misc/obj/rock_09.obj", "rock", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"forest", "m_rock_09", "rocks-misc/obj/rock_09.obj", "rock", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"cynder", "m_rock_09", "rocks-misc/obj/rock_09.obj", "basalt", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* solid boulder */
+    {"badlands", "m_scree", "rocks-misc/obj/scree_a.obj", "rock", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"highland", "m_scree", "rocks-misc/obj/scree_a.obj", "slate", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"mine", "m_scree", "rocks-misc/obj/scree_a.obj", "rock", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"cynder", "m_scree", "rocks-misc/obj/scree_a.obj", "basalt", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"badlands", "m_scree_b", "rocks-misc/obj/scree_b.obj", "rock", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"highland", "m_scree_b", "rocks-misc/obj/scree_b.obj", "slate", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"mine", "m_scree_b", "rocks-misc/obj/scree_b.obj", "rock", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"cynder", "m_scree_b", "rocks-misc/obj/scree_b.obj", "basalt", 13.8, 16.2, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* scree scatter */
+    {"badlands", "m_pebble_group", "rocks-misc/obj/pebbles_a.obj", "rock", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"highland", "m_pebble_group", "rocks-misc/obj/pebbles_a.obj", "slate", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"coast", "m_pebble_group", "rocks-misc/obj/pebbles_a.obj", "sandstone", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"mine", "m_pebble_group", "rocks-misc/obj/pebbles_a.obj", "rock", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"maahl", "m_pebble_group", "rocks-misc/obj/pebbles_a.obj", "sandstone", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"badlands", "m_pebble_group_b", "rocks-misc/obj/pebbles_b.obj", "rock", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"highland", "m_pebble_group_b", "rocks-misc/obj/pebbles_b.obj", "slate", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"coast", "m_pebble_group_b", "rocks-misc/obj/pebbles_b.obj", "sandstone", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"mine", "m_pebble_group_b", "rocks-misc/obj/pebbles_b.obj", "rock", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"maahl", "m_pebble_group_b", "rocks-misc/obj/pebbles_b.obj", "sandstone", 8.28, 9.72, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* pebble group */
+    {"ashveil", "m_basalt_columns", "rocks-misc/obj/basalt_columns.obj", "rock", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hexagonal basalt columns */
+    {"highland", "m_basalt_columns", "rocks-misc/obj/basalt_columns.obj", "slate", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hexagonal basalt columns */
+    {"coast", "m_basalt_columns", "rocks-misc/obj/basalt_columns.obj", "sandstone", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hexagonal basalt columns */
+    {"cynder", "m_basalt_columns", "rocks-misc/obj/basalt_columns.obj", "basalt", 16.56, 19.44, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* hexagonal basalt columns */
+    {"highland", "m_cairn", "rocks-misc/obj/cairn_a.obj", "slate", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn */
+    {"maahl", "m_cairn", "rocks-misc/obj/cairn_a.obj", "sandstone", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn */
+    {"frontier", "m_cairn", "rocks-misc/obj/cairn_a.obj", "rock", 7.728, 9.072, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn */
+    {"highland", "m_cairn_b", "rocks-misc/obj/cairn_b.obj", "slate", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn with side stones */
+    {"maahl", "m_cairn_b", "rocks-misc/obj/cairn_b.obj", "sandstone", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn with side stones */
+    {"frontier", "m_cairn_b", "rocks-misc/obj/cairn_b.obj", "rock", 7.176, 8.424, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn with side stones */
+    {"highland", "m_cairn_c", "rocks-misc/obj/cairn_c.obj", "slate", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn */
+    {"maahl", "m_cairn_c", "rocks-misc/obj/cairn_c.obj", "sandstone", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn */
+    {"frontier", "m_cairn_c", "rocks-misc/obj/cairn_c.obj", "rock", 6.072, 7.128, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* stacked-stone cairn */
+    {"badlands", "m_angular_boulder", "rocks-misc/obj/rock_large_a.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"highland", "m_angular_boulder", "rocks-misc/obj/rock_large_a.obj", "slate", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"forest", "m_angular_boulder", "rocks-misc/obj/rock_large_a.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"mine", "m_angular_boulder", "rocks-misc/obj/rock_large_a.obj", "rock", 8.832, 10.368, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"badlands", "m_angular_boulder_b", "rocks-misc/obj/rock_large_b.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"highland", "m_angular_boulder_b", "rocks-misc/obj/rock_large_b.obj", "slate", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"forest", "m_angular_boulder_b", "rocks-misc/obj/rock_large_b.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"mine", "m_angular_boulder_b", "rocks-misc/obj/rock_large_b.obj", "rock", 9.936, 11.664, "s", "made", 0.0, 0.0, 0.22, 0.0, 0, 0, {}},          /* angular boulder */
+    {"badlands", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"highland", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"highland", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"highland", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"maahl", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"maahl", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"maahl", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"corridor", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"corridor", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"corridor", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"infestation", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"infestation", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"urban", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"urban", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"mine", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"mine", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"mine", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"swamp", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"cynder", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"cynder", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"targa", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"targa", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"targa", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"trederra", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"fortress", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"fortress", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"fortress", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"beast", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"frontier", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"frontier", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"frontier", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"graveyard", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"forest", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"forest", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"forest", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"temple", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"temple", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"temple", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"coast", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"coast", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"coast", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"sundered", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"ferrum", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"ferrum", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"ferrum", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"thornwild", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"obelis", "m_skull_human", "polyy-bones/obj/skull_01_human.obj", "bone", 1.214, 1.426, "s", "made", 0.0, 0.2, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"obelis", "m_femur", "polyy-bones/obj/bone_29_femur.obj", "bone", 2.484, 2.916, "l", "debris", 0.0, 0.1, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+    {"obelis", "m_bone_heap", "polyy-bones/obj/bone_37_heap.obj", "bone", 3.864, 4.536, "s", "debris", 0.0, 0.3, 0.22, 0.0, 0, 0, {}},          /* skulls and bones in every style (user, 2026-11-20) */
+/* IMPORT 2026-11-20 END */
 /* END MODEL TABLE */
 };
 
@@ -423,6 +1156,11 @@ static int m_build(void *ctx, double cx, double cy, double a, PyRandom *rng, int
     const MRow *prev = CUR; int r; (void)hs; (void)sc;
     CUR = (const MRow *)ctx; r = bsdde_run(m_body, cx, cy, a, rng, foot, lay); CUR = prev;
     return r;
+}
+/* the model table for the window's Models preview (2026-11-20): row i's style, name, file and classic mm a unit; 0 past the end */
+int bsdde_model_row(int i, const char **style, const char **name, const char **rel, double *mm) {
+    if (i < 0 || i >= (int)(sizeof ROWS / sizeof ROWS[0])) return 0;
+    *style = ROWS[i].style; *name = ROWS[i].name; *rel = ROWS[i].rel; *mm = (ROWS[i].mm0 + ROWS[i].mm1) / 2; return 1;
 }
 /* the rows of one Python file, registered as _model does it: a missing model file makes no detail */
 void bsdde_models_register(void) {

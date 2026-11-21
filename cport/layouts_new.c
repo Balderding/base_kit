@@ -238,6 +238,7 @@ static void bl_figure_ground(Scene *s, PyRandom *rng, const char *theme, Geo *ke
         }
         S_gcut(s, g_polys(g_inter(g_uu(rr), D)), NF(0.35), "runecut");
     }
+    { const char *ko = getenv("KIT_OBJ"); double o = (ko && *ko) ? strtod(ko, NULL) : 0; if (o > 1.0) A /= o * o; }          /* true size: the ring is the real base's, not a small layout's; as many things as the old --scale gave (Blight was 9x too busy and slow) */
     k2 = A > 0.6 ? A : 0.6;          /* max(0.6, A) */
     { int r = RI(3, 5); bl_thorn_clumps(s, rng, (int)ly_rint(r * k2 * (!strcmp(theme, "spike garden") ? 1.8 : 1.0)), rg); }
     { int r = RI(2, 3); s2_banks(s, rng, ly_rint(r * k2), 1.4, 2.4, 0.6, 1.1, "fleshrock", S2_SOFTT, 2, rg); }

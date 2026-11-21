@@ -91,7 +91,7 @@ int au_scene(Scene *s, const char *style, int n, double mm, const char *theme, F
             if ((b->feat == -1000 && strstr(a->who, "cart on track")) || (a->feat == -1000 && strstr(b->who, "cart on track"))) continue;          /* the cart stands on its rails on purpose */
             if (a->z0 >= b->top - 0.2 || b->z0 >= a->top - 0.2) continue;          /* one stands on the other (sunk in by less than 0.2 mm: settled) */
             if ((x = inter_area(a->g, b->g)) > 0.1) { hit = 1; blame(&C[C_COLLIDE], a->who);
-                { const char *pf = getenv("BBB_AUDIT_PAIRS"); FILE *ff = pf && *pf ? fopen(pf, "a") : NULL; if (ff) { fprintf(ff, "COLLIDE %s [%.2f..%.2f] x %s [%.2f..%.2f] %.2f mm2 at %.1f,%.1f\n", a->who, a->z0, a->top, b->who, b->z0, b->top, x, (a->bb[0] + a->bb[2]) / 2, (a->bb[1] + a->bb[3]) / 2); fclose(ff); } } }
+                { const char *pf = getenv("BBB_AUDIT_PAIRS"); FILE *ff = pf && *pf ? fopen(pf, "a") : NULL; if (ff) { fprintf(ff, "COLLIDE %s [%.2f..%.2f] x %s [%.2f..%.2f] %.2f mm2 at %.1f,%.1f ops %d %d of %d\n", a->who, a->z0, a->top, b->who, b->z0, b->top, x, (a->bb[0] + a->bb[2]) / 2, (a->bb[1] + a->bb[3]) / 2, a->op, b->op, s->ops.n); fclose(ff); } } }
         }
         if (foot) {          /* straddle: partly on a raised plate of the ground, partly off it; buried: no higher than the plate it is on */
             double cov = 0.0, ptop = -1e9; GEOSGeometry *u = NULL; const char *pk = "";

@@ -567,20 +567,58 @@ static void mesh_merge(Mesh *m) {
 /* trimesh.exchange.stl.export_stl: 80 zero bytes, u32 count, per face: the unit normal (triangles.normals: np.cross of
    the edges v1-v0 and v2-v1, made unit by 1/sqrt(x*x + y*y + z*z); zero when not above 1e-13) and the three corners,
    as float32, then u16 0 */
+/* loose slivers (2026-11-21): a part of the mesh under 1 mm2 that does not reach the bottom (left by a cut at a detail's edge)
+   does not print and makes slicers warn: its faces are left out. Parts are faces joined through edges at the same place. */
+static int sl_find(int *p, int i) { while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; } return i; }
+static const double *vs_v; static int vs_cmp(const void *a, const void *b) {
+    const double *x = vs_v + 3 * (size_t)*(const int *)a, *y = vs_v + 3 * (size_t)*(const int *)b;
+    for (int k = 0; k < 3; k++) { if (x[k] < y[k]) return -1; if (x[k] > y[k]) return 1; } return 0;
+}
+typedef struct { int a, b, f; } SlEdge;
+static int sle_cmp(const void *x, const void *y) { const SlEdge *p = x, *q = y; return p->a != q->a ? (p->a < q->a ? -1 : 1) : p->b != q->b ? (p->b < q->b ? -1 : 1) : 0; }
+static char *loose_slivers(const Mesh *m) {          /* per face: 1 = leave out (NULL: none); faces joined through shared edges */
+    int nv = m->nv, nt = m->nt, i, any = 0, *cid, *ord, *p; double *mz, *ar; char *drop; SlEdge *e;
+    if (nv <= 0 || nt <= 0) return NULL;
+    ord = malloc(sizeof(int) * (size_t)nv); cid = malloc(sizeof(int) * (size_t)nv);
+    for (i = 0; i < nv; i++) ord[i] = i;
+    vs_v = m->v; qsort(ord, (size_t)nv, sizeof(int), vs_cmp);
+    for (i = 0; i < nv; i++) cid[ord[i]] = (i > 0 && !vs_cmp(&ord[i - 1], &ord[i])) ? cid[ord[i - 1]] : ord[i];          /* one id per corner position */
+    e = malloc(sizeof(SlEdge) * 3 * (size_t)nt);
+    for (i = 0; i < nt; i++) for (int k = 0; k < 3; k++) { int a = cid[m->f[3 * i + k]], b = cid[m->f[3 * i + (k + 1) % 3]]; e[3 * i + k].a = a < b ? a : b; e[3 * i + k].b = a < b ? b : a; e[3 * i + k].f = i; }
+    qsort(e, 3 * (size_t)nt, sizeof(SlEdge), sle_cmp);
+    p = malloc(sizeof(int) * (size_t)nt); for (i = 0; i < nt; i++) p[i] = i;
+    for (i = 1; i < 3 * nt; i++) if (!sle_cmp(&e[i - 1], &e[i])) { int a = sl_find(p, e[i - 1].f), b = sl_find(p, e[i].f); if (a != b) p[a] = b; }
+    mz = malloc(sizeof(double) * (size_t)nt); ar = calloc((size_t)nt, sizeof(double));
+    for (i = 0; i < nt; i++) mz[i] = 1e300;
+    for (i = 0; i < nt; i++) {
+        const double *a = m->v + 3 * m->f[3 * i], *b = m->v + 3 * m->f[3 * i + 1], *c = m->v + 3 * m->f[3 * i + 2]; int r = sl_find(p, i);
+        double u0 = b[0] - a[0], u1 = b[1] - a[1], u2 = b[2] - a[2], w0 = c[0] - a[0], w1 = c[1] - a[1], w2 = c[2] - a[2];
+        double cx = u1 * w2 - u2 * w1, cy = u2 * w0 - u0 * w2, cz = u0 * w1 - u1 * w0;
+        ar[r] += 0.5 * sqrt(cx * cx + cy * cy + cz * cz);
+        if (a[2] < mz[r]) mz[r] = a[2]; if (b[2] < mz[r]) mz[r] = b[2]; if (c[2] < mz[r]) mz[r] = c[2];
+    }
+    drop = calloc((size_t)nt, 1);
+    for (i = 0; i < nt; i++) { int r = sl_find(p, i); if (mz[r] > 0.5 && ar[r] < 1.0) { drop[i] = 1; any = 1; } }
+    free(p); free(ord); free(cid); free(mz); free(ar); free(e);
+    if (!any) { free(drop); return NULL; }
+    return drop;
+}
 static int stl_write(const char *path, const Mesh *m) {
     WCHAR w[MAX_PATH * 2]; wpath(path, w, MAX_PATH * 2); FILE *f = _wfopen(w, L"wb"); if (!f) return 0;
-    unsigned char hd[84] = { 0 }; uint32_t nt = (uint32_t)m->nt; memcpy(hd + 80, &nt, 4); fwrite(hd, 1, 84, f);
-    unsigned char *buf = malloc((size_t)50 * (m->nt ? m->nt : 1));
+    char *drop = loose_slivers(m); uint32_t nt = 0; for (int i = 0; i < m->nt; i++) nt += !(drop && drop[i]);
+    unsigned char hd[84] = { 0 }; memcpy(hd + 80, &nt, 4); fwrite(hd, 1, 84, f);
+    unsigned char *buf = malloc((size_t)50 * (m->nt ? m->nt : 1)); int wn = 0;
     for (int i = 0; i < m->nt; i++) {
+        if (drop && drop[i]) continue;
         const double *a = m->v + 3 * m->f[3 * i], *b = m->v + 3 * m->f[3 * i + 1], *c = m->v + 3 * m->f[3 * i + 2];
         double u0 = b[0] - a[0], u1 = b[1] - a[1], u2 = b[2] - a[2], w0 = c[0] - b[0], w1 = c[1] - b[1], w2 = c[2] - b[2];
         double cx = u1 * w2 - u2 * w1, cy = u2 * w0 - u0 * w2, cz = u0 * w1 - u1 * w0;
         double nn = sqrt(cx * cx + cy * cy + cz * cz); float o[12];
         if (nn > 1e-13) { double r = 1.0 / nn; o[0] = (float)(cx * r); o[1] = (float)(cy * r); o[2] = (float)(cz * r); } else o[0] = o[1] = o[2] = 0;
         for (int k = 0; k < 3; k++) { o[3 + k] = (float)a[k]; o[6 + k] = (float)b[k]; o[9 + k] = (float)c[k]; }
-        memcpy(buf + 50 * (size_t)i, o, 48); buf[50 * (size_t)i + 48] = buf[50 * (size_t)i + 49] = 0;
+        memcpy(buf + 50 * (size_t)wn, o, 48); buf[50 * (size_t)wn + 48] = buf[50 * (size_t)wn + 49] = 0; wn++;
     }
-    fwrite(buf, 50, m->nt, f); free(buf);
+    fwrite(buf, 50, (size_t)wn, f); free(buf); free(drop);
     int ok = !ferror(f); fclose(f); return ok;
 }
 /* trimesh.load(stl, process=False): every face its own three corners (float32 read as float64) */
@@ -637,16 +675,15 @@ static void edge_counts(const Mesh *m, int *odd, int *pinched, int *watertight) 
     }
     *watertight = wt && wind; free(e);
 }
-static int uf_find(int *p, int x) { while (p[x] != x) { p[x] = p[p[x]]; x = p[x]; } return x; }
 /* Trimesh.split(only_watertight=False): faces joined across edges shared by exactly two faces; comp[f] = part number,
    parts numbered by their first face. Returns the number of parts; vol[k] = each part's volume (signed, mm^3) */
 static int mesh_split(const Mesh *m, int *comp, double **vol) {
     int *p = malloc(sizeof(int) * (m->nt ? m->nt : 1)); for (int i = 0; i < m->nt; i++) p[i] = i;
     Ed *e = mesh_edges(m); size_t ne = 3 * (size_t)m->nt;
-    for (size_t i = 0; i < ne;) { size_t j = i; while (j < ne && e[j].key == e[i].key) j++; if (j - i == 2) { int a = uf_find(p, e[i].face), b = uf_find(p, e[i + 1].face); if (a != b) p[a < b ? b : a] = a < b ? a : b; } i = j; }
+    for (size_t i = 0; i < ne;) { size_t j = i; while (j < ne && e[j].key == e[i].key) j++; if (j - i == 2) { int a = sl_find(p, e[i].face), b = sl_find(p, e[i + 1].face); if (a != b) p[a < b ? b : a] = a < b ? a : b; } i = j; }
     free(e);
     int nc = 0; int *lab = malloc(sizeof(int) * (m->nt ? m->nt : 1)); for (int i = 0; i < m->nt; i++) lab[i] = -1;
-    for (int i = 0; i < m->nt; i++) { int r = uf_find(p, i); if (lab[r] < 0) lab[r] = nc++; comp[i] = lab[r]; }
+    for (int i = 0; i < m->nt; i++) { int r = sl_find(p, i); if (lab[r] < 0) lab[r] = nc++; comp[i] = lab[r]; }
     *vol = calloc(nc ? nc : 1, sizeof(double));
     for (int i = 0; i < m->nt; i++) {
         const double *a = m->v + 3 * m->f[3 * i], *b = m->v + 3 * m->f[3 * i + 1], *c = m->v + 3 * m->f[3 * i + 2];
@@ -1257,12 +1294,20 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
                         double rad, hx, hy, xy[2 * 160], zt = 4.0; int box = ft_model_space(P->mm, r, P->mini, cfg_num("model_room", 1.0), &rad, &hx, &hy), n = 0; MgMesh ol = { 0 };
                         if (box) { double per = 4 * (hx + hy); for (int k = 0; k < 160; k++) { double t = per * k / 160.0, x, y;
                                 if (t < 2 * hx) { x = -hx + t; y = -hy; } else if (t < 2 * hx + 2 * hy) { x = hx; y = -hy + (t - 2 * hx); } else if (t < 4 * hx + 2 * hy) { x = hx - (t - 2 * hx - 2 * hy); y = hy; } else { x = -hx; y = hy - (t - 4 * hx - 2 * hy); }
-                                double d = sqrt(x * x + y * y), lim = 0.95 * r; if (d > lim) { x *= lim / d; y *= lim / d; } xy[2 * n] = x; xy[2 * n + 1] = y; n++; } }
+                                xy[2 * n] = x; xy[2 * n + 1] = y; n++; } }
                         else for (int k = 0; k < 64; k++) { xy[2 * n] = rad * cos(6.2831853 * k / 64); xy[2 * n + 1] = rad * sin(6.2831853 * k / 64); n++; }
-                        for (int i = 0; i < soup.nv; i++) { double x = soup.v[3 * i], y = soup.v[3 * i + 1], z = soup.v[3 * i + 2];
-                            if ((box ? fabs(x) <= hx && fabs(y) <= hy : x * x + y * y <= rad * rad) && x * x + y * y < 0.9 * r * r && z > zt) zt = z; }
-                        if (zt > 4.0 + 12.0) zt = 4.0 + 12.0;
-                        if (mg_outline(xy, n, 0.9, zt + 1.5, zt + 2.3, 2, &ol) == 0) { all.v = soup.v; all.nv = soup.nv; all.f = soup.f; all.nt = soup.nt; mg_concat(&all, &ol, 1); soup.v = all.v; soup.nv = all.nv; soup.f = all.f; soup.nt = all.nt; }
+                        {   /* inside the base: an oval's short sides too */
+                            double ry = -INFINITY; for (int i = 0; i < soup.nv; i++) if (soup.v[3 * i + 1] > ry) ry = soup.v[3 * i + 1];
+                            for (int k = 0; k < n; k++) { double x = xy[2 * k], y = xy[2 * k + 1], e = sqrt((x / r) * (x / r) + (y / ry) * (y / ry)); if (e > 0.95) { xy[2 * k] = x * 0.95 / e; xy[2 * k + 1] = y * 0.95 / e; } }
+                        }
+                        {   /* on the ground the model stands on (cleared and level): the commonest surface height in the space, in 0.1 mm steps */
+                            static int hist[400]; int best = -1; memset(hist, 0, sizeof hist);
+                            for (int i = 0; i < soup.nv; i++) { double x = soup.v[3 * i], y = soup.v[3 * i + 1], z = soup.v[3 * i + 2];
+                                if ((box ? fabs(x) <= hx && fabs(y) <= hy : x * x + y * y <= rad * rad) && x * x + y * y < 0.9 * r * r && z > 1.0 && z < 40.0) hist[(int)(z * 10)]++; }
+                            for (int q = 0; q < 400; q++) if (hist[q] && (best < 0 || hist[q] > hist[best])) best = q;
+                            if (best >= 0) zt = best / 10.0;
+                        }
+                        if (mg_outline(xy, n, 0.9, zt + 0.2, zt + 1.0, 2, &ol) == 0) { all.v = soup.v; all.nv = soup.nv; all.f = soup.f; all.nt = soup.nt; mg_concat(&all, &ol, 1); soup.v = all.v; soup.nv = all.nv; soup.f = all.f; soup.nt = all.nt; }
                         mg_mesh_free(&ol);
                     }
                     if (mg_figure(P->obj > 0 ? P->fig * 3.0 / 32.0 : P->scale, r, &fig) == 0) {
@@ -1387,11 +1432,13 @@ static int job_build(Args *a, const char *style) {
 }
 
 /* ================================================================ runner_main: gui_job.py */
+#include "models_job.c"          /* --job models: the Models preview pictures */
 int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
     if (!OUTL_ready) { InitializeCriticalSection(&OUTL); OUTL_ready = 1; }
     OUTF = out; OUTC = ctx; set_kit(); load_cfg(); pyx_load();          /* the UCRT cos / sin (magnet spots, compare_bases rotations) */
     char **av = malloc(sizeof(char *) * (argc + 1)); for (int i = 0; i < argc; i++) av[i] = argv[i];
     Args a = { argc, av };
+    if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(); free(av); return r2; }          /* the window's Models preview */
     if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: gui_job.py choices|build <style> ..."); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;

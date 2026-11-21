@@ -24,5 +24,8 @@ set KIT=%CP%\runner.c %CP%\draw2d.c %CP%\pipeline.c %CP%\stylefns.c %CP%\make.c 
  %CP%\bld_sd_rx_targa.c %CP%\bld_sd_rx_temple.c %CP%\bld_sd_rx_trederra.c %CP%\bld_sd_rx_urban.c %CP%\bld_newstyles.c %CP%\bld_ns_ashveil.c ^
  %CP%\bld_ns_blight.c %CP%\bld_ns_ferrum.c %CP%\bld_ns_obelis.c %CP%\bld_ns_sundered.c %CP%\bld_ns_tables.c %CP%\bld_ns_thornwild.c %CP%\bld_ns_tiers.c ^
  %CP%\core.c %CP%\mesh.c %CP%\mt.c %CP%\field.c %CP%\livetiles.c %CP%\shot.c %CP%\geos_link.c %CP%\mfjoin.c %CP%\audit.c %CP%\smooth3d.c %CP%\rocks3d.c
-clang %CLANG_FLAGS% -O2 -Wno-unused-function -Wno-unused-parameter -Wno-unsequenced -ffp-contract=off -fno-fast-math -mwindows -static -I%CP% -I%CP%\manifold_static\include -o "%OUT%" bbb_kit.c live.c %KIT% bbb_kit.res -L%CP%\geos_static\lib -L%CP%\manifold_static\lib -lgeos_c -lgeos -lmanifoldc -lmanifold -lClipper2 -lstdc++ -lwinpthread -ld3d11 -ldxgi -ldxguid -luuid -lgdiplus -lgdi32 -luser32 -lshell32 -lwinhttp -lbcrypt -lkernel32 -lm || exit /b 1
+rem BBB_NK=1: the window's Nuklear face (gui\nk\PLAN.md), still one exe: Nuklear is compiled in
+set NKF=
+if "%BBB_NK%"=="1" set NKF=-DBBB_NK -Ink nk\nk_ui.c -lshlwapi
+clang %CLANG_FLAGS% -O2 -Wno-unused-function -Wno-unused-parameter -Wno-unsequenced -ffp-contract=off -fno-fast-math -mwindows -static -I%CP% -I%CP%\manifold_static\include -o "%OUT%" %NKF% bbb_kit.c live.c %KIT% bbb_kit.res -L%CP%\geos_static\lib -L%CP%\manifold_static\lib -lgeos_c -lgeos -lmanifoldc -lmanifold -lClipper2 -lstdc++ -lwinpthread -ld3d11 -ldxgi -ldxguid -luuid -lgdiplus -lgdi32 -luser32 -lshell32 -lwinhttp -lbcrypt -lkernel32 -lm || exit /b 1
 echo built %OUT%

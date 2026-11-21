@@ -226,7 +226,7 @@ int cp_theme_order(const char *style, const char *salt, int64_t *out, int *n) { 
 }
 double cp_model_room = 1.0;          /* settings "model_room": the model's space times this (features.c ft_model_space) */
 static int na_of(double mm) { return mm < 59 ? 0 : mm < 79 ? 1 : mm < 129 ? 2 : mm < 159 ? 3 : 4; }          /* _na */
-static double big_of(double mm) { return ft_true_scale() != 1.0 ? 1.0 : mm >= 59.9 ? 1.2 : 1.0; }        /* _big */
+static double big_of(double mm) { return ft_figure() ? 1.0 : mm >= 59.9 ? 1.2 : 1.0; }        /* _big */
 
 /* split on whitespace into a static word array (borrowed copies) */
 typedef struct { char *buf; char *w[256]; int n; } Words;
@@ -706,9 +706,34 @@ static void uncover(Sc *sc, Geo *foot);
    low things (cracks, plates, thin rubble) stay, so the model sits on real ground */
 static Geo *cp_msp; static int cp_mbox; static double cp_mhx, cp_mhy, cp_mrad;          /* the model's space of the base being made (NULL: none) */
 static Geo *g_moved(Geo *g, double dx, double dy) { return LA(shp_translate(g->g, dx, dy)); }
-static double op_h(const Op *o) { return o->type == OP_PRISM ? o->n[1].v - o->n[0].v : o->n[1].v; }
+static double op_top(const Op *o) { return o->type == OP_PRISM ? o->n[1].v : o->n[0].v + o->n[1].v; }
+static double op_h(const Op *o) { return o->type == OP_PRISM ? o->n[1].v - o->n[0].v : o->n[1].v; }          /* one piece's own height */
+/* how high a detail stands (the model's space): a tagged one from its lowest piece to its highest top (a spire's or a rock's tiers
+   count in full); a loose piece from the deck to its top; anything on the scene's path (rails, sleepers) not at all */
+static double stand_h(Sc *sc, const Op *o, Geo *pb) {          /* pb: the path, a little wider (NULL: none) */
+    Scene *s = sc->s; int i, on = 0; double lo = 1e300, hi = -1e300, h;
+    if (pb) { int j; on = o->polys.n > 0; for (j = 0; j < o->polys.n && on; j++) if (!g_contains(pb, o->polys.v[j])) on = 0; }
+    if (o->feat <= 0) h = op_top(o) - SC.H;
+    else { for (i = 0; i < s->ops.n; i++) if (s->ops.v[i]->feat == o->feat) { double z0 = s->ops.v[i]->n[0].v, t = op_top(s->ops.v[i]); if (z0 < lo) lo = z0; if (t > hi) hi = t; } h = hi - pmin(lo, SC.H); }          /* from the ground: a piece left standing on something moved away floats */
+    return on && h <= 3.0 ? 0 : h;          /* on the path and low as a whole (rails, sleepers, pipe): part of it; a portal, frame or wreck over it is not */
+}
 /* a detail standing in the model's space is moved out of it, to the side strip (a box) or outward (a disc), when it fits there
    clear of the other standing details and inside the rim; else it goes */
+/* a chamfered rock is built from its chop, not from its stand-in op (kind rockc, sharing the polygons): moving or dropping the op
+   must do the same to its chop */
+static void chops_of(Sc *sc, const Op *o, double dx, double dy, int drop) {
+    Scene *s = sc->s; int i, j, w = 0;
+    for (i = 0; i < s->chops.n; i++) {
+        Chop *c = s->chops.v[i]; int hit = 0;
+        for (j = 0; j < o->polys.n && !hit; j++) if (c->poly == o->polys.v[j] || (c->poly && g_intersects(c->poly, o->polys.v[j]) && fabs(area(c->poly) - area(o->polys.v[j])) < 0.25 * area(o->polys.v[j]) + 0.05 && area(LIn(c->poly, o->polys.v[j])) > 0.6 * area(o->polys.v[j]))) hit = 1;          /* the same polygon, or the same shape (a grown copy) */
+        if (hit && drop) continue;          /* out of the list (its memory goes with the scene's) */
+        if (hit) { Geo *g = g_moved(c->poly, dx, dy); int k; geo_ref(g); geo_unref(c->poly); c->poly = g;
+            for (k = 0; k < c->ops.n; k++) { Op *q = c->ops.v[k], *n; GeoList ps = { 0 }; int z; for (z = 0; z < q->polys.n; z++) gl_push(&ps, g_moved(q->polys.v[z], dx, dy)); n = op_like(q, &ps); gl_free(&ps); op_unref(q); c->ops.v[k] = n; } }
+        s->chops.v[w++] = c;
+    }
+    s->chops.n = w;
+}
+static int op_ground(const Scene *s, const Op *o);
 static int move_out(Sc *sc, Geo *space, int f, int box, double hx, double hy, double rad) {
     Scene *s = sc->s; double bb[4], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 }, d[2][2]; int i, j, t, nt;
     Geo *inner = g_buf(sc->disc, -0.8);
@@ -733,7 +758,7 @@ static int move_out(Sc *sc, Geo *space, int f, int box, double hx, double hy, do
                 Geo *m = g_moved(o->polys.v[j], d[t][0], d[t][1]); int k2;
                 if (!g_contains(inner, m) || (g_intersects(m, space) && area(LIn(m, space)) > 0.3)) { ok = 0; break; }
                 for (k2 = 0; k2 < s->ops.n && ok; k2++) { Op *q = s->ops.v[k2]; int z;
-                    if (q->feat == f || q->feat <= 0 || op_h(q) <= 1.0) continue;
+                    if (q->feat == f || op_ground(s, q) || op_top(q) <= o->n[0].v + 0.2) continue;          /* any standing piece is in the way (the layout's own rocks too), only the ground is not */
                     for (z = 0; z < q->polys.n; z++) if (g_intersects(m, q->polys.v[z]) && area(LIn(m, q->polys.v[z])) > 0.2) { ok = 0; break; } }
             }
         }
@@ -741,6 +766,7 @@ static int move_out(Sc *sc, Geo *space, int f, int box, double hx, double hy, do
         for (i = 0; i < s->ops.n; i++) {
             Op *o = s->ops.v[i], *n; GeoList ps = { 0 };
             if (o->feat != f) continue;
+            chops_of(sc, o, d[t][0], d[t][1], 0);
             for (j = 0; j < o->polys.n; j++) gl_push(&ps, g_moved(o->polys.v[j], d[t][0], d[t][1]));
             n = op_like(o, &ps); gl_free(&ps); op_unref(o); s->ops.v[i] = n;
         }
@@ -748,11 +774,51 @@ static int move_out(Sc *sc, Geo *space, int f, int box, double hx, double hy, do
     }
     return 0;
 }
-static void drop_tall_in(Sc *sc, Geo *space, int box, double hx, double hy, double rad) {
-    Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL; OpList keep = { 0 };
+/* true size: the ground cuts (pits, holes, pools, grooves) cut back out of the model's space, so the model stands on solid ground */
+static void clear_cuts(Sc *sc, Geo *space) {
+    Scene *s = sc->s; int i, j, k;
+    for (i = 0; i < s->gcuts.n; i++) {
+        GeoList *pl = &s->gcuts.v[i].polys, np = { 0 }; int hit = 0;
+        for (j = 0; j < pl->n; j++) if (intersects(pl->v[j], space)) { hit = 1; break; }
+        if (!hit) continue;
+        for (j = 0; j < pl->n; j++) {
+            if (!intersects(pl->v[j], space)) { gl_push(&np, pl->v[j]); continue; }
+            { GeoList *ps = g_polys(g_diff(pl->v[j], space)); for (k = 0; k < ps->n; k++) if (area(ps->v[k]) > 0.6 && g_wide(ps->v[k], SC.MINW)) gl_push(&np, ps->v[k]); }          /* no slivers left at its edge */
+        }
+        gl_free(pl); *pl = np;
+    }
+}
+/* true size: where a track runs, the ground is cleared for it, as at a level crossing: raised paving cut back to the track's
+   edge, the layout's loose ground pieces (kerb bricks, stones) taken away, the cut marks (grooves, gutters) stopped there.
+   The subject and the details are not touched; old, nold: the ops there were before the track was laid (the track's own are the rest) */
+static void track_clear(Sc *sc, Op **old, int nold) {
+    Scene *s = sc->s; Geo *strip; int i, j, k, w; OpList keep = { 0 };
+    if (!sc->pathg || E(sc->pathg)) return;
+    strip = g_buf(sc->pathg, 0.8);
     for (i = 0; i < s->ops.n; i++) {
-        Op *o = s->ops.v[i]; double h = op_h(o); int in = 0;
-        if (o->feat <= 0 || h <= 2.0) continue;
+        Op *o = s->ops.v[i]; int hit = 0;
+        int was = 0, q; for (q = 0; q < nold && !was; q++) was = old[q] == o;
+        if (!was || o->feat > 0 || !o->kind) { ol_push_own(&keep, o); continue; }
+        for (j = 0; j < o->polys.n && !hit; j++) if (intersects(o->polys.v[j], strip) && area(LIn(o->polys.v[j], strip)) > 0.2) hit = 1;
+        if (!hit || op_top(o) <= SC.H + 0.05) { ol_push_own(&keep, o); continue; }          /* the floor at ground level stays */
+        if (in_bridge(o->kind) || in_terrk(o->kind)) {          /* a raised plate or slab: cut back to the track's edge */
+            GeoList ps = { 0 }; Op *n;
+            for (j = 0; j < o->polys.n; j++) { GeoList *xs = g_polys(g_diff(o->polys.v[j], strip)); for (k = 0; k < xs->n; k++) if (area(xs->v[k]) > 0.6 && g_wide(xs->v[k], SC.MINW)) gl_push(&ps, xs->v[k]); }
+            if (ps.n) { n = op_like(o, &ps); ol_push_own(&keep, n); }
+            gl_free(&ps); op_unref(o); continue;
+        }
+        chops_of(sc, o, 0, 0, 1); op_unref(o);          /* a loose ground piece on the track: gone */
+    }
+    free(s->ops.v); s->ops = keep;
+    clear_cuts(sc, strip);
+    (void)w;
+}
+static void drop_tall_in(Sc *sc, Geo *space, int box, double hx, double hy, double rad) {
+    Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL; OpList keep = { 0 }; Geo *pb = sc->pathg && !E(sc->pathg) ? g_buf(sc->pathg, 0.6) : NULL;
+    for (i = 0; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i]; double h; int in = 0;
+        if (o->feat <= 0) continue;
+        h = stand_h(sc, o, pb); if (h <= 2.0) continue;
         for (k = 0; k < nb; k++) if (bad[k] == o->feat) break;
         if (k < nb) continue;
         for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.3) in = 1;
@@ -764,14 +830,16 @@ static void drop_tall_in(Sc *sc, Geo *space, int box, double hx, double hy, doub
     for (i = 0; i < s->ops.n; i++) {          /* the layout's own standing pieces (untagged, not ground: no plate, bedrock or grit) in the space go too */
         Op *o = s->ops.v[i]; int in = 0;
         int gb = 0, z; for (z = 0; z < s->base_ops.n && !gb; z++) gb = s->base_ops.v[z] == o;          /* the ground laid before the details stays */
-        if (gb || o->feat > 0 || op_h(o) <= 2.0 || !o->kind || in_bridge(o->kind) || in_soft(o->kind) || in_terrk(o->kind) || kd_has(KD.wetk, o->kind->s)) continue;
+        (void)gb;          /* the layout's own pieces too (a well's pillars): only the ground kinds stay */
+        if (getenv("BBB_DBG_GROW") && op_top(o) > SC.H + 2.0) { int in2 = 0, jj; for (jj = 0; jj < o->polys.n; jj++) if (g_intersects(o->polys.v[jj], space)) in2 = 1; if (in2) { FILE *df = fopen(getenv("BBB_DBG_GROW"), "a"); if (df) { fprintf(df, "tall in space: kind %s feat %d base %d bridge %d soft %d terrk %d top %.2f\n", o->kind ? o->kind->s : "?", o->feat, gb, o->kind && in_bridge(o->kind), o->kind && in_soft(o->kind), o->kind && in_terrk(o->kind), op_top(o)); fclose(df); } } }
+        if (o->feat > 0 || stand_h(sc, o, pb) <= 2.0 || !o->kind || in_bridge(o->kind) || in_soft(o->kind) || in_terrk(o->kind) || kd_has(KD.wetk, o->kind->s)) continue;
         for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.3) in = 1;
         if (in) { if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); } bad[nb++] = -(i + 1); }          /* -(index): this op alone */
     }
     if (!nb) return;
     for (i = 0; i < s->ops.n; i++) {
         Op *o = s->ops.v[i]; for (k = 0; k < nb && !(bad[k] > 0 ? o->feat == bad[k] : bad[k] == -(i + 1)); k++) {}
-        if (k < nb) op_unref(o); else ol_push_own(&keep, o);
+        if (k < nb) { chops_of(sc, o, 0, 0, 1); op_unref(o); } else ol_push_own(&keep, o);
     }
     free(s->ops.v); s->ops = keep; free(bad);
 }
@@ -1012,7 +1080,7 @@ static int place_subject(Sc *sc, KVal *plan, int small, int force) {          /*
     FtBuildFn build = NULL; void *bctx = NULL; KVal *offs[8]; KVal off_lit[4]; static const double OL[4] = { 0.3, 0.15, 0.42, 0.0 };
     const char *name = KS_(sub, "name");
     subject_builder(name, &sc->pal, &build, &bctx);
-    k0 = (small && ft_true_scale() == 1.0 ? 1.0 : ft_size_factor(sc->mm) * big_of(sc->mm)) * KN(KG(sub, "size"));
+    k0 = (small && !ft_figure() ? 1.0 : ft_figure() ? 1.6 : ft_size_factor(sc->mm) * big_of(sc->mm)) * KN(KG(sub, "size"));          /* true size: 1.6 as the old --scale had it, then grown (lay_scene) */
     seed = py_random(sc->mixr); edge = truthy(KG(sub, "edge"));
     past = strcmp(KS_(pth, "kind"), "none") != 0 && !strcmp(KS_(pth, "route"), "past");
     offs[0] = KG(sub, "offset"); noffs = 1;
@@ -1171,12 +1239,25 @@ static Geo *P_trail(Sc *sc, Geo *line, PyRandom *rng) {
     }
     return g;
 }
+/* a track's real parts at 1:56 (2026-11-21), mm at object size 3: in a mine an 18 in (457 mm) tub track on 12 lb/yd rail (ASCE
+   12: 50.8 mm high, foot 50.8, head 25.4), sleepers 0.9 x 0.11 m every 0.6 m; elsewhere (a trench railway, a foundry line) a
+   600 mm track on 20 lb/yd rail (ASCE 20 / BS 20M: 66.7 mm high, foot 56-67, head 31-34), sleepers 1.2 x 0.15 m every 0.64 m.
+   Sleepers about 2 x gauge long, half in the ballast. Rails at least the 0.88 mm that prints. */
+typedef struct { double sp, sw, sl, sh, ro, rw, rh, hw, rmin; } Trk;          /* rmin: the tightest curve, m (a mine line about 6 m, a 600 mm line about 10 m) */
+static Trk trk_of(const Sc *sc) {
+    Trk t; int mine = sc->style && !strcmp(sc->style, "mine");
+    if (mine) { t.sp = 10.7; t.sw = 2.0; t.sl = 16.1; t.sh = 0.8; t.ro = 4.3; t.rw = 0.9; t.rh = 0.9; t.hw = 8.6; t.rmin = 6.0; }          /* gauge 8.2 mm between the rails */
+    else { t.sp = 11.5; t.sw = 2.7; t.sl = 21.4; t.sh = 1.0; t.ro = 5.4; t.rw = 1.1; t.rh = 1.2; t.hw = 11.0; t.rmin = 10.0; }          /* gauge 10.7 mm */
+    return t;
+}
 static Geo *P_track(Sc *sc, Geo *line, PyRandom *rng) {
-    GeoList *t = LL(), *sd = LL(); int64_t n, i; double *us = arange_(0.8, g_len(line), 1.65, &n); UpL L[2];
-    for (i = 0; i < n; i++) { double x, y, a; at_(line, us[i], &x, &y, &a); gl_push(t, rect_(x, y, 0.95, 3.6, a + py_uniform(rng, -0.05, 0.05))); }
-    L[0].g = U(t); L[0].h = 0.4; L[0].k = sc->pal.wood;
-    gl_push(sd, side_(line, -1.15, 0.92)); gl_push(sd, side_(line, 1.15, 0.92));
-    L[1].g = U(sd); L[1].h = 0.85; L[1].k = sc->pal.iron;
+    GeoList *t = LL(), *sd = LL(); int64_t n, i; UpL L[2]; double *us; Trk T = trk_of(sc);          /* true size: the real parts (trk_of), times the size slider; the classic one as drawn */
+    double f = ft_obj_scale() > 0 ? ft_obj_scale() / 3.0 : 0, sp = f ? T.sp * f : 1.65, sw = f ? T.sw * f : 0.95, sl = f ? T.sl * f : 3.6, ro = f ? T.ro * f : 1.15, rw = f ? pmax(T.rw * f, 0.88) : 0.92;
+    us = arange_(f ? sp * 0.5 : 0.8, g_len(line), sp, &n);
+    for (i = 0; i < n; i++) { double x, y, a; at_(line, us[i], &x, &y, &a); gl_push(t, rect_(x, y, sw, sl, a + py_uniform(rng, -0.05, 0.05))); }
+    L[0].g = U(t); L[0].h = f ? T.sh : 0.4; L[0].k = sc->pal.wood;
+    gl_push(sd, side_(line, -ro, rw)); gl_push(sd, side_(line, ro, rw));
+    L[1].g = U(sd); L[1].h = f ? T.sh + T.rh * f : 0.85; L[1].k = sc->pal.iron;          /* the rail's top: on the sleeper (low enough to stay under a model in its space: the path's own pieces up to 3 mm) */
     return lay_up(sc, L, 2, 0);
 }
 static Geo *P_boards(Sc *sc, Geo *line, PyRandom *rng) {
@@ -1298,7 +1379,17 @@ static void lay_path(Sc *sc, KVal *plan) {          /* lay_path(sc, plan) */
     if (!strcmp(kind, "none")) return;
     c[0] = sc->c[0]; c[1] = sc->c[1]; front[0] = sc->front[0]; front[1] = sc->front[1]; p1[0] = sc->p1[0]; p1[1] = sc->p1[1];
     n[0] = -front[1]; n[1] = front[0]; hw = path_w(kind); bend = KN(KG(pth, "bend"));
-    if (!strcmp(KS_(pth, "route"), "past")) {
+    if (ft_obj_scale() > 0 && !strcmp(kind, "track")) hw = trk_of(sc).hw * ft_obj_scale() / 3.0;          /* true size: the real track's half width (trk_of) */
+    if (ft_obj_scale() > 0 && !strcmp(kind, "track") && !strcmp(KS_(pth, "route"), "past")) {          /* true size: a real track cannot turn round a subject; it runs past it as a chord across the base, bowed no more than its tightest curve allows */
+        double q[2], d1[2], pa[2], pb[2], ctrl[2], mb[2], m2[2], ch, sag, rm = trk_of(sc).rmin * 6.0 * ft_obj_scale();
+        q[0] = p1[0] + front[0] * (1.2 + hw); q[1] = p1[1] + front[1] * (1.2 + hw);
+        rot_(front, PI / 2 + LF_RADIANS(bend * 40), d1); rim_hit(q, d1, R + 2, pa); m2[0] = -d1[0]; m2[1] = -d1[1]; rim_hit(q, m2, R + 2, pb);
+        ch = px_dist(pa, pb, 2); sag = pmin(fabs(bend) * ch * 0.5, ch * ch / (8 * rm)); if (bend < 0) sag = -sag;
+        mb[0] = (pa[0] + pb[0]) / 2 + front[0] * 2 * sag; mb[1] = (pa[1] + pb[1]) / 2 + front[1] * 2 * sag; ctrl[0] = mb[0]; ctrl[1] = mb[1];
+        line = curve_(pa, ctrl, pb); sc->has_start = 1; sc->start[0] = pa[0]; sc->start[1] = pa[1];
+        sc->has_q = 1; sc->q[0] = q[0] + front[0] * hw; sc->q[1] = q[1] + front[1] * hw;
+        kv_set(pth, "from_angle", kv_float(pround(pmod(LF_DEGREES(py_atan2(pa[1], pa[0])), 360), 1)));
+    } else if (!strcmp(KS_(pth, "route"), "past")) {
         double q[2], d1[2], d2[2], pa[2], pb[2], ctrl[2];
         q[0] = p1[0] + front[0] * (1.2 + hw); q[1] = p1[1] + front[1] * (1.2 + hw);
         rot_(front, PI / 2 - LF_RADIANS(6 + fabs(bend) * 110), d1); rot_(front, -PI / 2 + LF_RADIANS(6 + fabs(bend) * 60), d2);
@@ -1312,9 +1403,18 @@ static void lay_path(Sc *sc, KVal *plan) {          /* lay_path(sc, plan) */
         double end[2], L, ctrl[2];
         if (sc->core && !E(sc->core)) ray_exit(c, front, sc->core, end); else { end[0] = p1[0]; end[1] = p1[1]; }
         if (px_dist(end, c, 2) < px_dist(p1, c, 2) * 0.5) { end[0] = p1[0] - front[0] * 1.0; end[1] = p1[1] - front[1] * 1.0; }
+        if (ft_obj_scale() > 0 && !strcmp(kind, "track")) {          /* true size: a real track runs straight out of the subject (a tunnel mouth, a shaft head) to the rim, bowed no more than its tightest curve allows (sagitta L^2 / 8r; the control point twice that) */
+            double s0[2], rm = trk_of(sc).rmin * 6.0 * ft_obj_scale(), bw, mx;
+            rim_hit(end, front, R + 2, s0); L = px_dist(s0, end, 2);
+            bw = bend * L; mx = 2 * L * L / (8 * rm); if (fabs(bw) > mx) bw = bw < 0 ? -mx : mx;
+            ctrl[0] = (s0[0] + end[0]) / 2 + n[0] * bw; ctrl[1] = (s0[1] + end[1]) / 2 + n[1] * bw;
+            line = curve_(s0, ctrl, end); sc->has_start = 1; sc->start[0] = s0[0]; sc->start[1] = s0[1];
+            kv_set(pth, "from_angle", kv_float(pround(pmod(LF_DEGREES(py_atan2(s0[1], s0[0])), 360), 1)));
+        } else {
         L = px_dist(sc->p0, end, 2);
         ctrl[0] = end[0] + front[0] * L * 0.5 + n[0] * bend * L; ctrl[1] = end[1] + front[1] * L * 0.5 + n[1] * bend * L;
         line = curve_(sc->p0, ctrl, end); sc->has_start = 1; sc->start[0] = sc->p0[0]; sc->start[1] = sc->p0[1];
+        }
         sc->has_q = 1; sc->q[0] = p1[0]; sc->q[1] = p1[1];
     }
     pc.sc = sc; pc.f = path_fn(kind); pc.line = line; pc.g = NULL;
@@ -1533,19 +1633,71 @@ static Snap snap(Scene *s) {          /* _snap(s) */
     return r;
 }
 static double cp_grow = 1.0;          /* true size on a big base (clutter): loose debris and growth made this much larger, fewer of them */
-static void grow_new(Sc *sc, int from, int cfrom) {          /* the ops (and chamfered rocks) made since from, larger about their middle; heights by the root */
+static int cp_grow_check = 0;          /* grow_new: 1 = keep the growth only if it cuts into no detail made before (run_ places at the small size) */
+static int op_ground(const Scene *s, const Op *o) {          /* the ground, not a standing detail (as audit.c counts it) */
+    static const char *G[] = { "bedrock", "garden", "grass", "flower", "flesh", "moss", "pan", "mud", "sand", "ash", "dust", "spoil", "pavers", "slate", NULL }; int i; size_t n;
+    for (i = 0; i < s->base_ops.n; i++) if (s->base_ops.v[i] == o) return 1;
+    if (!o->kind) return 0;
+    if (in_soft(o->kind)) return 1;
+    if (o->feat) return 0;
+    if (in_bridge(o->kind) || in_terrk(o->kind)) return 1;
+    for (i = 0; G[i]; i++) if (!strcmp(o->kind->s, G[i])) return 1;
+    n = strlen(o->kind->s); return n > 2 && !strcmp(o->kind->s + n - 2, "_p");
+}
+static int op_hits(Sc *sc, Op *n, int upto, int skip) {          /* n (not ground) cuts into a detail among ops[0..upto) other than ops[skip] */
+    Scene *s = sc->s; int i, j, b; double ba[4], bb[4], z0 = n->n[0].v, t = op_top(n);
+    for (i = 0; i < upto; i++) {
+        Op *e = s->ops.v[i];
+        if (i == skip || !e || op_ground(s, e) || (n->feat && e->feat == n->feat)) continue;
+        if (z0 >= op_top(e) - 0.2 || e->n[0].v >= t - 0.2) continue;          /* one stands on the other */
+        for (j = 0; j < n->polys.n; j++) { g_bounds(n->polys.v[j], ba);
+            for (b = 0; b < e->polys.n; b++) { g_bounds(e->polys.v[b], bb);
+                if (ba[2] < bb[0] || bb[2] < ba[0] || ba[3] < bb[1] || bb[3] < ba[1]) continue;
+                { Geo *x = LIn(n->polys.v[j], e->polys.v[b]); if (x && !g_isempty(x) && area(x) > 0.1) return 1; }
+            }
+        }
+    }
+    return 0;
+}
+static int scene_hits(Sc *sc, int from) {          /* a piece made since from cuts into a standing piece the layout or scene laid itself (a pipe run, veins, rails) */
+    Scene *s = sc->s; int i, j, a, b; double ba[4], bb[4];
+    for (i = 0; i < from; i++) {
+        Op *e = s->ops.v[i];
+        if (!e || e->feat > 0 || op_ground(s, e) || op_top(e) - e->n[0].v <= 1.0 || !e->polys.n) continue;          /* over 1 mm tall: low planks and slabs a detail can stand among stay allowed */
+        for (a = from; a < s->ops.n; a++) {
+            Op *n = s->ops.v[a];
+            if (op_ground(s, n) || n->n[0].v >= op_top(e) - 0.2 || e->n[0].v >= op_top(n) - 0.2) continue;
+            for (j = 0; j < n->polys.n; j++) { g_bounds(n->polys.v[j], ba);
+                for (b = 0; b < e->polys.n; b++) { g_bounds(e->polys.v[b], bb);
+                    if (ba[2] < bb[0] || bb[2] < ba[0] || ba[3] < bb[1] || bb[3] < ba[1]) continue;
+                    { Geo *x = LIn(n->polys.v[j], e->polys.v[b]); if (x && !g_isempty(x) && area(x) > 0.1) return 1; }
+                }
+            }
+        }
+    }
+    return 0;
+}
+static int grown_hits(Sc *sc, int from, Op **news, int nm) {          /* a grown piece in the same place and height as an earlier detail */
+    int a; for (a = 0; a < nm; a++) if (!op_ground(sc->s, news[a]) && op_hits(sc, news[a], from, -1)) return 1;
+    return 0;
+}
+static int cp_piv = 0; static double cp_pivx, cp_pivy;          /* grow_new: grow about this point, not the middle (set by grow_since) */
+static int grow_new(Sc *sc, int from, int cfrom) {          /* returns 0 when cp_grow_check found the grown detail cutting into another (nothing changed) */          /* the ops (and chamfered rocks) made since from, larger about their middle; heights by the root */
     Scene *s = sc->s; double bb[4], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 }, cx, cy, k = cp_grow, kh = sqrt(cp_grow); int i, j, nm = 0; Op **olds = (Op **)LM(sizeof(Op *) * (size_t)(s->ops.n - from + 1)), **news = (Op **)LM(sizeof(Op *) * (size_t)(s->ops.n - from + 1));
     for (i = from; i < s->ops.n; i++) for (j = 0; j < s->ops.v[i]->polys.n; j++) { g_bounds(s->ops.v[i]->polys.v[j], bb); lo[0] = pmin(lo[0], bb[0]); lo[1] = pmin(lo[1], bb[1]); hi[0] = pmax(hi[0], bb[2]); hi[1] = pmax(hi[1], bb[3]); }
-    if (lo[0] > hi[0]) return;
+    if (lo[0] > hi[0]) return 1;
     cx = (lo[0] + hi[0]) / 2; cy = (lo[1] + hi[1]) / 2;
+    if (cp_piv) { cx = cp_pivx; cy = cp_pivy; }
     for (i = from; i < s->ops.n; i++) {
         Op *o = s->ops.v[i], *n; GeoList ps = { 0 };
         for (j = 0; j < o->polys.n; j++) { Geo *g = LIn(g_scale(o->polys.v[j], k, k, SHP_ORIGIN_POINT, cx, cy), sc->disc); if (g && !g_isempty(g) && area(g) > 0.05) gl_push(&ps, g); }
         if (!ps.n) { gl_free(&ps); continue; }
         n = op_like(o, &ps); gl_free(&ps);
         if (n->type == OP_PRISM) n->n[1].v = n->n[0].v + (n->n[1].v - n->n[0].v) * kh; else n->n[1].v *= kh;
-        olds[nm] = o; news[nm++] = n; s->ops.v[i] = n;          /* o stays alive until its chop (if any) lets go of it */
+        olds[nm] = o; news[nm++] = n;
     }
+    if (cp_grow_check && grown_hits(sc, from, news, nm)) { for (i = 0; i < nm; i++) op_unref(news[i]); return 0; }
+    for (i = from, j = 0; i < s->ops.n && j < nm; i++) if (s->ops.v[i] == olds[j]) s->ops.v[i] = news[j++];          /* o stays alive until its chop (if any) lets go of it */
     for (i = cfrom; i < s->chops.n; i++) {          /* a chamfered rock is built from its chop: the same growth, and it points at the new ops */
         Chop *c = s->chops.v[i]; Geo *g = c->poly ? LIn(g_scale(c->poly, k, k, SHP_ORIGIN_POINT, cx, cy), sc->disc) : NULL;
         if (g && !g_isempty(g)) { geo_ref(g); geo_unref(c->poly); c->poly = g; }
@@ -1553,6 +1705,7 @@ static void grow_new(Sc *sc, int from, int cfrom) {          /* the ops (and cha
         for (j = 0; j < c->ops.n; j++) { int m; for (m = 0; m < nm && c->ops.v[j] != olds[m]; m++) {} if (m < nm) { op_unref(c->ops.v[j]); c->ops.v[j] = op_ref(news[m]); } }
     }
     for (i = 0; i < nm; i++) op_unref(olds[i]);
+    return 1;
 }
 /* true size on a big base: the layout's own loose pebbles (chamfered rocks under 3 mm2) made k larger, each about its middle */
 static void grow_pebbles(Sc *sc, double k) {          /* (before the release: they are still plain rock ops; a rock's tiers grow about one middle) */
@@ -1571,19 +1724,62 @@ static void grow_pebbles(Sc *sc, double k) {          /* (before the release: th
         if (!ps.n) { gl_free(&ps); continue; }
         n = op_like(o, &ps); gl_free(&ps);
         if (n->type == OP_PRISM) n->n[1].v = n->n[0].v + (n->n[1].v - n->n[0].v) * kh; else { double z0 = o->n[0].v; if (fabs(z0 - pot) < 1e-3) n->n[0].v = pnt; n->n[1].v *= kh; pot = z0 + o->n[1].v; pnt = n->n[0].v + n->n[1].v; }          /* a rock's next tier (it starts where the last one ended): on the grown one */
+        if (op_hits(sc, n, s->ops.n, i)) { op_unref(n); pot = -1e300; continue; }          /* grown it would cut into a detail standing there: it stays its size */
         op_unref(o); s->ops.v[i] = n;
     }
     for (i = w = 0; i < s->ops.n; i++) if (s->ops.v[i]) s->ops.v[w++] = s->ops.v[i];          /* the dropped grit out of the list */
     s->ops.n = w;
 }
+/* true size (2026-11-20): what lay_scene just made (the subject, then its path) grown k times about its own middle: ops, chamfered
+   rocks and the cuts that go with it (ballast, ruts), as the old --scale grew the whole layout */
+static void grow_since(Sc *sc, Snap b, int c0, double k) {
+    Scene *s = sc->s; double bb[4], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 }, cx, cy; int i, j; double keep = cp_grow;
+    if (k <= 1.0) return;
+    for (i = b.a; i < s->ops.n; i++) for (j = 0; j < s->ops.v[i]->polys.n; j++) { g_bounds(s->ops.v[i]->polys.v[j], bb); lo[0] = pmin(lo[0], bb[0]); lo[1] = pmin(lo[1], bb[1]); hi[0] = pmax(hi[0], bb[2]); hi[1] = pmax(hi[1], bb[3]); }
+    if (lo[0] > hi[0]) return;
+    cx = (lo[0] + hi[0]) / 2; cy = (lo[1] + hi[1]) / 2;
+    if (sc->mm < 39.9 && cp_msp) {          /* a base for one figure: the subject beside it grows to at most a fifth of the base (a true-size ore cart or depot is as long as the base) */
+        double ba = (hi[0] - lo[0]) * (hi[1] - lo[1]), cap = ba > 0 ? sqrt(0.2 * PI * sc->R * sc->R / ba) : k;
+        if (cap < k) k = pmax(1.0, cap);
+        if (k <= 1.0) return;
+    }
+    if (cp_msp) {          /* true size: placed clear of the model's space, it grows from its outer corner, and only as far as stays clear of it */
+        int in0 = 0, q, step; double px = 0, py = 0, best = -1, kk = k;
+        for (q = 0; q < 4; q++) { double x = q & 1 ? hi[0] : lo[0], y = q & 2 ? hi[1] : lo[1]; if (x * x + y * y > best) { best = x * x + y * y; px = x; py = y; } }
+        for (i = b.a; i < s->ops.n && !in0; i++) for (j = 0; j < s->ops.v[i]->polys.n; j++) { Geo *x = LIn(s->ops.v[i]->polys.v[j], cp_msp); if (x && !g_isempty(x) && area(x) > 0.5) { in0 = 1; break; } }
+        if (!in0) {          /* (a track across the middle was laid there on purpose: grown about its middle as before) */
+            for (step = 0; step <= 12; step++) {
+                int bad = 0; kk = k - (k - 1.0) * step / 12.0;
+                for (i = b.a; i < s->ops.n && !bad; i++) for (j = 0; j < s->ops.v[i]->polys.n; j++) { Geo *x = LIn(g_scale(s->ops.v[i]->polys.v[j], kk, kk, SHP_ORIGIN_POINT, px, py), cp_msp); if (x && !g_isempty(x) && area(x) > 0.5) { bad = 1; break; } }
+                if (!bad) break;
+            }
+            k = kk; cx = px; cy = py;
+            if (k <= 1.0) return;
+        }
+    }
+    for (i = b.b; i < s->gcuts.n; i++) { GeoList *pl = &s->gcuts.v[i].polys; for (j = 0; j < pl->n; j++) { Geo *g = LIn(g_scale(pl->v[j], k, k, SHP_ORIGIN_POINT, cx, cy), sc->disc); if (g) { geo_ref(g); geo_unref(pl->v[j]); pl->v[j] = g; } } }
+    for (i = b.c; i < s->tcuts.n; i++) { GeoList *pl = &s->tcuts.v[i].polys; for (j = 0; j < pl->n; j++) { Geo *g = LIn(g_scale(pl->v[j], k, k, SHP_ORIGIN_POINT, cx, cy), sc->disc); if (g) { geo_ref(g); geo_unref(pl->v[j]); pl->v[j] = g; } } }
+    if (getenv("BBB_DBG_GROW")) { FILE *df = fopen(getenv("BBB_DBG_GROW"), "a"); if (df) { fprintf(df, "grow_since k %.2f ops %d gcuts %d tcuts %d chops %d box %.1fx%.1f\n", k, s->ops.n - b.a, s->gcuts.n - b.b, s->tcuts.n - b.c, s->chops.n - c0, hi[0] - lo[0], hi[1] - lo[1]); fclose(df); } }
+    cp_grow = k; cp_piv = 1; cp_pivx = cx; cp_pivy = cy; grow_new(sc, b.a, c0); cp_piv = 0; cp_grow = keep;
+}
 static int run_(Sc *sc, ScFn *fn, SmAt *at, SmAim *aim) {          /* _run(sc, fn, at, aim) */
-    Snap b, a; SmFocus keep; int r, c0;
+    Snap b, a; SmFocus keep; int r, c0, f0;
     if (!at) return 0;
-    b = snap(sc->s); c0 = sc->s->chops.n;
+    b = snap(sc->s); c0 = sc->s->chops.n; f0 = sc->s->feet.n;
     sm_focus_enter(&keep, at, aim);
     r = call_fn(fn, sc->s, sc->rng, sc->t);
     sm_focus_exit(&keep);
-    if (cp_grow > 1.0 && r >= 0 && sc->s->ops.n > b.a) grow_new(sc, b.a, c0);
+    if (cp_grow > 1.0 && r >= 0 && sc->s->ops.n > b.a) {          /* grown where it was placed small: only as large as fits beside the details already there */
+        double kk = cp_grow; cp_grow_check = 1;
+        if (!grow_new(sc, b.a, c0)) { cp_grow = sqrt(kk); if (cp_grow > 1.05) grow_new(sc, b.a, c0); }
+        cp_grow = kk; cp_grow_check = 0;
+    }
+    if (ft_obj_scale() > 0 && r >= 0 && sc->s->ops.n > b.a && scene_hits(sc, b.a)) {          /* true size: not on the layout's own pipes, veins or rails (taken back) */
+        Scene *s = sc->s; int i;
+        for (i = b.a; i < s->ops.n; i++) op_unref(s->ops.v[i]);
+        s->ops.n = b.a; s->chops.n = c0; s->gcuts.n = b.b; s->tcuts.n = b.c; s->feet.n = f0;          /* (their memory goes with the scene's) */
+        return 0;
+    }
     if (r < 0) cp_log(sc, fn->qualname && *fn->qualname ? fn->qualname : "detail");
     a = snap(sc->s);
     return a.a != b.a || a.b != b.b || a.c != b.c || a.d != b.d;
@@ -1821,7 +2017,7 @@ static int cart_on_track(Sc *sc) {          /* the cart on its track: on the rai
         Geo *foot = NULL, *test; SoLayers lay = { 0 }; int ok = 1;
         u = py_uniform(sc->mixr, 0.2 * L, 0.8 * L); at_(sc->line, u, &x, &y, &a);
         if (x * x + y * y > (sc->R - 4.0) * (sc->R - 4.0)) continue;
-        if (ft_track_cart(x, y, a, sc->rng, 1.15, sc->pal.wood ? sc->pal.wood : "wood", sc->pal.iron ? sc->pal.iron : "iron", &foot, &lay) < 0 || !foot) { lyl_free(&lay); continue; }
+        if (ft_track_cart(x, y, a, sc->rng, ft_obj_scale() > 0 ? trk_of(sc).ro * ft_obj_scale() / 3.0 : 1.15, sc->pal.wood ? sc->pal.wood : "wood", sc->pal.iron ? sc->pal.iron : "iron", &foot, &lay) < 0 || !foot) { lyl_free(&lay); continue; }
         test = g_buf(foot, 0.3);
         if (area(LIn(foot, sc->disc)) < 0.995 * area(foot)) ok = 0;
         for (i = 0; ok && i < sc->bigs.n; i++) if (intersects(sc->bigs.v[i], test)) ok = 0;
@@ -2013,7 +2209,13 @@ static int lay_scene(Sc *sc, KVal *plan, int small, int force) {          /* lay
     }
     set_geo(&sc->lline, ll->n ? g_uu(ll) : NULL);
     if (!strcmp(KS_(KG(plan, "subject"), "name"), "bridge")) { if (small || !lay_bridge(sc, plan)) return 0; }
-    else { if (!place_subject(sc, plan, small, force)) return 0; lay_path(sc, plan); }
+    else {
+        Snap b0 = snap(s); int c0 = s->chops.n; double k = ft_obj_scale() > 0 ? ft_obj_scale() : 1.0;          /* true size: the subject and its path at their real size */
+        const char *sn = KS_(KG(plan, "subject"), "name"); double kt = (strstr(sn, "track") || strstr(sn, "rail")) ? 1.6 : 1.0;          /* a mine track: ~0.6 m gauge, 1.1 m sleepers, 18-20 mm across at 1:56 (the classic one is drawn narrow) */
+        if (!place_subject(sc, plan, small, force)) return 0;
+        grow_since(sc, b0, c0, k * kt);
+        b0 = snap(s); c0 = s->chops.n; { KVal *pth = KG(plan, "path"); const char *pk = pth ? KS_(pth, "kind") : ""; Op **was = NULL; int nwas = s->ops.n; if (!strcmp(pk, "track") && ft_obj_scale() > 0) { was = (Op **)malloc(sizeof(Op *) * (size_t)(nwas ? nwas : 1)); memcpy(was, s->ops.v, sizeof(Op *) * (size_t)nwas); { int q; for (q = 0; q < nwas; q++) op_ref(was[q]); } } lay_path(sc, plan); if (strcmp(pk, "track")) grow_since(sc, b0, c0, k); else if (was) track_clear(sc, was, nwas); if (was) { int q; for (q = 0; q < nwas; q++) op_unref(was[q]); } free(was); }          /* (held while the track is laid: a freed old op cannot lend its address to a new one) */          /* a track is drawn at its real size by P_track; the other paths grown */
+    }
     hold_yard(sc, plan);
     return 1;
 }
@@ -2046,7 +2248,7 @@ static void outcrops(Sc *sc) {
         for (i = 0; ok && i < sc->bigs.n; i++) if (intersects(sc->bigs.v[i], test)) ok = 0;
         for (i = 0; ok && i < s->ops.n; i++) {          /* clear of the other standing details (not the ground) */
             Op *o = s->ops.v[i];
-            if (op_h(o) <= 1.5 || !o->kind || in_bridge(o->kind) || in_soft(o->kind) || in_terrk(o->kind)) continue;
+            if (!o->kind || op_ground(s, o) || op_top(o) <= SC.H + 0.2) continue;          /* low pieces too (a grate, planks): an outcrop on them cuts in */
             for (j = 0; j < o->polys.n; j++) if (intersects(o->polys.v[j], test)) { ok = 0; break; }
         }
         if (!ok) { lyl_free(&lay); ly_pop(mark); continue; }
@@ -2199,7 +2401,13 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
     given = plans->n;
     RX(cp_pick_plans(style, mixr, mm, (int)n, plans));
     ts = ft_true_scale();
-    if ((big || mm >= 39.9) && !ft_figure()) {          /* at true size no landmark: the model is the subject */
+    cp_msp = NULL;          /* none unless this base is true size from 25 mm (never left from the last base) */
+    if (ft_obj_scale() > 0 && mm >= 24.9) {          /* true size (2026-11-20; every size from 25 mm since 11-21: a cart stood where the figure goes): the model's space marked before the scene, so its subject and props keep out of it */
+        double mr, hx, hy; int bx = ft_model_space(mm, sc->R, CPC.kit_mini, cp_model_room, &mr, &hx, &hy); Geo *clear = bx ? g_box(-hx, -hy, hx, hy) : g_ptbuf(0, 0, mr, 24); GeoList nk = { 0 };
+        (void)nk; gl_push(&sc->taken, clear);          /* the subject steers clear of it; the clip (keepout) comes after the scene, so a track runs right across */
+        cp_msp = LIn(clear, sc->disc); cp_mbox = bx; cp_mhx = hx; cp_mhy = hy; cp_mrad = mr;
+    }
+    if ((big || mm >= 39.9 || (ft_obj_scale() > 0 && mm >= 24.9)) && (!ft_figure() || ft_obj_scale() > 0)) {          /* the theme's scene (paths, subject, props); not with the old --scale, where the model is the subject */
         int np = big ? plans->n : (plans->n ? 1 : 0);
         for (i = 0; i < np; i++) {
             if (lay_scene(sc, plans->v[i], !big, 0)) { plan = plans->v[i]; scene = 1; break; }
@@ -2220,11 +2428,18 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         kv_push(plans, plan);
     }
     sc->plan = (ScPlan *)plan;
-    cp_msp = NULL;          /* set below for a true-size base; never left from the last base */
+    if (scene && cp_msp) {          /* true size: from here on the model's space keeps details out (the scene's track and subject are laid) */
+        GeoList nk = { 0 }; if (s->has_objs) gl_copy(&nk, &s->keepout); gl_push(&nk, cp_msp); gl_free(&s->keepout); s->keepout = nk; s->has_objs = 1;
+    }
     if (scene) {
         place_also(sc, plan); { int sv = sc_feat_push("rim backdrop"); rim_dressing(sc, plan); sc_feat_pop(sv); } place_props(sc, plan);          /* the backdrop: one detail, however many blocks */
         style_made(sc, plan);
         tier_features(sc, plan, fns, &late);
+        if (cp_msp) {          /* true size: the model's space cleared and level, the outcrops round it */
+            grow_pebbles(sc, pmax(1.0, pmin(2.2, pow(sc->mm / 40.0, 0.7))));
+            drop_tall_in(sc, cp_msp, cp_mbox, cp_mhx, cp_mhy, cp_mrad); if (terr(s)) R_(sm_clear_terrain(s, cp_msp)); uncover(sc, cp_msp); clear_cuts(sc, cp_msp);
+            outcrops(sc);
+        }
         clutter(sc, plan, !big, (1 + t) * sc->K * sc->K);
     } else {
         Geo *msp = NULL; int mbox = 0; double mrad = 0, mhx = 0, mhy = 0; cp_msp = NULL;          /* the model's space (true size from 40 mm): one level, cut clear of plates and steps */
@@ -2239,7 +2454,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
             if (ft_obj_scale() <= 0) clear = g_ptbuf(0, 0, CPC.clear_middle * rv, 24);          /* KIT_SCALE: the middle 45 % */
             else if (ft_model_space(sc->mm, rv, CPC.kit_mini, cp_model_room, &mr, &hx, &hy)) clear = g_box(-hx, -hy, hx, hy);
             else clear = g_ptbuf(0, 0, mr, 24);
-            if (ft_obj_scale() > 0 && sc->mm >= 39.9) { msp = clear; mbox = ft_model_space(sc->mm, rv, CPC.kit_mini, cp_model_room, &mrad, &mhx, &mhy); }
+            if (ft_obj_scale() > 0 && sc->mm >= 24.9) { msp = clear; mbox = ft_model_space(sc->mm, rv, CPC.kit_mini, cp_model_room, &mrad, &mhx, &mhy); }
             GeoList nk = { 0 };
             if (s->has_objs) gl_copy(&nk, &s->keepout);
             gl_push(&nk, clear); gl_free(&s->keepout); s->keepout = nk;
@@ -2252,7 +2467,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         tier_features(sc, plan, fns, &late);
         if (ft_obj_scale() > 0 && sc->mm >= 39.9) grow_pebbles(sc, pmax(1.0, pmin(2.2, pow(sc->mm / 40.0, 0.7))));
         if (msp) { cp_msp = LIn(msp, sc->disc); cp_mbox = mbox; cp_mhx = mhx; cp_mhy = mhy; cp_mrad = mrad; }
-        if (msp) { Geo *g = LIn(msp, sc->disc); drop_tall_in(sc, g, mbox, mhx, mhy, mrad); if (terr(s)) R_(sm_clear_terrain(s, g)); uncover(sc, g); }
+        if (msp) { Geo *g = LIn(msp, sc->disc); drop_tall_in(sc, g, mbox, mhx, mhy, mrad); if (terr(s)) R_(sm_clear_terrain(s, g)); uncover(sc, g); clear_cuts(sc, g); }
         outcrops(sc);          /* the framing pieces: big stone or crystal at the rim */          /* a tank sits level: no split level, no plate edge under it */
         clutter(sc, plan, 1, (1 + t) * sc->K * sc->K);
     }
@@ -2261,7 +2476,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         marks(sc, plan, has_n, (1 + t) * sc->K * sc->K * 0.6 / (kgrow * kgrow));
         a.sc = sc; a.plan = plan; a.marks_only = 0; a.cracks = 0;
         if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
-        if (cp_msp) drop_tall_in(sc, cp_msp, cp_mbox, cp_mhx, cp_mhy, cp_mrad);          /* again: the details laid after the first clearing (style details, fill) */
+        if (cp_msp) { drop_tall_in(sc, cp_msp, cp_mbox, cp_mhx, cp_mhy, cp_mrad); clear_cuts(sc, cp_msp); }          /* again: the details and marks laid after the first clearing (style details, fill) */
         cp_release(s);
         a.marks_only = 1; if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
         cp_grow = 1.0;
