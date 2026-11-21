@@ -275,6 +275,14 @@ static void proj(const double *q, double rim, double *o) {          /* _arc_loop
     if (r == 0) r = 1;
     o[0] = q[0] * rim / r; o[1] = q[1] * rim / r;
 }
+/* two points on the rim are neighbours along it only when the straight edge between them stays at the rim: a chord
+   across the base (a strip clipped at both ends, both of its corners on the rim) is a straight edge, never an arc.
+   2026-11-21: an arc drawn for such a chord went half way round the base and filled that half flat at the strip's
+   height (frontier, the wooden rail of a layout). 0.05 mm: the rim's own polygon edges sag a few thousandths. */
+static int rim_follows(const double *p, const double *q, double rim) {
+    double mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+    return rim - py_hypot(mx, my) < 0.05;
+}
 /* gg._arc_loop(coords, rim): commands appended to out; returns how many (0 = None or an empty list), BC_ERR */
 static int arc_loop(BcGroup *out, const double *coords, int nc, double rim, double tol, int noarc) {
     int n = nc > 0 ? nc - 1 : 0, k0, i, j, ns = 0, cs = 0, any_on = 0, all_on = 1, has_arc = 0, added = 0, rc = 0;
@@ -291,7 +299,7 @@ static int arc_loop(BcGroup *out, const double *coords, int nc, double rim, doub
     while (i < n) {
         if (ON[i]) {
             j = i;
-            while (j + 1 < n && ON[j + 1]) j++;
+            while (j + 1 < n && ON[j + 1] && rim_follows(&P[2 * j], &P[2 * (j + 1)], rim)) j++;
             if (j - i >= 2) {
                 double a[2], m[2], b[2]; Seg *s;
                 proj(&P[2 * i], rim, a); proj(&P[2 * ((i + j) / 2)], rim, m); proj(&P[2 * j], rim, b);

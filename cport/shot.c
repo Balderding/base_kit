@@ -31,6 +31,15 @@ static const char HLSL[] =
 
 static int fail(char *err, int n, const char *what, HRESULT hr) { snprintf(err, n, "%s (0x%08lx)", what, (unsigned long)hr); return 0; }
 
+/* shot_keep(1): this thread keeps its Direct3D device, shaders and states between pictures (the Models preview draws
+   hundreds on every core: making the device and compiling the shaders again was nearly all its time); shot_keep(0) lets
+   them go. Only plain shots (no colour drawing) use the kept ones. */
+typedef struct { int on, mode; ID3D11Device *D; ID3D11DeviceContext *X; ID3D11VertexShader *vs; ID3D11PixelShader *ps; ID3D11InputLayout *il; ID3D11DepthStencilState *dss; ID3D11RasterizerState *rs; char dev[160]; } ShotKeep;
+static _Thread_local ShotKeep KP;
+void shot_keep(int on) {
+    if (!on) { REL(KP.rs); REL(KP.dss); REL(KP.il); REL(KP.ps); REL(KP.vs); REL(KP.X); REL(KP.D); memset(&KP, 0, sizeof KP); return; }
+    KP.on = 1;
+}
 int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, double elev, double azim, int mode,
                 unsigned char *rgb, char *dev, int devlen, char *err, int errlen) {
     return shot_render_tex(V, nv, F, nt, w, h, elev, azim, mode, NULL, 0, 0, NULL, rgb, dev, devlen, err, errlen);
@@ -82,6 +91,9 @@ int shot_render_tex(const double *V, int nv, const int *F, int nt, int w, int h,
     ID3D11Texture2D *tt = NULL; ID3D11ShaderResourceView *srv = NULL; ID3D11SamplerState *smp = NULL;
     ID3DBlob *bv = NULL, *bp = NULL, *be = NULL; HRESULT hr; int ok = 0; D3D_FEATURE_LEVEL fl;
     D3D_FEATURE_LEVEL want[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0 };
+    int kept = KP.on && !tex && KP.D && KP.mode == mode, keep = KP.on && !tex;
+    if (kept) { D = KP.D; X = KP.X; vs = KP.vs; ps = KP.ps; il = KP.il; dss = KP.dss; rs = KP.rs; snprintf(dev, devlen, "%s", KP.dev); goto ready; }
+    if (keep && KP.D) shot_keep(0), KP.on = 1;          /* kept for the other mode: made again */
     hr = E_FAIL;
     if (mode == 1) hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, want, 3, D3D11_SDK_VERSION, &D, &fl, &X);
     if (FAILED(hr)) { hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_WARP, NULL, 0, want, 3, D3D11_SDK_VERSION, &D, &fl, &X); if (FAILED(hr)) { free(buf); return fail(err, errlen, "no Direct3D 11 device", hr); } snprintf(dev, devlen, "software (WARP)"); }
@@ -100,6 +112,15 @@ int shot_render_tex(const double *V, int nv, const int *F, int nt, int w, int h,
     D3D11_INPUT_ELEMENT_DESC ie[3] = { { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }, { "SHADE", 0, DXGI_FORMAT_R32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
                                        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 } };
     if (FAILED(hr = ID3D11Device_CreateInputLayout(D, ie, 3, ID3D10Blob_GetBufferPointer(bv), ID3D10Blob_GetBufferSize(bv), &il))) { fail(err, errlen, "CreateInputLayout", hr); goto done; }
+    {
+    D3D11_DEPTH_STENCIL_DESC dd; memset(&dd, 0, sizeof dd); dd.DepthEnable = TRUE; dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL; dd.DepthFunc = D3D11_COMPARISON_GREATER;
+    if (FAILED(hr = ID3D11Device_CreateDepthStencilState(D, &dd, &dss))) { fail(err, errlen, "depth state", hr); goto done; }
+    D3D11_RASTERIZER_DESC rd; memset(&rd, 0, sizeof rd); rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;          /* turned-away faces are already gone */
+    if (FAILED(hr = ID3D11Device_CreateRasterizerState(D, &rd, &rs))) { fail(err, errlen, "rasterizer state", hr); goto done; }
+    }
+    if (keep) { KP.D = D; KP.X = X; KP.vs = vs; KP.ps = ps; KP.il = il; KP.dss = dss; KP.rs = rs; KP.mode = mode; snprintf(KP.dev, sizeof KP.dev, "%s", dev); kept = 1; }
+ready:;
+    {
     D3D11_TEXTURE2D_DESC td; memset(&td, 0, sizeof td); td.Width = w; td.Height = h; td.MipLevels = 1; td.ArraySize = 1; td.SampleDesc.Count = 1;
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
     if (FAILED(hr = ID3D11Device_CreateTexture2D(D, &td, NULL, &ct))) { fail(err, errlen, "colour target", hr); goto done; }
@@ -109,10 +130,7 @@ int shot_render_tex(const double *V, int nv, const int *F, int nt, int w, int h,
     if (FAILED(hr = ID3D11Device_CreateTexture2D(D, &td, NULL, &st))) { fail(err, errlen, "read-back texture", hr); goto done; }
     if (FAILED(hr = ID3D11Device_CreateRenderTargetView(D, (ID3D11Resource *)ct, NULL, &rtv))) { fail(err, errlen, "render target view", hr); goto done; }
     if (FAILED(hr = ID3D11Device_CreateDepthStencilView(D, (ID3D11Resource *)dt, NULL, &dsv))) { fail(err, errlen, "depth view", hr); goto done; }
-    D3D11_DEPTH_STENCIL_DESC dd; memset(&dd, 0, sizeof dd); dd.DepthEnable = TRUE; dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL; dd.DepthFunc = D3D11_COMPARISON_GREATER;
-    if (FAILED(hr = ID3D11Device_CreateDepthStencilState(D, &dd, &dss))) { fail(err, errlen, "depth state", hr); goto done; }
-    D3D11_RASTERIZER_DESC rd; memset(&rd, 0, sizeof rd); rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;          /* turned-away faces are already gone */
-    if (FAILED(hr = ID3D11Device_CreateRasterizerState(D, &rd, &rs))) { fail(err, errlen, "rasterizer state", hr); goto done; }
+    }
     if (tex) {          /* the 2D drawing as a texture, each pixel as it is (point sampling: the drawing's own colours) */
         unsigned char *t4 = malloc(4 * (size_t)tw * th); if (!t4) { fail(err, errlen, "out of memory", 0); goto done; }
         for (size_t q = 0; q < (size_t)tw * th; q++) { t4[4 * q] = tex[3 * q]; t4[4 * q + 1] = tex[3 * q + 1]; t4[4 * q + 2] = tex[3 * q + 2]; t4[4 * q + 3] = 255; }
@@ -151,6 +169,7 @@ int shot_render_tex(const double *V, int nv, const int *F, int nt, int w, int h,
     ID3D11DeviceContext_Unmap(X, (ID3D11Resource *)st, 0);
     ok = 1;
 done:
-    REL(smp); REL(srv); REL(tt); REL(be); REL(bv); REL(bp); REL(rs); REL(dss); REL(il); REL(ps); REL(vs); REL(vb); REL(dsv); REL(rtv); REL(st); REL(dt); REL(ct); REL(X); REL(D);
+    REL(smp); REL(srv); REL(tt); REL(be); REL(bv); REL(bp); REL(vb); REL(dsv); REL(rtv); REL(st); REL(dt); REL(ct);
+    if (!kept) { REL(rs); REL(dss); REL(il); REL(ps); REL(vs); REL(X); REL(D); }          /* the kept ones stay with the thread */
     free(buf); return ok;
 }

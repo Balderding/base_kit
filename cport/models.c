@@ -2326,7 +2326,35 @@ static const BlobFile *blob_find(const char *rel) {
     }
     return NULL;
 }
+/* the models the user took out (2026-11-21, the Models window: a click on a picture): removed_models.txt beside the exe, a
+   model file a line, as the model table names it. A removed model is as if its file were missing: no detail is made of it.
+   Read once a process (every base's layout is its own helper process, so a change counts from the next base). No file:
+   nothing removed, the kit as it always was. */
+static char **rm_list; static int rm_n, rm_read;
+static int rm_same(const char *a, const char *b) { for (; *a && *b; a++, b++) { char x = *a == '\\' ? '/' : *a, y = *b == '\\' ? '/' : *b; if (x != y) return 0; } return *a == *b; }
+int mdl_removed(const char *rel) {
+    int i;
+    if (!rm_read) {
+        WCHAR w[MAX_PATH + 40]; DWORD n = GetModuleFileNameW(NULL, w, MAX_PATH); FILE *f; char line[600];
+        rm_read = 1;
+        if (n && n < MAX_PATH) {
+            while (n && w[n - 1] != L'\\' && w[n - 1] != L'/') n--;
+            wcscpy(w + n, L"removed_models.txt"); f = _wfopen(w, L"rb");
+            if (f) {
+                while (fgets(line, sizeof line, f)) {
+                    size_t L = strlen(line); while (L && (line[L - 1] == '\n' || line[L - 1] == '\r' || line[L - 1] == ' ')) line[--L] = 0;
+                    if (!L || line[0] == '#') continue;
+                    rm_list = (char **)realloc(rm_list, sizeof(char *) * (size_t)(rm_n + 1)); rm_list[rm_n++] = _strdup(line);
+                }
+                fclose(f);
+            }
+        }
+    }
+    for (i = 0; i < rm_n; i++) if (rm_same(rm_list[i], rel)) return 1;
+    return 0;
+}
 int mdl_has(const char *root, const char *rel) {                     /* os.path.exists(os.path.join(sd_mesh.ROOT, rel)) */
+    if (mdl_removed(rel)) return 0;          /* taken out by the user */
     if (blob_files) return blob_find(rel) != NULL;
     char path[1024]; snprintf(path, sizeof path, "%s\\%s", root, rel);
     return exists(path);

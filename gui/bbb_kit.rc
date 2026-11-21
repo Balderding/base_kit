@@ -8,3 +8,6 @@
    packed and compressed by cport\models.c's mdl_pack into gui\models.bin, read in memory by cport\models.c
    (mdl_blob_from_resource): no models folder, no download */
 MODELS_BIN RCDATA "models.bin"
+/* a picture of every model at its true size (cport\models_job.c --pack, made by build.cmd from the exe it just built):
+   the Models window shows them straight from the exe */
+PREVIEWS_BIN RCDATA "previews.bin"

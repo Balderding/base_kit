@@ -37,3 +37,5 @@ cport/manifold_static/lib/
 
 # the list of model packs and their licence notes: kept locally only (all CC0, no credit needed)
 models/SOURCES.md
+# the Models window pictures: gui/build.cmd draws and packs them from the exe it builds
+gui/previews.bin

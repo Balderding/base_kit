@@ -1438,7 +1438,7 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
     OUTF = out; OUTC = ctx; set_kit(); load_cfg(); pyx_load();          /* the UCRT cos / sin (magnet spots, compare_bases rotations) */
     char **av = malloc(sizeof(char *) * (argc + 1)); for (int i = 0; i < argc; i++) av[i] = argv[i];
     Args a = { argc, av };
-    if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(); free(av); return r2; }          /* the window's Models preview */
+    if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(opt(&a, "--pack", "")); free(av); return r2; }          /* the window's Models preview */
     if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: gui_job.py choices|build <style> ..."); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;

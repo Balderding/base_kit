@@ -82,5 +82,6 @@ int mdl_http_get(const char *url, const char *referer, int timeout_s, unsigned c
 int mdl_pack(const char *root, const char *const *rels, int n, const char *out_path, size_t *raw_size, size_t *packed_size);
 int mdl_blob_use(const unsigned char *blob, size_t n);    /* read models from this blob from now on (NULL: from the files again); clears the cache */
 int mdl_blob_from_resource(void *module, const char *name);   /* the blob as an RCDATA resource of module (NULL = the exe) */
+int mdl_removed(const char *rel);                         /* 1: the user took this model out (removed_models.txt beside the exe) */
 int mdl_has(const char *root, const char *rel);           /* os.path.exists(sd_mesh.ROOT / rel), from the blob when one is in use */
 #endif

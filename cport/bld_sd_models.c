@@ -1133,6 +1133,7 @@ static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
     mm = u(R->mm0, R->mm1); sink = u(R->sink0, R->sink1); mirror = rnd() < 0.5;
     if (pose != 's' || rnd() < 0.5) tilt = u(0, R->tilt); else tilt = 0.0;
     tdir = u(0, 6.28);
+    { const char *lp = getenv("BBB_MODEL_LOG"); FILE *lf = lp && *lp ? fopen(lp, "a") : NULL; if (lf) { fprintf(lf, "%s\t%s\t%s\n", R->style, R->name, R->rel); fclose(lf); } }          /* BBB_MODEL_LOG: every model placed (a test) */
     if (msolid(R->rel, mm, cx, cy, a, pose, sink, mirror, tilt, tdir, lim, sol, &foot, &top) != SO_OK) return SC_ERR;
     if (ck(so_fine(sol, top, R->kind, &y)) < 0) return SC_ERR;
     yk(y); push(lay, y); gl_add(foots, foot);

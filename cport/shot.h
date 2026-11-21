@@ -5,6 +5,7 @@
 #define SHOT_H
 /* V: nv x 3 doubles, F: nt x 3 ints. rgb: w*h*3 bytes out (rows top down). mode: 1 = video card (WARP if it fails),
    2 = WARP only. dev: which one drew it ("video card <name>" / "software (WARP)"). 1 = ok; 0 = failed (err says why). */
+void shot_keep(int on);          /* 1: this thread keeps its Direct3D device and shaders between plain shots; 0: lets them go */
 int shot_render(const double *V, int nv, const int *F, int nt, int w, int h, double elev, double azim, int mode,
                 unsigned char *rgb, char *dev, int devlen, char *err, int errlen);
 /* the colour view: as shot_render, each point coloured by the 2D drawing straight above it (tex: tw x th RGB, rows top
