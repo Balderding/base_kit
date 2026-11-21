@@ -444,39 +444,6 @@ unpacked or used. `python run_set.py ...` never downloads by itself; it only tel
 - To stop the download: `"models_download": false` in `settings.json` (or `bbb_kit.cmd --models off`). A pack that
   is not there only means its details are left out; everything else works the same.
 
-The packs the kit uses:
-
-| Pack | By | Page |
-|---|---|---|
-| Base Mesh (single models) | The Base Mesh | https://github.com/M3-org/base-meshes |
-| Blaster Kit | Kenney | https://kenney.nl/assets/blaster-kit |
-| Car Kit | Kenney | https://kenney.nl/assets/car-kit |
-| City Kit Industrial | Kenney | https://kenney.nl/assets/city-kit-industrial |
-| City Kit Roads | Kenney | https://kenney.nl/assets/city-kit-roads |
-| Factory Kit | Kenney | https://kenney.nl/assets/factory-kit |
-| Fantasy Town Kit | Kenney | https://kenney.nl/assets/fantasy-town-kit |
-| Graveyard Kit | Kenney | https://kenney.nl/assets/graveyard-kit |
-| KayKit City Builder Bits | Kay Lousberg | https://github.com/KayKit-Game-Assets/KayKit-City-Builder-Bits-1.0 |
-| KayKit Dungeon Remastered | Kay Lousberg | https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0 |
-| KayKit Halloween Bits | Kay Lousberg | https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0 |
-| KayKit Space Base Bits | Kay Lousberg | https://github.com/KayKit-Game-Assets/KayKit-Space-Base-Bits-1.0 |
-| Mini Arena | Kenney | https://kenney.nl/assets/mini-arena |
-| Mini Dungeon | Kenney | https://kenney.nl/assets/mini-dungeon |
-| Mini Forest | Kenney | https://kenney.nl/assets/mini-forest |
-| Modular Cave Kit | Kenney | https://kenney.nl/assets/modular-cave-kit |
-| Modular Space Kit | Kenney | https://kenney.nl/assets/modular-space-kit |
-| Nature Kit | Kenney | https://kenney.nl/assets/nature-kit |
-| Pirate Kit | Kenney | https://kenney.nl/assets/pirate-kit |
-| Retro Fantasy Kit | Kenney | https://kenney.nl/assets/retro-fantasy-kit |
-| Retro Urban Kit | Kenney | https://kenney.nl/assets/retro-urban-kit |
-| Space Kit | Kenney | https://kenney.nl/assets/space-kit |
-| Space Station Kit | Kenney | https://kenney.nl/assets/space-station-kit |
-| Survival Kit | Kenney | https://kenney.nl/assets/survival-kit |
-| Tower Defense Kit | Kenney | https://kenney.nl/assets/tower-defense-kit |
-
-`python tools\used_packs.py` works this list out from the details themselves and marks the packs in
-`models\packs.json`; `models\SOURCES.md` has the licence statements and other sources that were looked at.
-
 
 ## 3. Build bases
 
