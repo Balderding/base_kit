@@ -262,7 +262,7 @@ the layout's own millimetres.
   Blobs and boxes became a dead crawler with jointed legs, a shed husk, basalt columns, a forge bellows, a tin
   helmet, a gas mask, sandbags, rats, a buried stone head, a scarab, a sled, an ice-fishing hole. 85 details redrawn,
   12 new.
-- **Three sources of models** now: Kenney, KayKit and the Base Mesh collection, all public domain (CC0). The first
+- **More models**, all public domain (CC0). The first
   run fetches 25 packs, about 92 MB (it was 9 MB). The window does this too now, and says so at the top
   while it does.
 - **Faster.** Details from models are sliced once instead of at every try. A 100 mm base with many of them builds in
@@ -429,9 +429,8 @@ When you run a build the kit stops with a plain message if a Python library is m
 ### The model packs (inside the exe; fetched on the Python kit's first run)
 
 About 300 details (chests, skulls, tools, bottles, wheels, gravestones ...) are made from ready-made low-poly 3D
-models. They are free and in the public domain (Creative Commons Zero, CC0: anyone may use them for any purpose),
-from three makers: Kenney (www.kenney.nl), Kay Lousberg's KayKit (kaylousberg.com) and The Base Mesh
-(thebasemesh.com). `bbb_kit.exe` carries the models it uses inside it, so the window downloads nothing.
+models. They are free and in the public domain (Creative Commons Zero, CC0: anyone may use them for any purpose).
+`bbb_kit.exe` carries the models it uses inside it, so the window downloads nothing.
 
 The first time you run `bbb_kit.cmd` (the Python kit) the kit says which packs it is about to fetch, from which pages
 and how big they are, and then downloads them into `models\<pack>`: 25 packs, about 92 MB. It happens

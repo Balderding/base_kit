@@ -18,7 +18,7 @@ the parts below. Their licence texts are in the `licenses` folder beside this fi
 | networkx 3.7 | the cycle and part finding the clean-up uses, written again in C | BSD 3-clause | `licenses/networkx.txt` |
 | shapely 2.2 | how the kit calls GEOS, written again in C | BSD 3-clause | `licenses/shapely.txt` |
 | numpy 2.5 | the number steps (spacing, sums) written again in C to give the same numbers | BSD 3-clause | `licenses/numpy.txt` |
-| 3D model packs (Kenney, KayKit, Base Mesh collection) | the models inside the exe | public domain (CC0) | `models/SOURCES.md`, each pack's `License.txt` |
+| 3D models | the models inside the exe | public domain (CC0) | none needed |
 
 ## GEOS and the LGPL
 
