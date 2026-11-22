@@ -601,6 +601,11 @@ Everything is optional.
 | `min_part_mm` | 0.5 | Object parts thinner than this are trimmed (or the object thickened first). 0 = off |
 | `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
 | `cart_on_track` | true | A cart by a track stands on its rails |
+| `story_direction` | true | On a base with a subject (a wreck, a ruin, a crater), the debris lies along lines out from it, as if thrown or fallen from it |
+| `style_strength` | 1 | How bold the style is, 0.25 to 2.5: deeper cracks, bolder rocks, coarser ground grain (catch washes and drybrushing). `--strength` and the window's Style strength row win |
+| `ground_grain` | true | Fine grain on every flat ground top, `ground_grain_mm` (0.12) high, times the style strength |
+| `organic_rocks` | true | Rocks shaped as real stone: rounded, chipped, layered or split, with chips and pits; about half lean |
+| `file_name` | `{style}_{size}mm_{theme}_{seed}_{n}` | The picked files' names. Also `{date}`. Only letters, digits, - and _ are kept. `--name` wins |
 | `supports_join` | true | With supports on, the objects are joined into the base as one solid (Manifold), pieces in the air left out. false = each object its own shell. The window's Join switch wins |
 | `video_card` | true | 3D pictures drawn by the video card (Direct3D 11; Windows' software renderer if there is no card). false = Python draws them. The window's Video card switch wins |
 | `max_attempts` | 4 | Tries per base before it is flagged |

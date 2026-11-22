@@ -1262,6 +1262,26 @@ static void size_tag_gui(const char *txt, char *out, size_t cap) {          /* g
     if (a == b) snprintf(out, cap, "%s", x); else snprintf(out, cap, "%sx%s", x, y);
 }
 static void copy_file(const char *a, const char *b) { WCHAR x[MAX_PATH * 3], y[MAX_PATH * 3]; wpath(a, x, MAX_PATH * 3); wpath(b, y, MAX_PATH * 3); CopyFileW(x, y, FALSE); }
+/* the picked file's name (plan B4, 2026-11-22): settings "file_name" or --name, with {style} {size} {theme} {seed} {n} {date};
+   the standard one makes the same names as before. Only letters, digits, - and _ are kept; doubled or end _ dropped. */
+static const char *NAME_CLI = NULL;
+static void pick_name(const char *style, const char *size, const char *theme, const char *seed, int n, char *out, size_t cap) {
+    const char *t = NAME_CLI && NAME_CLI[0] ? NAME_CLI : cfg_str("file_name", "{style}_{size}mm_{theme}_{seed}_{n}"); char raw[600]; size_t j = 0, k = 0; int us = 1;
+    for (const char *c = t; *c && j < sizeof raw - 80; c++) {
+        char v[64]; const char *put = NULL; const char *e = *c == '{' ? strchr(c, '}') : NULL;
+        if (e) { size_t L = (size_t)(e - c - 1);
+            if (L == 5 && !strncmp(c + 1, "style", 5)) put = style; else if (L == 4 && !strncmp(c + 1, "size", 4)) put = size;
+            else if (L == 5 && !strncmp(c + 1, "theme", 5)) put = theme; else if (L == 4 && !strncmp(c + 1, "seed", 4)) put = seed;
+            else if (L == 1 && c[1] == 'n') { snprintf(v, sizeof v, "%d", n); put = v; }
+            else if (L == 4 && !strncmp(c + 1, "date", 4)) { SYSTEMTIME s; GetLocalTime(&s); snprintf(v, sizeof v, "%04d%02d%02d", s.wYear, s.wMonth, s.wDay); put = v; } }
+        if (put) { for (; *put && j < sizeof raw - 80; put++) raw[j++] = *put; c = e; } else raw[j++] = *c;
+    }
+    raw[j] = 0;
+    for (j = 0; raw[j] && k + 1 < cap; j++) { char ch = raw[j]; int ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '.';
+        if (ok) { out[k++] = ch; us = 0; } else if (!us) { out[k++] = '_'; us = 1; } }
+    while (k && out[k - 1] == '_') k--; out[k] = 0;
+    if (!k) snprintf(out, cap, "%s_%smm_%s_%d", style, size, seed, n);
+}
 static int file_exists(const char *p) { WCHAR w[MAX_PATH * 3]; wpath(p, w, MAX_PATH * 3); return GetFileAttributesW(w) != INVALID_FILE_ATTRIBUTES; }
 static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
     PickCtx *P = vctx; int n = R->n; P->seen[n] = 1; Try *last = &R->tries[R->ntries ? R->ntries - 1 : 0];
@@ -1277,7 +1297,7 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
         for (const char *c = theme; *c && j < 250; c++) { char ch = (char)tolower((unsigned char)*c); if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) { tag[j++] = ch; us = 0; } else if (!us) { tag[j++] = '_'; us = 1; } }
         tag[j] = 0; char *tg = tag; while (*tg == '_') tg++; size_t tl = strlen(tg); while (tl && tg[tl - 1] == '_') tg[--tl] = 0;
         char st[64], nw[600]; size_tag_gui(P->size, st, sizeof st);
-        snprintf(nw, sizeof nw, "%s_%smm_%s%s%s_%d", P->style, st, tg, tl ? "_" : "", P->seed, n);
+        pick_name(P->style, st, tg, P->seed, n, nw, sizeof nw); (void)tl;
         char dstl[MAX_PATH * 3], img[MAX_PATH * 3] = "", img2[MAX_PATH * 3] = "", img3c[MAX_PATH * 3] = "", t[MAX_PATH * 3], er[300];
         snprintf(dstl, sizeof dstl, "%s\\%s.stl", P->dest, nw); copy_file(stl, dstl);
         snprintf(t, sizeof t, "%.*s_plan.json", (int)strlen(stl) - 4, stl); if (file_exists(t)) { char d[MAX_PATH * 3]; snprintf(d, sizeof d, "%s\\%s_plan.json", P->dest, nw); copy_file(t, d); }
@@ -1423,6 +1443,7 @@ static int job_build(Args *a, const char *style) {
         if (sup[0]) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
         if (on_off(smooth) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(smooth) ? "1" : "0" };
         if (on_off(rocks) >= 0) es[ne++] = (EnvSet){ "KIT_ROCKS", on_off(rocks) ? "1" : "0" };
+        { const char *nmo = opt(a, "--name", ""); if (nmo[0]) NAME_CLI = nmo; }
         { const char *st = opt(a, "--strength", ""); static char sb[32]; if (st[0]) STRENGTH_CLI = strtod(st, NULL); snprintf(sb, sizeof sb, "%g", strength()); es[ne++] = (EnvSet){ "KIT_STRENGTH", sb }; }
         { static char thb[128]; theme_arg(opt(a, "--theme", ""), thb, sizeof thb); if (thb[0]) es[ne++] = (EnvSet){ "KIT_THEME", thb }; }          /* only this theme (the window's theme picker) */
         rs.envw = env_block(es, ne);
@@ -1457,7 +1478,7 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
         free(av); return r3 ? 2 : 0;
     }
     if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(opt(&a, "--pack", "")); free(av); return r2; }          /* the window's Models preview */
-    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--scale x] [--strength 0.25..2.5] [--theme name] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
+    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--scale x] [--strength 0.25..2.5] [--theme name] [--name {style}_{size}mm_{theme}_{seed}_{n}] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;
     if (!strcmp(job, "choices")) rc = job_choices(&a, style);
