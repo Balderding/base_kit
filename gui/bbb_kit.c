@@ -78,9 +78,9 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 /* resize plan R1 (2026-11-22): the side panel's width in design px (x SC on screen), dragged by the line between it and the
    cards; double-click puts it back. Saved as sidew in bbb_kit.ini. SIDE_W stays the name every row uses. */
 enum { SIDE_W0 = 420, SIDE_MIN = 320 };
-static int sideW = SIDE_W0;
+static int sideW = SIDE_W0, sideWant = SIDE_W0;          /* sideWant: what the user set (kept, saved); sideW: that, kept in bounds for this window */
 enum { DET_H0 = 170, DET_MIN = 110 };
-static int detailsH = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; saved as detailsh */
+static int detailsH = DET_H0, detWant = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; detWant saved as detailsh */
 static int divDrag, divHover;          /* R1 / R2: which line is being dragged / is under the mouse: 1 the side panel's, 2 the Details pane's */
 #define SIDE_W sideW
 enum { HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
@@ -101,7 +101,7 @@ enum { DESIGN_W = 1650, DESIGN_H = 1240 };          /* 1240 since 2026-11-21: th
 /* 2026-11-22: the scale follows the SCREEN size, not the side panel's full height (the panel scrolls): FIT_W x FIT_H is what
    a scale of 1 fills, so a maximized 1080p window is 1.0, 1440p about 1.35, 4K about 2; text stays a comfortable size */
 enum { FIT_W = 1650, FIT_H = 1000 };
-static double fit_sc(int w, int h) { double s = fmin(w / (double)(FIT_W - SIDE_W0 + sideW), h / (double)FIT_H);          /* R6: a wider side panel widens it */ s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
+static double fit_sc(int w, int h) { double s = fmin(w / (double)FIT_W, h / (double)FIT_H);          /* R6: the screen alone sets the scale; the dividers only share the room out (a wider panel shrinking everything was worse) */ s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
 static int sideOff, sideMax, hitDy, txtDy, titleH;          /* the side panel's scroll (px), how far it can go, and the shift its click areas get */
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200], batchFolder[64];          /* batchFolder: several sizes, the batch's picked_ folder name */
@@ -511,9 +511,21 @@ static void fillrect(int x, int y, int w, int h, ARGB c) {
     if (!fillB) GdipCreateSolidFill(c, &fillB); else GdipSetSolidFillColor(fillB, c);
     GdipFillRectangleI(G, (GpBrush *)fillB, x, y, w, h);
 }
+/* R3 (2026-11-22): a one-line text too long for its box is cut with "..." and kept here with its whole text; resting the
+   mouse on it for half a second shows the whole text (drawn by the window itself, timer 7) */
+typedef struct { RECT r; WCHAR s[200]; } Tip;
+static Tip tips[96]; static int ntip, tipNo, tipCur = -1, tipShown, tipX, tipY; static WCHAR tipText[200];
 static void txt(const WCHAR *s, int x, int y, int w, int h, HFONT f, ARGB c, UINT fl) {
     RECT r = { x, y + txtDy, x + w, y + h + txtDy }; GdipFlush(G, FlushIntentionSync);
-    SelectObject(DC, f); SetTextColor(DC, RGB((c >> 16) & 255, (c >> 8) & 255, c & 255)); DrawTextW(DC, s, -1, &r, fl | DT_NOPREFIX);
+    SelectObject(DC, f); SetTextColor(DC, RGB((c >> 16) & 255, (c >> 8) & 255, c & 255));
+    if ((fl & DT_SINGLELINE) && !tipNo && w > 0) {
+        SIZE sz; int n = (int)wcslen(s);
+        if (GetTextExtentPoint32W(DC, s, n, &sz) && sz.cx > w) {
+            fl |= DT_END_ELLIPSIS;
+            if (ntip < 96) { tips[ntip].r = r; wcsncpy(tips[ntip].s, s, 199); tips[ntip].s[199] = 0; ntip++; }
+        }
+    }
+    DrawTextW(DC, s, -1, &r, fl | DT_NOPREFIX);
 }
 static void hit(int x, int y, int w, int h, int kind, int idx) { y += hitDy; if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
 static int hov(int kind, int idx) { return hovK == kind && hovI == idx; }
@@ -700,6 +712,7 @@ static void section(const WCHAR *label, int x, int y, int w, int h) {          /
 static int sideTight, sideNeed;          /* the side panel does not fit the window at full size: its chips are drawn a little shorter (sideNeed: its full height) */
 static void chips(const WCHAR *label, const char **items, int n, int cols, int sel, int kind, int *y) {
     int x0 = S(16), wAll = S(SIDE_W - 32), gap = sideTight ? S(3) : S(4), ch = sideTight ? S(20) : S(24), cw = (wAll - (cols - 1) * gap) / cols, i; const int *r;
+    while (cols > 1 && cw < S(34)) { cols--; cw = (wAll - (cols - 1) * gap) / cols; }          /* R3: a narrow panel: fewer chips a row, more rows */
     if (label) { section(label, x0, *y, wAll, S(18)); *y += sideTight ? S(19) : S(20); }          /* no label: a second block of the same choice */
     chipSpec = 0;
     if (lookFont) for (r = ROLES[0]; *r && !chipSpec; r++) { for (i = 0; i < n; i++) { WCHAR b[64]; swprintf(b, 64, L"%hs", items[i]); if (!spec_fits(*r, b, cw)) break; } if (i == n) chipSpec = *r; }
@@ -876,7 +889,7 @@ static void help(int W, int H);
 /* the strip under the top bar: the PC's meters on the left (Small: one CPU and one video card bar; Live card and Big view:
    one thin bar per core), the three views and the Parts button on the right */
 static const char *VIEWS[3] = { "Small", "Live card", "Big view" };
-static RECT partsR; static int lookW = 238;          /* how wide the three look switches came out (the title stops short of them) */          /* where the Parts button is, for its panel */
+static RECT partsR; static int lookW = 238, lookWd = 238;          /* lookWd: the same in design px (a resize does not make it stale) */          /* how wide the three look switches came out (the title stops short of them) */          /* where the Parts button is, for its panel */
 static void meter_bar(int x, int y, int w, int h, double f, ARGB c) {
     if (lookPix) { px_box(x, y, w, h, 0, 0xFF262A33u, 0, 0, 0); if (f > 0) px_box(x, y, w * (f > 1 ? 1 : f), h, 0, c, 0, 0, 0); }
     else { rr(x, y, w, h, h / 2.0, 0xFF262A33u, 0, 0); if (f > 0.02) rr(x, y, w * (f > 1 ? 1 : f), h, h / 2.0, c, 0, 0); }
@@ -1051,7 +1064,7 @@ static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
     GdipCreateFromHDC(DC, &G); GdipSetSmoothingMode(G, lookPix ? SmoothingModeNone : SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
-    nhit = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
+    nhit = 0; ntip = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
     if (lookPix && lookTex) {          /* textures: stone on the side panel, a navy scanline title bar over it, faint scanlines on the top */
         int tb = snp(S(66));
         texfill(0, 0, mx, H, 2, C_STONEL, 0);
@@ -1067,7 +1080,7 @@ static void paint(HDC out, int W, int H) {
         int sp = pick_spec(2, L"Balderding's Ballin", S(SIDE_W - 24));
         int lh = pf[(sp - 1) & 1].cap * (sp > 2 ? 2 * FS : FS) + S(6);          /* a line: the capitals' height at this size, and a gap */
         pf_draw(sp, L"Balderding's Ballin", S(16), S(6), S(SIDE_W - 24), lh, C_TEXT, DT_LEFT); pf_draw(sp, L"Base Kit", S(16), S(6) + lh, S(SIDE_W - 24), lh, C_TEXT, DT_LEFT);
-        txt(L"Save time and money.", S(16), S(6) + 2 * lh, S(SIDE_W - 32), S(16), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE); titleH = S(6) + 2 * lh + S(18);
+        txt(L"Save time and money.", S(16), S(12) + 2 * lh, S(SIDE_W - 32), S(16), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE); titleH = S(12) + 2 * lh + S(18);          /* R3: clear of the second line */
     } else {
         ltxt(L"Balderding's Ballin Base Kit", S(16), S(14), S(SIDE_W - 24), S(26), fTitle, C_TEXT, DT_LEFT | DT_SINGLELINE, 2, -1);
         txt(L"Save time and money.", S(16), S(40), S(SIDE_W - 32), S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
@@ -1075,7 +1088,7 @@ static void paint(HDC out, int W, int H) {
     y = titleH > S(68) ? titleH : S(68); titleH = 0;
     chips(L"STYLE", STYLES, NSTYLES, 3, selStyle, H_STYLE, &y);
     {          /* the theme: any, or one of the style's own (step through them with < and >; the middle goes back to any) */
-        int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), bw = S(34), nt = theme_count(); const char *tn = theme_name(); WCHAR tb[120];
+        int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), bw = S(34) < wAll / 8 ? S(34) : wAll / 8, nt = theme_count(); const char *tn = theme_name(); WCHAR tb[120];
         section(L"THEME  (ANY, OR PICK ONE)", x0, y, wAll, S(18)); y += S(20);
         if (lookPix) { pbox(x0, y, bw, bh, 1, 0, hov(H_THEME, -1)); pbox(x0 + wAll - bw, y, bw, bh, 1, 0, hov(H_THEME, 1)); pbox(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, 1, tn ? 1 : 0, hov(H_THEME, 0)); }
         else { rr(x0, y, bw, bh, S(6), hov(H_THEME, -1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + wAll - bw, y, bw, bh, S(6), hov(H_THEME, 1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, S(6), tn ? C_ACC : C_CARD, C_LINE, 1); }
@@ -1095,7 +1108,7 @@ static void paint(HDC out, int W, int H) {
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
     chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
     {          /* how many: a number from 1 to 20. Type it, or use the minus and plus */
-        int x0 = S(16), wAll = S(SIDE_W - 32), bh = S(30), bw = S(40), fresh = GetTickCount() - lastDigit < 1500; WCHAR nb[8];
+        int x0 = S(16), wAll = S(SIDE_W - 32), bh = S(30), bw = S(40) < wAll / 7 ? S(40) : wAll / 7, fresh = GetTickCount() - lastDigit < 1500; WCHAR nb[8];
         section(L"HOW MANY BASES  (1 TO 20)", x0, y, wAll, S(18)); y += S(20);
         if (lookPix) { pbox(x0, y, bw, bh, 1, 0, hov(H_COUNT, -1)); pbox(x0 + wAll - bw, y, bw, bh, 1, 0, hov(H_COUNT, 1)); pbox(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, 1, 4, fresh); }
         else { rr(x0, y, bw, bh, S(6), hov(H_COUNT, -1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + wAll - bw, y, bw, bh, S(6), hov(H_COUNT, 1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, S(6), C_BG, fresh ? C_ACCH : C_ACC, fresh ? S(2) : 1); }
@@ -1107,7 +1120,7 @@ static void paint(HDC out, int W, int H) {
     chips(L"STYLE STRENGTH  (2 = BOLDER FOR PAINT)", STRENGTHS, NSTR, 5, selStr, H_STR, &y);
     chips(L"PRINTER  (GRAIN AND SMALLEST DETAIL)", PRINTERS, 2, 2, selPrinter, H_PRINTER, &y);
     {          /* the design seed: empty = new designs each time; type a word to get the same designs again */
-        int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), cw = S(70); WCHAR sb[64];
+        int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), cw = S(70) < wAll / 4 ? S(70) : wAll / 4; WCHAR sb[64];
         section(L"DESIGN SEED  (EMPTY = NEW EACH TIME)", x0, y, wAll, S(18)); y += S(20);
         if (lookPix) { pbox(x0, y, wAll - cw - S(4), bh, 1, seedEdit ? 4 : 0, hov(H_SEED, 0)); pbox(x0 + wAll - cw, y, cw, bh, 1, 0, hov(H_SEED, 1)); }
         else { rr(x0, y, wAll - cw - S(4), bh, S(6), C_BG, seedEdit ? C_ACCH : C_LINE, seedEdit ? S(2) : 1); rr(x0 + wAll - cw, y, cw, bh, S(6), hov(H_SEED, 1) ? C_CARDH : C_CARD, C_LINE, 1); }
@@ -1161,7 +1174,7 @@ static void paint(HDC out, int W, int H) {
         on[0] = lookPix; on[1] = lookTex; on[2] = lookFont;
         for (k = 2; k >= 0; k--) { lw = need_wa(LK[k], S(LW[k])); lx -= lw; chip(LK[k], lx, S(14), lw, S(22), on[k], H_LOOK, k); lx -= S(4); }
         { int mw = need_w(L"Models", S(84)); lx -= S(6) + mw; button(L"Models", lx, S(12), mw, S(26), 0, H_MODELS); }          /* the Models preview */
-        lookW = W - S(22) - S(96) - S(10) - lx;
+        lookW = W - S(22) - S(96) - S(10) - lx; lookWd = (int)(lookW / SC + 0.5);
     }
     txt(head, mx + S(22), S(14), mw - S(44) - S(110) - lookW - S(10), S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     txt(sub, mx + S(22), S(42), mw - S(44) - S(110), S(20), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1285,6 +1298,15 @@ static void paint(HDC out, int W, int H) {
 #ifdef BBB_NK
     if (nkActed) { nkActed = 0; InvalidateRect(hMain, NULL, FALSE); }          /* a widget changed something: draw again with it */
 #endif
+    if (tipShown && tipText[0]) {          /* R3: the whole text of a label cut short, by the mouse */
+        SIZE sz; int bw, bh, bx, by; tipNo = 1; SelectObject(DC, fSmall); GetTextExtentPoint32W(DC, tipText, (int)wcslen(tipText), &sz);
+        bw = sz.cx + S(16); bh = sz.cy + S(10); if (bw > W - S(8)) bw = W - S(8);
+        bx = tipX + S(12); by = tipY + S(20);
+        if (bx + bw > W - S(4)) bx = W - S(4) - bw;
+        if (bx < S(4)) bx = S(4);
+        if (by + bh > H - S(4)) by = tipY - S(8) - bh;
+        rr(bx, by, bw, bh, S(4), C_CARD, C_ACC, 1); txt(tipText, bx + S(8), by, bw - S(16), bh, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS); tipNo = 0;
+    }
     GdipFlush(G, FlushIntentionSync); GdipDeleteGraphics(G); BitBlt(out, 0, 0, W, H, DC, 0, 0, SRCCOPY); SelectObject(DC, obm); DeleteObject(bm); DeleteDC(DC);
 }
 /* the help page: a panel over the window, opened with ? (Shift+/), F1 or the Help button, closed with Esc or a click */
@@ -1463,20 +1485,38 @@ static int on_divider(int x, int y) {          /* 1 the side panel's line, 2 the
     if (showDetails && x > mx + S(4)) { int t = det_top(); if (y >= t - S(4) && y <= t + S(4)) return 2; }
     return 0;
 }
-static void det_set(int h) {          /* R2: at least DET_MIN, at most half of the card area */
-    RECT rc; int mxh; GetClientRect(hMain, &rc); mxh = (int)((rc.bottom / SC - FOOT_H - HEAD_H - STRIP_H) / 2);
+static void det_fit(void);
+static void det_set(int h) { detWant = h; det_fit(); }          /* R2: what the user asked, then what fits */
+static void det_fit(void) {          /* R2: at least DET_MIN, at most half of the card area */
+    RECT rc; int mxh, h = detWant; GetClientRect(hMain, &rc); mxh = (int)((rc.bottom / SC - FOOT_H - HEAD_H - STRIP_H) / 2);
     if (h > mxh) h = mxh;
     if (h < DET_MIN) h = DET_MIN;
     detailsH = h;
 }
-static void side_set(int w) {
-    RECT rc; int mxw; GetClientRect(hMain, &rc); mxw = (int)(rc.right / SC) - 260;
+static int main_need(void) {          /* R3: design px the card side needs: one card column, the top row (look switches, Help, a title), the strip, the bottom bar compact */
+    int n = 260, a, b, c, i, vw = S(78);
+    for (i = 0; i < 3; i++) vw = need_wa(VIEWS[i], vw);
+    a = lookWd + 22 + 96 + 10 + 22 + 200;
+    b = 84 + 4 + 84 + 8 + 70 + 8 + 118 + 24 + 104 + 8 + 110 + 10 + 220 + 44;          /* the bottom bar at its compact sizes (foot_need's smallest widths; footFit off) */
+    c = (int)((need_w(L"Parts", S(64)) + 3 * (vw + S(4)) + S(14) + need_w(L"OUR CORES", S(64)) + S(170) + S(44)) / SC);
+    if (a > n) n = a;
+    if (b > n) n = b;
+    if (c > n) n = c;
+    return n;
+}
+static void side_fit(void);
+static void side_set(int w) { sideWant = w; side_fit(); }          /* R1: what the user asked, then what fits */
+static void side_fit(void) {
+    RECT rc; int mxw, w = sideWant; GetClientRect(hMain, &rc); mxw = (int)(rc.right / SC) - main_need();
     if (w > mxw) w = mxw;
     if (w < SIDE_MIN) w = SIDE_MIN;
     sideW = w;
 }
 static void hover_at(int x, int y) {
     int i, k = H_NONE, id = -1; POINT p = { x, y };
+    {   int t = -1, j; for (j = ntip - 1; j >= 0; j--) if (PtInRect(&tips[j].r, p)) { t = j; break; }          /* R3: a cut label under the mouse: its tooltip in half a second */
+        if (t < 0) { if (tipCur >= 0 || tipShown) { tipCur = -1; tipShown = 0; KillTimer(hMain, 7); redraw(); } }
+        else if (tipCur < 0 || wcscmp(tipText, tips[t].s)) { int was = tipShown; tipCur = t; tipShown = 0; wcscpy(tipText, tips[t].s); tipX = x; tipY = y; SetTimer(hMain, 7, 500, NULL); if (was) redraw(); } }
     for (i = nhit - 1; i >= 0; i--) if (PtInRect(&hits[i].r, p)) { k = hits[i].kind; id = hits[i].idx; break; }
     if (k == H_CARD && !PtInRect(&gridR, p)) { k = H_NONE; id = -1; }
     if (k != hovK || id != hovI) {
@@ -1550,8 +1590,8 @@ static void ini(int save) {
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
     if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcscpy(p, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
-    if (save) { swprintf(v, 16, L"%d", sideW); WritePrivateProfileStringW(L"window", L"sidew", v, p); swprintf(v, 16, L"%d", detailsH); WritePrivateProfileStringW(L"window", L"detailsh", v, p); }          /* R1, R2 */
-    else { sideW = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p); detailsH = (int)GetPrivateProfileIntW(L"window", L"detailsh", DET_H0, p); }
+    if (save) { swprintf(v, 16, L"%d", sideWant); WritePrivateProfileStringW(L"window", L"sidew", v, p); swprintf(v, 16, L"%d", detWant); WritePrivateProfileStringW(L"window", L"detailsh", v, p); }          /* R1, R2 */
+    else { sideW = sideWant = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p); detailsH = detWant = (int)GetPrivateProfileIntW(L"window", L"detailsh", DET_H0, p); }
     if (save) {          /* the window's size and place, so it opens next time the way it was left */
         WINDOWPLACEMENT wp; static const WCHAR *k[] = { L"left", L"top", L"right", L"bottom" }; LONG *e[4];
         memset(&wp, 0, sizeof wp); wp.length = sizeof wp; GetWindowPlacement(hMain, &wp); e[0] = &wp.rcNormalPosition.left; e[1] = &wp.rcNormalPosition.top; e[2] = &wp.rcNormalPosition.right; e[3] = &wp.rcNormalPosition.bottom;
@@ -1598,6 +1638,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_LINE: on_line((int)w, (WCHAR *)l); free((void *)l); return 0;
     case WM_ENDED: on_ended((int)w, (DWORD)l); return 0;
     case WM_TIMER:
+        if (w == 7) { KillTimer(h, 7); if (tipCur >= 0) { tipShown = 1; redraw(); } return 0; }          /* R3: the tooltip's half second is up */
         if (w == 2) KillTimer(h, 2);
         else if (w == 3) meters_tick();
         else if (w == 4) {          /* the animation timer redraws while building */
@@ -1617,11 +1658,12 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
             else { RECT rc; GetClientRect(h, &rc); det_set((int)((rc.bottom - S(FOOT_H) - GET_Y_LPARAM(l)) / SC + 0.5)); }
             SetCursor(LoadCursor(NULL, divDrag == 1 ? IDC_SIZEWE : IDC_SIZENS)); redraw(); return 0; }          /* R1: the line follows the mouse */
         { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if ((w & MK_LBUTTON) && hovK == H_OBJ && hovI != selObj) act(H_OBJ, hovI); return 0; }          /* the slider follows a drag */
-    case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; redraw(); return 0;
+    case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; tipCur = -1; tipShown = 0; KillTimer(h, 7); redraw(); return 0;
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
     case WM_LBUTTONDBLCLK: { int d = on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (d) { if (d == 1) side_set(SIDE_W0); else det_set(DET_H0); SendMessageW(h, WM_SIZE, 0, 0); return 0; } }          /* R1: back to the default */
         /* any other double-click is a click, as it was before the window took double-clicks */
-    case WM_LBUTTONDOWN: { int d = on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (d) { divDrag = d; SetCapture(h); redraw(); return 0; } }          /* R1: drag the line */
+    case WM_LBUTTONDOWN: if (tipShown || tipCur >= 0) { tipShown = 0; tipCur = -1; KillTimer(h, 7); }          /* R3: a click hides the tooltip */
+        { int d = on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (d) { divDrag = d; SetCapture(h); redraw(); return 0; } }          /* R1: drag the line */
         hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (hovK != H_NONE) act(hovK, hovI); return 0;
     case WM_LBUTTONUP: if (divDrag) { divDrag = 0; ReleaseCapture(); SendMessageW(h, WM_SIZE, 0, 0); return 0; }          /* R1: let go: the scale fits the new split */
         break;
@@ -1666,7 +1708,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 #ifdef BBB_NK
         if (NK) { nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme); }
 #endif
-        } side_set(sideW); det_set(detailsH); } redraw(); return 0; }
+        } side_fit(); det_fit(); } redraw(); return 0; }          /* R1/R2: what was asked, fitted to this size */
     case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, 900, 560 };          /* as small as 900 x 560 px: the scale follows the window, the side panel scrolls */
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
     case 0x02E0: { RECT *r = (RECT *)l; SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
@@ -1768,16 +1810,26 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     double sc0 = SC; RECT rc0; GetClientRect(hMain, &rc0);
                     SendMessageW(hMain, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(x2, y2)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(x2, y2));
                     int after = *val, saved = -1, back = -1;
-                    keep = *val;
-                    if (which == 2) { det_set((int)((rc0.bottom - FOOT_H * sc0 - y2) / sc0 + 0.5)); want = detailsH; det_set(DET_H0); def = detailsH; }
-                    else { side_set((int)(x2 / sc0 + 0.5)); want = sideW; side_set(SIDE_W0); def = sideW; }
-                    *val = keep;
-                    if (GetEnvironmentVariableA("BBB_TEST_INI", NULL, 0)) { ini(1); sideW = SIDE_W0; detailsH = DET_H0; ini(0); saved = *val; }          /* written, then read back */
+                    keep = which == 2 ? detWant : sideWant;
+                    if (which == 2) { det_set((int)((rc0.bottom - FOOT_H * sc0 - y2) / sc0 + 0.5)); want = detailsH; det_set(DET_H0); def = detailsH; det_set(keep); }
+                    else { side_set((int)(x2 / sc0 + 0.5)); want = sideW; side_set(SIDE_W0); def = sideW; side_set(keep); }
+                    if (GetEnvironmentVariableA("BBB_TEST_INI", NULL, 0)) { ini(1); sideWant = SIDE_W0; detWant = DET_H0; side_fit(); det_fit(); ini(0); side_fit(); det_fit(); saved = *val; }          /* written, then read back */
                     if (GetEnvironmentVariableA("BBB_TEST_DBLCLK", NULL, 0)) { int bx = which == 2 ? x1 : S(sideW), by = which == 2 ? det_top() : y1; SendMessageW(hMain, WM_LBUTTONDBLCLK, MK_LBUTTON, MAKELPARAM(bx, by)); back = *val; }
                     int ok = which && after == want && after != before && (saved < 0 || saved == after) && (back < 0 || back == def);
                     swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
                     if (tf) { fprintf(tf, "%s %s %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", which == 2 ? "detailsh" : which == 1 ? "sidew" : "no line at the press:", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
                 }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_TIP", NULL, 0)) {          /* R3: the cut labels, and the first one's tooltip after a (sent) rest of the mouse */
+                FILE *tf; WCHAR p2[MAX_PATH]; int n0;
+                capture(NULL); n0 = ntip;
+                if (n0) { RECT tr = tips[0].r; WCHAR first[200]; wcscpy(first, tips[0].s);
+                    SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM((tr.left + tr.right) / 2, (tr.top + tr.bottom) / 2)); SendMessageW(hMain, WM_TIMER, 7, 0);
+                    swprintf(p2, MAX_PATH, L"%ls.tip.bmp", stShot); capture(p2);
+                    swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w");
+                    if (tf) { fprintf(tf, "%s cut %d first \"%ls\" shown %d" "\n", tipShown && !wcscmp(tipText, first) ? "OK" : "FAIL", n0, first, tipShown); fprintf(tf, "sidew %d main_need %d lookW %d scale %.2f" "\n", sideW, main_need(), lookW, SC); fclose(tf); }
+                    tipShown = 0; tipCur = -1; }
+                else { swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w"); if (tf) { fprintf(tf, "OK cut 0" "\n"); fprintf(tf, "sidew %d main_need %d lookW %d scale %.2f" "\n", sideW, main_need(), lookW, SC); fclose(tf); } }
             }
             capture(stShot); ui_check(L"screen"); return 0; } }
         if (GetEnvironmentVariableA("BBB_TEST_SEEDKEYS", NULL, 0)) {          /* a test: typing f, d, Enter in the seed box must not fire the shortcuts */
