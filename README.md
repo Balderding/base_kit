@@ -44,7 +44,7 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
-## What is new in 2.3: square bases, a window that fits your screen, textured ground
+## What is new in 2.3 (and 2.3.1): square bases, a window that fits your screen, textured ground
 
 ![Sixteen bases built by 2.3, two of every size from 30 to 160 mm](examples/sheet_2.3.0.png)
 
@@ -83,7 +83,7 @@ the one on that page, yours is an older one. (`python tools\make_release.py` mak
 - Your own themes in `themes.json` beside the exe are checked theme by theme, and the note says what was wrong and where.
 - Typing a design seed no longer triggers the window's shortcuts.
 
-**Known issue.** The urban style at 25 mm square can stop while drawing its choices (one card never arrives). Other urban sizes, and every other style at 25 mm square, are fine. The fix comes in the next update.
+**2.3.1:** fixed a stop while drawing choices: with some settings (urban at 25 mm square) one card never arrived, because the step that finds a model's steadiest face never finished. It now gives up cleanly, and that model stands upright. Every other base is unchanged.
 
 Download `bbb_kit.exe`, or the zip with everything, and run it from any folder. Nothing needs installing.
 
