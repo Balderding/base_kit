@@ -604,7 +604,8 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `cart_on_track` | true | A cart by a track stands on its rails |
 | `story_direction` | true | On a base with a subject (a wreck, a ruin, a crater), the debris lies along lines out from it, as if thrown or fallen from it |
 | `style_strength` | 1 | How bold the style is, 0.25 to 2.5: deeper cracks, bolder rocks, coarser ground grain (catch washes and drybrushing). `--strength` and the window's Style strength row win |
-| `ground_grain` | true | Fine grain on every flat ground top, `ground_grain_mm` (0.12) high, times the style strength |
+| `printer` | `fdm` | The printer the bases are for: `fdm` (filament) or `resin`. FDM: a coarser ground grain (`ground_grain_fdm_mm`, 0.25) deep enough to print in layers, no detail under 3 mm. Resin: the finer grain (`ground_grain_mm`, 0.12), details down to 2 mm. `--printer` and the window's Printer row win |
+| `ground_grain` | true | Grain on the open ground and ground-like patches (mud, earth, sand ...), times the style strength. Water stays smooth, and objects keep their own tops (`grain_by_ground`: false grains every flat top) |
 | `organic_rocks` | true | Rocks shaped as real stone: rounded, chipped, layered or split, with chips and pits; about half lean |
 | `side_picture` | true | A level side view of each picked base (`_side.png` beside its STL): the real edge and how tall things stand |
 | `file_name` | `{style}_{size}mm_{theme}_{seed}_{n}` | The picked files' names. Also `{date}`. Only letters, digits, - and _ are kept. `--name` wins |

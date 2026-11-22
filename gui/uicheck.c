@@ -4,11 +4,11 @@
    start a job or open a folder are not made (Show, Build, Quick, More, Stop, Open folder). Writes <shot>.<tag>.uicheck.txt. */
 static void ui_state(char *s, size_t n) {
     int i, pk = 0; for (i = 0; i < ncell; i++) pk += cells[i].picked;
-    snprintf(s, n, "st%d sz%d de%d mi%d n%d sup%d join%d sc%d obj%d mf%d%d%d%d thr%d gpu%d pix%d tex%d font%d view%d parts%d p%d%d%d%d%d det%d help%d picks%d col%d th%d str%d seed%d multi%u/%u save%d",
+    snprintf(s, n, "st%d sz%d de%d mi%d n%d sup%d join%d sc%d obj%d mf%d%d%d%d thr%d gpu%d pix%d tex%d font%d view%d parts%d p%d%d%d%d%d det%d help%d picks%d col%d th%d str%d seed%d multi%u/%u save%d pr%d",
              selStyle, selSize, selDetail, selMini, selCount, selSup, selJoin, selScale, selObj, mfOn[0], mfOn[1], mfOn[2], mfOn[3], spThr, spGpu, lookPix, lookTex, lookFont,
-             lvView, lvParts, lvCores, lvGpu, lvShape, lvTime, lvRows, showDetails, showHelp, pk, ncell > 0 ? cells[0].col : 0, selTheme, selStr, seedEdit * 1000 + (int)strlen(seedBuf), sizeMulti, sizeMask, setSave);
+             lvView, lvParts, lvCores, lvGpu, lvShape, lvTime, lvRows, showDetails, showHelp, pk, ncell > 0 ? cells[0].col : 0, selTheme, selStr, seedEdit * 1000 + (int)strlen(seedBuf), sizeMulti, sizeMask, setSave, selPrinter);
 }
-static const char *KN[] = { "none", "style", "size", "detail", "mini", "count", "overhangs", "show", "more", "all", "clear", "go", "stop", "open", "details", "card", "help", "quick", "scale", "oval", "look", "speed", "view", "parts", "colour", "join", "manifold", "objsize", "models", "theme", "seed", "strength", "several", "set" };
+static const char *KN[] = { "none", "style", "size", "detail", "mini", "count", "overhangs", "show", "more", "all", "clear", "go", "stop", "open", "details", "card", "help", "quick", "scale", "oval", "look", "speed", "view", "parts", "colour", "join", "manifold", "objsize", "models", "theme", "seed", "strength", "several", "set", "printer" };
 static void ui_check(const WCHAR *tag) {
     WCHAR p[MAX_PATH]; FILE *f; RECT c; int i, j, nh, bad = 0, nclick = 0, nnochange = 0; struct { RECT r; int kind, idx; } H[400]; char a[400], b[400];
     swprintf(p, MAX_PATH, L"%ls.%ls.uicheck.txt", stShot, tag); f = _wfopen(p, L"w"); if (!f) return;
@@ -27,7 +27,7 @@ static void ui_check(const WCHAR *tag) {
     }
     for (i = 0; i < nh; i++) {          /* click each safe one where it is drawn: it must change the state; then put it back */
         int k = H[i].kind, cx = (H[i].r.left + H[i].r.right) / 2, cy = (H[i].r.top + H[i].r.bottom) / 2, keep[40], m = 0, *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3], &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvParts, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &showHelp,
-                                                                                                                       &selTheme, &selStr, &seedEdit, &sizeMulti, &setSave };          /* review P2-5: the plan B rows put back too */
+                                                                                                                       &selTheme, &selStr, &seedEdit, &sizeMulti, &setSave, &selPrinter };          /* review P2-5: the plan B rows put back too */
         int nv = (int)(sizeof V / sizeof V[0]), pk[MAXC], q; unsigned kmask = sizeMask; char kseed[16]; strcpy(kseed, seedBuf);
         if (k == H_SHOW || k == H_GO || k == H_QUICK || k == H_MORE || k == H_STOP || k == H_OPEN || k == H_NONE || k == H_MODELS) continue;
         if (cy < 0 || cy >= c.bottom || cx < 0 || cx >= c.right) continue;
@@ -39,7 +39,7 @@ static void ui_check(const WCHAR *tag) {
         SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(cx, cy));
         ui_state(b, sizeof b); nclick++;
         if (!strcmp(a, b)) {          /* nothing changed: fine only for a choice already chosen, or count at its end */
-            int chosen = (k == H_THEME && H[i].idx == 0 && selTheme == 0) || (k == H_STR && H[i].idx == selStr) || (k == H_SEED && H[i].idx == 1 && !seedBuf[0] && !seedEdit) || (k == H_STYLE && H[i].idx == selStyle) || (k == H_SIZE && H[i].idx == selSize) || (k == H_OVAL && H[i].idx + NROUND == selSize) || (k == H_DETAIL && H[i].idx == selDetail) || (k == H_MINI && H[i].idx == selMini) ||
+            int chosen = (k == H_THEME && H[i].idx == 0 && selTheme == 0) || (k == H_STR && H[i].idx == selStr) || (k == H_PRINTER && H[i].idx == selPrinter) || (k == H_SEED && H[i].idx == 1 && !seedBuf[0] && !seedEdit) || (k == H_STYLE && H[i].idx == selStyle) || (k == H_SIZE && H[i].idx == selSize) || (k == H_OVAL && H[i].idx + NROUND == selSize) || (k == H_DETAIL && H[i].idx == selDetail) || (k == H_MINI && H[i].idx == selMini) ||
                          (k == H_SCALE && H[i].idx == selScale) || (k == H_OBJ && H[i].idx == selObj) || (k == H_VIEW && H[i].idx == lvView) || (k == H_COUNT && (H[i].idx == 0 || (H[i].idx < 0 && selCount == 1) || (H[i].idx > 0 && selCount == 20)));
             if (!chosen) { fprintf(f, "NO CHANGE %s %d (clicked at %d,%d)\n", KN[k], H[i].idx, cx, cy); nnochange++; }
         }

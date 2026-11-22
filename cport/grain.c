@@ -24,11 +24,17 @@ static void em_put(Emap *e, uint64_t k) { size_t s = eslot(k, e->cap); while (e-
 static void em_free(Emap *e) { free(e->k); free(e->m); }
 
 /* ---------------------------------------------------------------- the mesh */
-static int is_flat(const double *v, const int *t) {          /* a horizontal face whose outside is up */
+static const GrainOpt *GO;
+static int is_flat(const double *v, const int *t) {          /* a horizontal face whose outside is up, and not masked off */
     const double *a = v + 3 * t[0], *b = v + 3 * t[1], *c = v + 3 * t[2];
     double ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], wx = c[0] - a[0], wy = c[1] - a[1], wz = c[2] - a[2];
     double nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx, l = sqrt(nx * nx + ny * ny + nz * nz);
-    return l > 1e-12 && nz / l > 0.99995;
+    if (!(l > 1e-12 && nz / l > 0.99995)) return 0;
+    if (GO && GO->mask) {
+        int i = (int)floor(((a[0] + b[0] + c[0]) / 3 - GO->mx0) / GO->mstep), j = (int)floor(((a[1] + b[1] + c[1]) / 3 - GO->my0) / GO->mstep);
+        if (i >= 0 && j >= 0 && i < GO->mw && j < GO->mh && GO->mask[(size_t)j * GO->mw + i]) return 0;
+    }
+    return 1;
 }
 static double d2(const double *v, int a, int b) { double x = v[3 * a] - v[3 * b], y = v[3 * a + 1] - v[3 * b + 1], z = v[3 * a + 2] - v[3 * b + 2]; return x * x + y * y + z * z; }
 
@@ -56,15 +62,16 @@ static Hn hpop(Hn *h, int *n) {
     return top;
 }
 
-int grain_apply(double **vp, int *nvp, int **fp, int *ntp, double amp, uint32_t seed) {
+int grain_apply(double **vp, int *nvp, int **fp, int *ntp, const GrainOpt *o, uint32_t seed) {
     double *v = *vp; int nv = *nvp, *f = *fp, nt = *ntp, moved = 0;
-    double area = 0, L;
+    double area = 0, L, amp = o->amp;
     if (amp <= 0 || nt <= 0) return 0;
+    GO = o;
     for (int t = 0; t < nt; t++) if (is_flat(v, f + 3 * t)) {
         const double *a = v + 3 * f[3 * t], *b = v + 3 * f[3 * t + 1], *c = v + 3 * f[3 * t + 2];
         area += 0.5 * fabs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
     }
-    L = fmax(0.4, sqrt(area / 40000.0));          /* a big base: coarser, so its file stays a sensible size */
+    L = fmax(o->coarse ? 0.5 : 0.4, sqrt(area / 40000.0));          /* a big base: coarser, so its file stays a sensible size */
 
     /* split: each flat face's longest edge while it is longer than L; a face beside a split edge takes the same point */
     for (int round = 0; round < MAXROUNDS; round++) {
@@ -145,18 +152,19 @@ int grain_apply(double **vp, int *nvp, int **fp, int *ntp, double amp, uint32_t 
         }
         SEED = seed;
         {
-            double w1 = fmax(2.2, 7 * L), w2 = fmax(1.1, 3.5 * L), w3 = fmax(0.6, 2 * L);
+            double w1 = o->coarse ? fmax(3.0, 6 * L) : fmax(2.2, 7 * L), w2 = o->coarse ? fmax(1.2, 2.4 * L) : fmax(1.1, 3.5 * L), w3 = fmax(0.6, 2 * L);
             for (int i = 0; i < nv; i++) {
                 double x, y, s, n;
                 if (!flat[i] || edge[i]) continue;
                 s = dist[i] >= FADE ? 1.0 : dist[i] / FADE; s = s * s * (3 - 2 * s);
                 x = v[3 * i]; y = v[3 * i + 1];
-                n = 0.55 * vnoise(x / w1, y / w1) + 0.30 * vnoise(x / w2 + 17.3, y / w2 - 5.1) + 0.15 * vnoise(x / w3 - 31.7, y / w3 + 9.4);
+                n = o->coarse ? 0.65 * vnoise(x / w1, y / w1) + 0.35 * vnoise(x / w2 + 17.3, y / w2 - 5.1)          /* FDM: no octave finer than about 2 points */
+                              : 0.55 * vnoise(x / w1, y / w1) + 0.30 * vnoise(x / w2 + 17.3, y / w2 - 5.1) + 0.15 * vnoise(x / w3 - 31.7, y / w3 + 9.4);
                 v[3 * i + 2] += amp * s * n; moved++;
             }
         }
         free(flat); free(edge); free(dist); free(deg); free(adj); free(heap);
     }
-    *vp = v; *nvp = nv; *fp = f; *ntp = nt;
+    GO = NULL; *vp = v; *nvp = nv; *fp = f; *ntp = nt;
     return moved;
 }

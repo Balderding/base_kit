@@ -76,6 +76,7 @@ static int setup(const char *mode) {
     { const char *e = getenv("KIT_SMOOTH"); SO.smooth = e && (!strcmp(e, "0") || !strcmp(e, "1")) ? e[0] == '1' : runner_cfg_bool("smooth_details", 0); }          /* smooth details (smooth3d.c) */
     sm_shell_grid_mm = runner_cfg_num("smooth_grid_mm", 0.08); if (!(sm_shell_grid_mm >= 0.02)) sm_shell_grid_mm = 0.08;
     { const char *e = getenv("KIT_ROCKS"); ork_on = e && (!strcmp(e, "0") || !strcmp(e, "1")) ? e[0] == '1' : runner_cfg_bool("organic_rocks", 1); }          /* organic rocks (rocks3d.c) */
+    { extern double kit_min_detail; const char *e = getenv("KIT_PRINTER"); const char *p = e && *e ? e : runner_cfg_str("printer", "fdm"); kit_min_detail = !_stricmp(p, "resin") ? 2.0 : 3.0; }          /* review N1: the smallest detail kept, by printer */
     { extern double kit_strength; const char *e = getenv("KIT_STRENGTH"); double v = e && *e ? strtod(e, NULL) : runner_cfg_num("style_strength", 1.0); kit_strength = v >= 0.25 && v <= 2.5 ? v : 1.0; }          /* style strength (plan B step 5): rock relief, crack depth */
     if (ork_on) { bc_organic_kind = ork_kind; bc_organic_take = ork_take; }
     ly_config(runner_cfg_bool("random_mix", 1), cfg_scenes(), runner_cfg_bool("outcrop_cracks", 0));

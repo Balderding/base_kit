@@ -967,6 +967,56 @@ static int shot_png_col(const Mesh *soup, const char *png, int w, int h, double 
 
 /* one base, mesher.build + mesher serve's picture: the report r (a JSON object as Sb text) or an error */
 typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; } Built;
+/* review P2-1 (2026-11-22): where grain may go. Ground and ground-like patches (mud, earth, sand ...) yes; water and
+   the like stay smooth (gloss, resin), and the tops of objects (headstones, slabs, planks, bones) keep their own look.
+   A grid of 0.1 mm cells over the base, 1 = no grain, from the scene's shapes (scene -> mm: x * sc + tx). */
+static int grain_ground_kind(const char *k) {
+    static const char *G[] = { "mud", "earth", "grit", "sand", "soil", "dirt", "ash", "gravel", "rubble", "scree", "dust", "silt", "loam", "clay", "peat", "snow", "mound", "heap", "bank", "ground", "rut", "crack", "pit", "glyph", "seam", "mudcrack", NULL };
+    for (int i = 0; G[i]; i++) if (!strcmp(k, G[i])) return 1;
+    return 0;
+}
+static int grain_smooth_kind(const char *k) {          /* ground cuts that stay smooth */
+    static const char *W[] = { "water", "ice", "pool", "pond", "puddle", "lava", "acid", "oil", "tar", "slime", "blood", "metal", "plate", "grate", "tile", "plank", "slab", "flag", "flagstone", "paving", "floor", NULL };
+    for (int i = 0; W[i]; i++) if (strstr(k, W[i])) return 1;
+    return 0;
+}
+static void grain_fill(unsigned char *g, int w, int h, double x0, double y0, double st, const D2Poly *p, double sc, double tx, double ty) {
+    if (p->type != 1 || p->nr < 1) return;
+    int tot = 0; for (int r = 0; r < p->nr; r++) tot += p->len[r];
+    double bx0 = 1e30, by0 = 1e30, bx1 = -1e30, by1 = -1e30;
+    for (int i = 0; i < p->len[0]; i++) { double x = p->xy[2 * i] * sc + tx, y = p->xy[2 * i + 1] * sc + ty; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+    int i0 = (int)floor((bx0 - x0) / st), i1 = (int)ceil((bx1 - x0) / st), j0 = (int)floor((by0 - y0) / st), j1 = (int)ceil((by1 - y0) / st);
+    if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0; if (i1 > w - 1) i1 = w - 1; if (j1 > h - 1) j1 = h - 1;
+    for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) {
+        double X = x0 + (i + 0.5) * st, Y = y0 + (j + 0.5) * st; int in = 0, at = 0;
+        for (int r = 0; r < p->nr; r++) {          /* even-odd over every ring: holes come out */
+            int n = p->len[r]; const double *xy = p->xy + 2 * at;
+            for (int a = 0, b = n - 1; a < n; b = a++) {
+                double ax = xy[2 * a] * sc + tx, ay = xy[2 * a + 1] * sc + ty, bx = xy[2 * b] * sc + tx, by = xy[2 * b + 1] * sc + ty;
+                if ((ay > Y) != (by > Y) && X < (bx - ax) * (Y - ay) / (by - ay) + ax) in = !in;
+            }
+            at += n;
+        }
+        if (in) g[(size_t)j * w + i] = 1;
+    }
+    (void)tot;
+}
+static unsigned char *grain_mask(const D2Scene *s, const Mesh *m, GrainOpt *o) {
+    double mn[3], mx[3], sc = s->has_sp ? s->sc : 1.0, tx = s->has_sp ? s->tx : 0, ty = s->has_sp ? s->ty : 0, st = 0.1; int w, h, any = 0; unsigned char *g;
+    mesh_bounds(m, mn, mx); w = (int)ceil((mx[0] - mn[0]) / st) + 2; h = (int)ceil((mx[1] - mn[1]) / st) + 2;
+    if (w <= 0 || h <= 0 || (size_t)w * h > 40000000u) return NULL;
+    g = calloc((size_t)w * h, 1); if (!g) return NULL;
+    for (int k = 0; k < s->ngc; k++) if (s->gc[k].kind && grain_smooth_kind(s->gc[k].kind)) for (int q = 0; q < s->gc[k].np; q++) { grain_fill(g, w, h, mn[0] - st, mn[1] - st, st, &s->gc[k].p[q], sc, tx, ty); any = 1; }
+    for (int k = 0; k < s->ntc; k++) if (s->tc[k].kind && grain_smooth_kind(s->tc[k].kind)) for (int q = 0; q < s->tc[k].np; q++) { grain_fill(g, w, h, mn[0] - st, mn[1] - st, st, &s->tc[k].p[q], sc, tx, ty); any = 1; }
+    for (int k = 0; k < s->nop; k++) if (s->op[k].kind && !grain_ground_kind(s->op[k].kind)) for (int q = 0; q < s->op[k].np; q++) { grain_fill(g, w, h, mn[0] - st, mn[1] - st, st, &s->op[k].p[q], sc, tx, ty); any = 1; }
+    if (!any) { free(g); return NULL; }
+    o->mask = g; o->mw = w; o->mh = h; o->mx0 = mn[0] - st; o->my0 = mn[1] - st; o->mstep = st;
+    return g;
+}
+static int printer_resin(void) {          /* review N1: "printer": "fdm" (standard, the user's) or "resin"; --printer wins */
+    const char *e = getenv("KIT_PRINTER"); const char *p = e && *e ? e : cfg_str("printer", "fdm");
+    return !_stricmp(p, "resin");
+}
 static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built *B) {
     memset(B, 0, sizeof *B); ULONGLONG t = GetTickCount64(); char name[160]; nm(rs, n, name, sizeof name);
     char png2d[MAX_PATH * 3]; snprintf(B->path, sizeof B->path, "%s/%s/%s.stl", rs->out, rs->style, name); snprintf(png2d, sizeof png2d, "%.*s_2d.png", (int)strlen(B->path) - 4, B->path);
@@ -1013,10 +1063,17 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     JV *cf = jget(&B->head, "cfield"); int cfield = cf && cf->t == 2;
     if (nthreads > 1 || cfield) snprintf(B->mesher, sizeof B->mesher, "C, bbb_kit.exe, field in C, %d thread%s", nthreads ? nthreads : 1, nthreads > 1 ? "s" : "");
     else snprintf(B->mesher, sizeof B->mesher, "C, bbb_kit.exe");          /* one core: the Python field + the C mesher (the same mesh) */
+    if (have_sc && getenv("BBB_GRAIN_KINDS")) { FILE *kf = fopen(getenv("BBB_GRAIN_KINDS"), "a"); if (kf) { fprintf(kf, "%s ground=%s sp=%d sc=%g tx=%g ty=%g\n", name, sc.ground ? sc.ground : "-", sc.has_sp, sc.sc, sc.tx, sc.ty);
+        for (int g = 0; g < sc.ngc; g++) fprintf(kf, " gc %s np=%d\n", sc.gc[g].kind ? sc.gc[g].kind : "?", sc.gc[g].np);
+        for (int g = 0; g < sc.nop; g++) fprintf(kf, " op %s type=%d z0=%g b=%g np=%d\n", sc.op[g].kind ? sc.op[g].kind : "?", sc.op[g].optype, sc.op[g].z0, sc.op[g].b, sc.op[g].np);
+        for (int g = 0; g < sc.ntc; g++) fprintf(kf, " tc %s np=%d\n", sc.tc[g].kind ? sc.tc[g].kind : "?", sc.tc[g].np); fclose(kf); } }
     mesh_merge(&m);
     if (cfg_bool("ground_grain", 1)) {          /* plan B step 2: fine grain on every flat top (grain.c), so no open ground is smooth */
         uint32_t sd = 2166136261u; for (const char *c = name; *c; c++) sd = (sd ^ (unsigned char)*c) * 16777619u;
-        int t0 = m.nt, mv = grain_apply(&m.v, &m.nv, &m.f, &m.nt, cfg_num("ground_grain_mm", 0.12) * strength(), sd);
+        GrainOpt go = { 0 }; int resin = printer_resin(); unsigned char *gm;
+        go.amp = (resin ? cfg_num("ground_grain_mm", 0.12) : cfg_num("ground_grain_fdm_mm", 0.25)) * strength(); go.coarse = !resin;          /* review P2-2: FDM grain big enough to print */
+        gm = have_sc && cfg_bool("grain_by_ground", 1) ? grain_mask(&sc, &m, &go) : NULL;
+        int t0 = m.nt, mv = grain_apply(&m.v, &m.nv, &m.f, &m.nt, &go, sd); free(gm);
         const char *gl = getenv("BBB_GRAIN_LOG");
         if (gl && *gl) { FILE *lf = fopen(gl, "a"); if (lf) { fprintf(lf, "%s: faces %d -> %d, points moved %d\n", name, t0, m.nt, mv); fclose(lf); } }
     }
@@ -1483,6 +1540,7 @@ static int job_build(Args *a, const char *style) {
         if (on_off(smooth) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(smooth) ? "1" : "0" };
         if (on_off(rocks) >= 0) es[ne++] = (EnvSet){ "KIT_ROCKS", on_off(rocks) ? "1" : "0" };
         { const char *nmo = opt(a, "--name", ""); if (nmo[0]) NAME_CLI = nmo; }
+        { const char *pr = opt(a, "--printer", ""); static char pb[16]; snprintf(pb, sizeof pb, "%s", pr[0] ? pr : cfg_str("printer", "fdm")); _putenv_s("KIT_PRINTER", pb); es[ne++] = (EnvSet){ "KIT_PRINTER", pb }; }          /* review N1 */
         { const char *st = opt(a, "--strength", ""); static char sb[32]; if (st[0]) STRENGTH_CLI = strtod(st, NULL); snprintf(sb, sizeof sb, "%g", strength()); es[ne++] = (EnvSet){ "KIT_STRENGTH", sb }; }
         { static char thb[128]; theme_arg(opt(a, "--theme", ""), thb, sizeof thb); if (thb[0]) es[ne++] = (EnvSet){ "KIT_THEME", thb }; }          /* only this theme (the window's theme picker) */
         rs.envw = env_block(es, ne);
@@ -1517,7 +1575,7 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
         free(av); return r3 ? 2 : 0;
     }
     if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(opt(&a, "--pack", "")); free(av); return r2; }          /* the window's Models preview */
-    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--scale x] [--strength 0.25..2.5] [--theme name] [--name {style}_{size}mm_{theme}_{seed}_{n}] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
+    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--scale x] [--strength 0.25..2.5] [--theme name] [--printer fdm|resin] [--name {style}_{size}mm_{theme}_{seed}_{n}] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;
     if (!strcmp(job, "choices")) rc = job_choices(&a, style);

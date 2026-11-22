@@ -8,6 +8,7 @@
 
 int ork_on = 0;
 double kit_strength = 1.0;          /* style strength (settings "style_strength", --strength; pipeline.c sets it): 1 = the standard look */
+double kit_min_detail = 3.0;          /* the smallest detail kept, mm (features.c; pipeline.c sets it from the printer: 3 FDM, 2 resin) */
 
 /* ---------------- the kinds ---------------- */
 static const char *const ORK_KINDS0[] = { "rock", "pebble", "pebbles", "rubble", "sandstone", "slate", "stone", "stones", "boulder", "cobble",

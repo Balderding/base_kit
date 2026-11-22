@@ -78,7 +78,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 enum { SIDE_W = 420, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
 enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS,
-       H_THEME, H_SEED, H_STR, H_MULTI, H_SET };
+       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -103,6 +103,7 @@ static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, 
    (seedBuf, typed while seedEdit), style strength, several sizes at once (sizeMask, built one size after another), and
    three saved sets (out\bbb_kit.ini [set1]..[set3]) */
 static const char *STRENGTHS[] = { "0.5", "0.75", "1", "1.5", "2" }; enum { NSTR = 5 };
+static const char *PRINTERS[] = { "FDM", "Resin" }; static int selPrinter;          /* review N1: the printer the bases are for (grain size, smallest detail) */
 static int selStr = 2, selTheme, seedEdit, sizeMulti, setSave, sizeQ[32], nSizeQ; static unsigned sizeMask; static char seedBuf[16];
 static const char *style_name(void);
 static void sets_ini(WCHAR *p);          /* where the saved sets live (a test: beside its picture, never the real ini) */
@@ -352,7 +353,7 @@ static void build(void) {
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
-    theme_opt(extra, 400); swprintf(extra + wcslen(extra), 24, L" --strength %hs", STRENGTHS[selStr]);
+    theme_opt(extra, 400); swprintf(extra + wcslen(extra), 48, L" --strength %hs --printer %hs", STRENGTHS[selStr], selPrinter ? "resin" : "fdm");
     for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
     jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
@@ -1081,6 +1082,7 @@ static void paint(HDC out, int W, int H) {
         y += bh + S(8);
     }
     chips(L"STYLE STRENGTH  (2 = BOLDER FOR PAINT)", STRENGTHS, NSTR, 5, selStr, H_STR, &y);
+    chips(L"PRINTER  (GRAIN AND SMALLEST DETAIL)", PRINTERS, 2, 2, selPrinter, H_PRINTER, &y);
     {          /* the design seed: empty = new designs each time; type a word to get the same designs again */
         int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), cw = S(70); WCHAR sb[64];
         section(L"DESIGN SEED  (EMPTY = NEW EACH TIME)", x0, y, wAll, S(18)); y += S(20);
@@ -1384,6 +1386,7 @@ static void act2(int kind, int idx) {
     case H_MULTI: sizeMulti = !sizeMulti; if (sizeMulti && !sizeMask) sizeMask = 1u << selSize; break;
     case H_THEME: { int nt = theme_count(); if (idx == 0) selTheme = 0; else if (nt) selTheme = (selTheme + idx + nt + 1) % (nt + 1); break; }
     case H_STR: selStr = idx; break;
+    case H_PRINTER: selPrinter = idx; break;
     case H_SEED: if (idx == 1) { seedBuf[0] = 0; seedEdit = 0; } else seedEdit = !seedEdit; break;
     case H_SET: if (idx == 3) setSave = !setSave; else { set_io(idx, setSave); setSave = 0; } break;
     case H_DETAIL: selDetail = idx; break;
@@ -1467,6 +1470,7 @@ static void hover_at(int x, int y) {
         }
         if (k == H_MULTI) wcscpy(sub, L"Several sizes at once: click each size you want (round or oval). \"Build straight away\" then builds that many bases for every size, one size after another.");
         if (k == H_THEME) wcscpy(sub, L"Theme: Any lets the kit choose among the style's themes. Step with < and > to make every base one theme; click the middle for Any again. A themes.json beside bbb_kit.exe adds your own.");
+        if (k == H_PRINTER) wcscpy(sub, L"Printer: FDM (filament) gets a coarser ground grain, deep enough to print in layers, and keeps no detail under 3 mm. Resin gets the finer grain and keeps details down to 2 mm.");
         if (k == H_STR) wcscpy(sub, L"Style strength: 1 is the standard look. Higher gives deeper cracks, bolder rock shapes and chips and a coarser ground grain, which catch washes and drybrushing better; lower is softer.");
         if (k == H_SEED) wcscpy(sub, id == 1 ? L"Clear the seed: new designs each time." : L"Design seed: type a word (letters and digits) to get the same designs again, on any PC. Empty: new designs each time. Enter or Esc when done.");
         if (k == H_SET) wcscpy(sub, id == 3 ? L"Save to a set: press this, then Set 1, 2 or 3, to keep the style, sizes, number, detail, miniature, scale, object size, strength, theme and seed chosen now." : L"Click to choose everything kept in this set again (\"-\" = nothing saved in it yet).");
@@ -1508,7 +1512,7 @@ static void ini(int save) {
     }
     if (save) {          /* the extras of plan B step 6 and the size by its name (the list grew: 120 mm, 2026-11-21) */
         swprintf(v, 16, L"%hs", SIZES[selSize]); WritePrivateProfileStringW(L"window", L"basesizemm", v, p);
-        swprintf(v, 16, L"%d", selStr); WritePrivateProfileStringW(L"window", L"strength", v, p);
+        swprintf(v, 16, L"%d", selStr); WritePrivateProfileStringW(L"window", L"strength", v, p); WritePrivateProfileStringW(L"window", L"printer", selPrinter ? L"resin" : L"fdm", p);
         swprintf(v, 16, L"%d", sizeMulti); WritePrivateProfileStringW(L"window", L"several", v, p);
         swprintf(v, 16, L"%u", sizeMask); WritePrivateProfileStringW(L"window", L"sizes", v, p);
         { WCHAR sd[16]; swprintf(sd, 16, L"%hs", seedBuf); WritePrivateProfileStringW(L"window", L"seed", sd, p); }
@@ -1522,6 +1526,7 @@ static void ini(int save) {
         GetPrivateProfileStringW(L"window", L"basesizemm", L"", t, 64, p);
         if (t[0]) for (i = 0; i < NSIZES; i++) { WCHAR sz[16]; swprintf(sz, 16, L"%hs", SIZES[i]); if (!wcscmp(sz, t)) selSize = i; }
         x = (int)GetPrivateProfileIntW(L"window", L"strength", selStr, p); if (x >= 0 && x < NSTR) selStr = x;
+        { WCHAR pv[16]; GetPrivateProfileStringW(L"window", L"printer", L"fdm", pv, 16, p); selPrinter = !_wcsicmp(pv, L"resin"); }
         sizeMulti = GetPrivateProfileIntW(L"window", L"several", 0, p) ? 1 : 0;
         GetPrivateProfileStringW(L"window", L"sizes", L"0", t, 64, p); sizeMask = (unsigned)wcstoul(t, NULL, 10) & ((1u << NSIZES) - 1u);
         GetPrivateProfileStringW(L"window", L"seed", L"", t, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, t, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
