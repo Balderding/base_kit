@@ -147,6 +147,16 @@ static int spThr = 1, spGpu = 1;
 static int lvView = 1, lvCores = 1, lvGpu = 1, lvShape = 1, lvTime = 1, lvRows = 1, lvParts;
 static float cpuV[LIVE_MAXCORE], gpuV = -1, jobCores; static int ncpu, nthr;
 static void meters_tick(void) { float pc[LIVE_MAXCORE]; ncpu = live_cpu(pc, LIVE_MAXCORE); nthr = live_job(hJob, cpuV, LIVE_MAXCORE, &jobCores); gpuV = live_gpu(); }
+/* idle CPU (2026-11-22, GUICy's baseline: 31.5 % of a core idle, a full redraw twice a second for the meters):
+   the window redraws for the meters only when what they show changed, and not at all while it is behind another
+   window (a game in front) or minimized and nothing is building. in_front: the window or one of its own is active */
+static int idleSecs, nPaint;          /* --idletest: how long, and how many full redraws happened */
+static int in_front(void) { if (selftest == 6) return GetEnvironmentVariableA("BBB_TEST_FRONT", NULL, 0) > 0; HWND f = GetForegroundWindow(); return f && (f == hMain || GetAncestor(f, GA_ROOTOWNER) == hMain) && !IsIconic(hMain); }
+static long long meters_shown(void) {          /* what the strip shows now, as one number: busy, our threads, our cores, the video card's percent */
+    long long g = gpuV < 0 ? -1 : (long long)(gpuV * 100 + 0.5);
+    if (!busy) g = g < 0 ? -1 : g / 5;          /* idle: the video card's percent in 5 % steps (the rest of the PC moves it all the time) */
+    return ((long long)busy << 40) ^ ((long long)nthr << 28) ^ ((long long)(jobCores * 10 + 0.5) << 12) ^ (g & 0xFFF);
+}
 static void speed_env(void) { WCHAR n[16]; DWORD c = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS); swprintf(n, 16, L"%lu", (unsigned long)(c > 1 ? c : 2)); SetEnvironmentVariableW(L"KIT_THREADS", spThr ? n : L"0"); SetEnvironmentVariableW(L"KIT_GPU", spGpu ? L"1" : L"0"); }
 
 static const char *STYLES[] = { "badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine", "swamp", "cynder", "targa",
@@ -1646,8 +1656,23 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_ENDED: on_ended((int)w, (DWORD)l); return 0;
     case WM_TIMER:
         if (w == 7) { KillTimer(h, 7); if (tipCur >= 0) { tipShown = 1; redraw(); } return 0; }          /* R3: the tooltip's half second is up */
+        if (w == 9 && selftest == 6) {          /* --idletest: the CPU time this process used while it sat idle, and the redraws */
+            static ULONGLONG c0 = 0, t0 = 0; FILETIME a, b2, k, u; GetProcessTimes(GetCurrentProcess(), &a, &b2, &k, &u);
+            ULONGLONG c = (((ULONGLONG)k.dwHighDateTime << 32 | k.dwLowDateTime) + ((ULONGLONG)u.dwHighDateTime << 32 | u.dwLowDateTime)) / 10000, t = GetTickCount64();
+            if (!t0) { c0 = c; t0 = t; nPaint = 0; KillTimer(h, 9); SetTimer(h, 9, idleSecs * 1000, NULL); return 0; }          /* the first tick: start counting after start-up */
+            { FILE *f = _wfopen(stShot, L"w"); double secs = (t - t0) / 1000.0, pct = secs > 0 ? 100.0 * (c - c0) / 1000.0 / secs : 0;
+              if (f) { fprintf(f, "%s idle %.1f s: cpu %.0f ms = %.2f %% of a core, %d redraws, in_front %d" "\n", pct < 1.0 ? "OK" : "HIGH", secs, (double)(c - c0), pct, nPaint, in_front()); fclose(f); } }
+            PostQuitMessage(0); return 0;
+        }
         if (w == 2) KillTimer(h, 2);
-        else if (w == 3) meters_tick();
+        else if (w == 3) {          /* the meters: a redraw only when what they show changed, and only in front (or building) */
+            static long long last = -2; long long now;
+            if (!busy && !in_front() && (!selftest || selftest == 6)) return 0;
+            meters_tick(); now = meters_shown();
+            if (now == last) return 0;
+            last = now;
+        }
+        else if (w == 1 && !busy && !in_front() && (!selftest || selftest == 6)) return 0;          /* the picked cards' animated outline: not behind another window */
         else if (w == 4) {          /* the animation timer redraws while building */
             live_poll();
             if (selftest && GetEnvironmentVariableA("BBB_LIVE_SHOTS", NULL, 0)) {          /* a test: pictures of the three views while laying out, then while the height field is cut */
@@ -1710,7 +1735,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == '-') act(H_COUNT, -1);
         return 0;
     case WM_ERASEBKGND: return 1;
-    case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
+    case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); nPaint++; GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
     case WM_SIZE: { RECT rc; GetClientRect(h, &rc); if (rc.right > 0 && rc.bottom > 0) { double s2 = fit_sc(rc.right, rc.bottom); if (fabs(s2 - SC) > 1e-6) { SC = s2; make_fonts();          /* the scale follows the window */
 #ifdef BBB_NK
         if (NK) { nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme); }
@@ -1760,6 +1785,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if (!strncmp(cmdA, "--demotest", 10)) { selftest = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); }
     else if (!strncmp(cmdA, "--quicktest", 11)) { selftest = 1; stStep = 2; autoBuild = 1; stSize = 3; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 11 + (cmdA[11] == ' ')); }
     else if (!strncmp(cmdA, "--resizetest", 12)) { selftest = 2; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
+    else if (!strncmp(cmdA, "--idletest", 10)) { selftest = 6; idleSecs = 60; { const char *q = cmdA + 10 + (cmdA[10] == ' '); idleSecs = atoi(q); if (idleSecs < 1) idleSecs = 60; while (*q && *q != ' ') q++; if (*q) q++; swprintf(stShot, MAX_PATH, L"%hs", q); } }          /* --idletest <secs> <out.txt>: sit idle, hidden, and say what it cost */
     else if (!strncmp(cmdA, "--modelstest", 12)) { selftest = 4; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
     else if (!strncmp(cmdA, "--selftest", 10)) { selftest = 1; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); if (!stShot[0]) wcscpy(stShot, L"bbb_selftest.bmp"); }
     GetModuleFileNameW(NULL, kit, MAX_PATH); sl = wcsrchr(kit, L'\\');
@@ -1895,6 +1921,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         act(H_QUICK, 0);
     }
     else if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = GetEnvironmentVariableA("BBB_TEST_OVERHANGS", NULL, 0) ? 1 : 0; ask_choices(1); }          /* a test of overhangs + join: BBB_TEST_OVERHANGS set */
+    if (selftest == 6) SetTimer(hMain, 9, 2000, NULL);          /* --idletest: two seconds to settle, then the counting */
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     GdiplusShutdown(gtok); return 0;
 }
