@@ -78,7 +78,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 enum { SIDE_W = 420, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
 enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS,
-       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER };
+       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER, H_SQ };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16], size[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -147,8 +147,9 @@ static const char *STYLES[] = { "badlands", "highland", "maahl", "corridor", "in
 #define NSTYLES ((int)(sizeof STYLES / sizeof STYLES[0]))
 static const char *style_name(void) { return STYLES[selStyle]; }
 static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50", "60", "65", "70", "80", "90", "100", "120", "130", "160",          /* the common round bases; the kit itself takes any size from 20 to 200 */
-                                "60x35.5", "75x42", "90x52", "105x70", "120x92", "150x95", "170x109" };          /* then the common oval bases, long x short */
-enum { NROUND = 17, NSIZES = 24 };
+                                "60x35.5", "75x42", "90x52", "105x70", "120x92", "150x95", "170x109",          /* then the common oval bases, long x short */
+                                "20sq", "25sq", "40sq", "50sq", "25x50r", "50x100r" };          /* then square and rectangle bases (2026-11-22) */
+enum { NROUND = 17, NOVAL = 7, NSQ = 6, NSIZES = 30 };
 static const char *DETAILL[] = { "Mix", "1", "2", "3", "4" }, *DETAILV[] = { "mix", "1", "2", "3", "4" };
 static const char *SCALES[] = { "32 mm", "28 mm", "15 mm" }; static const double GAMEMM[] = { 32, 28, 15 };          /* the game scale: how tall a man is */
 static const double OBJM[] = { 0.33, 0.45, 0.6, 0.75, 0.9, 1.0, 1.15, 1.3, 1.5 }; enum { NOBJ = 9, OBJ_TRUE = 5 };          /* the slider: times the true size (0.33 of 32 mm: the classic look) */
@@ -717,7 +718,7 @@ static void image_fit(GpImage *im, double x, double y, double w, double h) {
     s = w / iw < h / ih ? w / iw : h / ih; dw = iw * s; dh = ih * s; GdipDrawImageRect(G, im, (REAL)(x + (w - dw) / 2), (REAL)(y + (h - dh) / 2), (REAL)dw, (REAL)dh);
 }
 /* the oval of the session's base size: long / short (1 = round). Oval cards are wide boxes, their pictures cropped to the oval */
-static double oval_ratio(void) { double a = 0, b = 0; if (sscanf(curSize[0] ? curSize : SIZES[selSize], "%lfx%lf", &a, &b) == 2 && b > 0) return a / b; return 1.0; }
+static double oval_ratio(void) { double a = 0, b = 0; if (sscanf(curSize[0] ? curSize : SIZES[selSize], "%lfx%lf", &a, &b) == 2 && a > 0 && b > 0) return a > b ? a / b : b / a; return 1.0; }          /* long over short (a rectangle is written short x long) */
 static void image_box(GpImage *im, double x, double y, double w, double h, double ovr) {          /* a picture in a box; an oval's square drawing cropped to the oval's band */
     UINT iw = 1, ih = 1; double sh, s, dw, dh, sy;
     if (ovr <= 1.01) { image_fit(im, x, y, w, h); return; }
@@ -1077,9 +1078,10 @@ static void paint(HDC out, int W, int H) {
         y += bh + S(8);
     }
     chipsMask = sizeMulti; chipsBits = sizeMulti ? sizeMask : 0;
-    chips(sizeMulti ? L"BASE SIZES, MM  (EACH ONE, FOR BUILD STRAIGHT AWAY)" : L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 9, sizeMulti ? 0 : selSize, H_SIZE, &y); y -= S(4);
+    chips(sizeMulti ? L"BASE SIZES, MM  (EACH ONE, FOR BUILD STRAIGHT AWAY)" : L"BASE SIZE, MM  (ROUND, OVAL, THEN SQUARE)", SIZES, NROUND, 9, sizeMulti ? 0 : selSize, H_SIZE, &y); y -= S(4);
     {   int y0 = y, x0 = S(16), wAll = S(SIDE_W - 32), gap = sideTight ? S(3) : S(4), ch = sideTight ? S(20) : S(24), cw = (wAll - 3 * gap) / 4;
-        chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, sizeMulti ? NROUND : selSize - NROUND, H_OVAL, &y);
+        chips(NULL, SIZES + NROUND, NOVAL, 4, sizeMulti ? NROUND : selSize - NROUND, H_OVAL, &y);
+        chips(NULL, SIZES + NROUND + NOVAL, NSQ, 3, sizeMulti ? NROUND + NOVAL : selSize - NROUND - NOVAL, H_SQ, &y);          /* square and rectangle bases */
         chipsMask = 0;
         chip("Several", x0 + 3 * (cw + gap), y0 + ch + gap, cw, ch, sizeMulti, H_MULTI, 0); }          /* several sizes at once: in the oval row's free place */
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
@@ -1396,6 +1398,7 @@ static void act2(int kind, int idx) {
     case H_STYLE: if (selStyle != idx) selTheme = 0; selStyle = idx; break;
     case H_SIZE: if (sizeMulti) { sizeMask ^= 1u << idx; if (sizeMask & (1u << idx)) selSize = idx; } else selSize = idx; break;
     case H_OVAL: if (sizeMulti) { sizeMask ^= 1u << (NROUND + idx); if (sizeMask & (1u << (NROUND + idx))) selSize = NROUND + idx; } else selSize = NROUND + idx; break;
+    case H_SQ: { int q = NROUND + NOVAL + idx; if (sizeMulti) { sizeMask ^= 1u << q; if (sizeMask & (1u << q)) selSize = q; } else selSize = q; } break;
     case H_MULTI: sizeMulti = !sizeMulti; if (sizeMulti && !sizeMask) sizeMask = 1u << selSize; break;
     case H_THEME: { int nt = theme_count(); if (idx == 0) selTheme = 0; else if (nt) selTheme = (selTheme + idx + nt + 1) % (nt + 1); break; }
     case H_STR: selStr = idx; break;

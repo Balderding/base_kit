@@ -8,7 +8,7 @@ static void ui_state(char *s, size_t n) {
              selStyle, selSize, selDetail, selMini, selCount, selSup, selJoin, selScale, selObj, mfOn[0], mfOn[1], mfOn[2], mfOn[3], spThr, spGpu, lookPix, lookTex, lookFont,
              lvView, lvParts, lvCores, lvGpu, lvShape, lvTime, lvRows, showDetails, showHelp, pk, ncell > 0 ? cells[0].col : 0, selTheme, selStr, seedEdit * 1000 + (int)strlen(seedBuf), sizeMulti, sizeMask, setSave, selPrinter);
 }
-static const char *KN[] = { "none", "style", "size", "detail", "mini", "count", "overhangs", "show", "more", "all", "clear", "go", "stop", "open", "details", "card", "help", "quick", "scale", "oval", "look", "speed", "view", "parts", "colour", "join", "manifold", "objsize", "models", "theme", "seed", "strength", "several", "set", "printer" };
+static const char *KN[] = { "none", "style", "size", "detail", "mini", "count", "overhangs", "show", "more", "all", "clear", "go", "stop", "open", "details", "card", "help", "quick", "scale", "oval", "look", "speed", "view", "parts", "colour", "join", "manifold", "objsize", "models", "theme", "seed", "strength", "several", "set", "printer", "square" };
 static void ui_check(const WCHAR *tag) {
     WCHAR p[MAX_PATH]; FILE *f; RECT c; int i, j, nh, bad = 0, nclick = 0, nnochange = 0; struct { RECT r; int kind, idx; } H[400]; char a[400], b[400];
     swprintf(p, MAX_PATH, L"%ls.%ls.uicheck.txt", stShot, tag); f = _wfopen(p, L"w"); if (!f) return;
@@ -39,7 +39,7 @@ static void ui_check(const WCHAR *tag) {
         SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(cx, cy));
         ui_state(b, sizeof b); nclick++;
         if (!strcmp(a, b)) {          /* nothing changed: fine only for a choice already chosen, or count at its end */
-            int chosen = (k == H_THEME && H[i].idx == 0 && selTheme == 0) || (k == H_STR && H[i].idx == selStr) || (k == H_PRINTER && H[i].idx == selPrinter) || (k == H_SEED && H[i].idx == 1 && !seedBuf[0] && !seedEdit) || (k == H_STYLE && H[i].idx == selStyle) || (k == H_SIZE && H[i].idx == selSize) || (k == H_OVAL && H[i].idx + NROUND == selSize) || (k == H_DETAIL && H[i].idx == selDetail) || (k == H_MINI && H[i].idx == selMini) ||
+            int chosen = (k == H_THEME && H[i].idx == 0 && selTheme == 0) || (k == H_STR && H[i].idx == selStr) || (k == H_PRINTER && H[i].idx == selPrinter) || (k == H_SEED && H[i].idx == 1 && !seedBuf[0] && !seedEdit) || (k == H_STYLE && H[i].idx == selStyle) || (k == H_SIZE && H[i].idx == selSize) || (k == H_OVAL && H[i].idx + NROUND == selSize) || (k == H_SQ && H[i].idx + NROUND + NOVAL == selSize) || (k == H_DETAIL && H[i].idx == selDetail) || (k == H_MINI && H[i].idx == selMini) ||
                          (k == H_SCALE && H[i].idx == selScale) || (k == H_OBJ && H[i].idx == selObj) || (k == H_VIEW && H[i].idx == lvView) || (k == H_COUNT && (H[i].idx == 0 || (H[i].idx < 0 && selCount == 1) || (H[i].idx > 0 && selCount == 20)));
             if (!chosen) { fprintf(f, "NO CHANGE %s %d (clicked at %d,%d)\n", KN[k], H[i].idx, cx, cy); nnochange++; }
         }

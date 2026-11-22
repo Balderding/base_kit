@@ -13,6 +13,8 @@ a preview picture. No two bases come out the same.
   small scene with a theme ("tram stop", "hanging tree", "ore siding"), not scattered clutter.
 - **Any size from 20 to 200 mm.** The usual sizes (30, 40, 50, 60, 80, 100, 130, 160 mm) are tested.
 - **Oval bases too**, in the usual sizes: 60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95 and 170x109 mm.
+- **Square and rectangle bases**: 20, 25, 40 and 50 mm square (`25sq`) and 25x50, 50x100 mm rectangles (`25x50r`),
+  with 1.5 mm rounded corners and the same 12-degree edge, 4 mm height and magnet pockets as the round and oval bases.
 - **A whole small scene on every base** (the classic look, the default), or, if you choose, **objects at the
   miniature's true scale**: a barrel or a chest the right size beside a 32, 28 or 15 mm figure.
 - **Ready to print.** Every STL is one closed solid of exactly the size asked for, with nothing overhanging, so it
@@ -281,8 +283,8 @@ the layout's own millimetres.
   the ones you want and press Build. Python runs hidden in the background. See [The window](#the-window-bbb_kitexe).
 - **Pick before you build.** The kit draws up to 20 designs in about half a minute. Only the ones you tick are built.
 - **1 to 20 bases at a time**, typed into a number box, or "build that many straight away" without picking.
-- **Sixteen base sizes in the window**, from 20 to 160 mm (20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100,
-  130, 160).
+- **Seventeen round base sizes in the window**, from 20 to 160 mm (20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90,
+  100, 120, 130, 160), the seven ovals and six squares and rectangles (20sq, 25sq, 40sq, 50sq, 25x50r, 50x100r).
 - **The 2D drawing is saved with every base**, beside the STL, so you can check the finished base against what was laid
   out. See [The drawing and the finished base](#the-drawing-and-the-finished-base).
 - **One folder for what you picked**: every base you build from the window is copied to `out\picked_<date>_<time>`,
@@ -749,7 +751,7 @@ Every pocket fits a 6 x 2 mm magnet (6.2 mm across, 2.1 mm deep), in the bottom 
 
 The builder follows this table.
 
-An oval base has its pockets along its long axis: one in the middle up to 60 mm long (60x35.5), two a quarter of the
+A square or rectangle base has its pockets as an oval of the same long side has them. An oval base has its pockets along its long axis: one in the middle up to 60 mm long (60x35.5), two a quarter of the
 length out from the middle up to 105 mm long (75x42, 90x52, 105x70), three (those two and one in the middle) when
 longer (120x92, 150x95, 170x109). Every pocket is more than 8 mm from the edge.
 
