@@ -2014,6 +2014,7 @@ static void rim_dressing(Sc *sc, KVal *plan) {          /* rim_dressing(sc, plan
     }
 }
 
+double cp_prop_sink = 0.4;          /* settings "prop_sink_mm" (place.c pl_up) */
 int cp_story = 1;          /* settings "story_direction": debris lies out from the subject (clutter) */
 int cp_cart_on_track = 1;          /* settings.json "cart_on_track": a cart by a track stands on it */
 static int cart_on_track(Sc *sc) {          /* the cart on its track: on the rails, along them, clear of everything else */

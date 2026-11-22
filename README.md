@@ -602,6 +602,7 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `min_part_mm` | 0.5 | Object parts thinner than this are trimmed (or the object thickened first). 0 = off |
 | `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
 | `cart_on_track` | true | A cart by a track stands on its rails |
+| `prop_sink_mm` | 0.4 | Things standing on the ground sit in it: their top is this much lower (at most 15 % of their height). 0 = off |
 | `story_direction` | true | On a base with a subject (a wreck, a ruin, a crater), the debris lies along lines out from it, as if thrown or fallen from it |
 | `style_strength` | 1 | How bold the style is, 0.25 to 2.5: deeper cracks, bolder rocks, coarser ground grain (catch washes and drybrushing). `--strength` and the window's Style strength row win |
 | `printer` | `fdm` | The printer the bases are for: `fdm` (filament) or `resin`. FDM: a coarser ground grain (`ground_grain_fdm_mm`, 0.25) deep enough to print in layers, no detail under 3 mm. Resin: the finer grain (`ground_grain_mm`, 0.12), details down to 2 mm. `--printer` and the window's Printer row win |

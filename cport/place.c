@@ -434,6 +434,7 @@ int pl_up(Scene *s, const GeoList *polys, Num z, Num h, Kind *kind, Num *top) {
         return r < 0 ? SC_ERR : 0;
     }
     t = num_min2(num_add(z, h), NF(SC.CAP));          /* top = min(z + h, CAPZ) */
+    { extern double cp_prop_sink; if (cp_prop_sink > 0 && z.v <= SC.H + 1e-9 && !is_bridge_z(z) && h.v > 0.5) t = num_min2(num_add(z, NF(h.v - fmin(cp_prop_sink, 0.15 * h.v))), NF(SC.CAP)); }          /* review N7 (2026-11-22): a thing on the ground sits in it, min(0.4 mm, 15 %) lower */
     if (num_sub(t, z).v < 0.25) { gl_free(&ps); return 0; }
     if (is_bridge_z(z) && pl_notch(s, &ps, 0.3) < 0) { gl_free(&ps); return SC_ERR; }
     z0 = (z.v <= SC.H || is_bridge_z(z)) ? NF(SC.H - SC.SINK) : num_sub(z, NF(0.15));
