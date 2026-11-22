@@ -1548,6 +1548,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (scrollY > scrollMax) scrollY = scrollMax;
         redraw(); return 0;
     case WM_KEYDOWN:
+        if (seedEdit && w != VK_F1) return 0;          /* typing a design seed: its keys are letters (WM_CHAR below), not shortcuts; Enter/Esc finish it there */
         if (showHelp && w != VK_ESCAPE && w != VK_F1 && w != VK_OEM_2 && w != VK_SHIFT) { showHelp = 0; redraw(); }
         else if (w == VK_SHIFT) ;
         else if (w == VK_RETURN) { if (npicked()) build(); else ask_choices(1); }
@@ -1659,6 +1660,15 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         { char e[32]; int tw2, th2; if (GetEnvironmentVariableA("BBB_TEST_CLIENT", e, sizeof e) && sscanf(e, "%dx%d", &tw2, &th2) == 2) {          /* a test: the window's inside exactly this big (a screen size), one picture + the UI check, then quit */
             RECT wr = { 0, 0, tw2, th2 }; AdjustWindowRect(&wr, st, FALSE); SetWindowPos(hMain, NULL, 0, 0, wr.right - wr.left, wr.bottom - wr.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
             capture(stShot); ui_check(L"screen"); return 0; } }
+        if (GetEnvironmentVariableA("BBB_TEST_SEEDKEYS", NULL, 0)) {          /* a test: typing f, d, Enter in the seed box must not fire the shortcuts */
+            int lf = lookFont, sd = showDetails, bz = busy, nc = ncell; WPARAM ks[3] = { 'F', 'D', VK_RETURN }, cs[3] = { 'f', 'd', 13 }; FILE *tf; WCHAR p2[MAX_PATH];
+            seedEdit = 1; seedBuf[0] = 0;
+            for (i = 0; i < 3; i++) { SendMessageW(hMain, WM_KEYDOWN, ks[i], 0); SendMessageW(hMain, WM_CHAR, cs[i], 0); }
+            swprintf(p2, MAX_PATH, L"%ls.seedkeys.txt", stShot); tf = _wfopen(p2, L"w");
+            if (tf) { fprintf(tf, "%s font %d->%d details %d->%d busy %d->%d cards %d->%d seed \"%s\" editing %d\n", lookFont == lf && showDetails == sd && busy == bz && ncell == nc && !strcmp(seedBuf, "fd") && !seedEdit ? "OK" : "FAIL",
+                               lf, lookFont, sd, showDetails, bz, busy, nc, ncell, seedBuf, seedEdit); fclose(tf); }
+            return 0;
+        }
         if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* only to look at the drawing: a few cards building, built, failed, waiting, and a half-full progress bar, in the first picture */
             cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5;
             capture(stShot); busy = 0; for (i = 1; i < 8; i++) if (i != 5) cells[i].state = ST_NONE;
