@@ -571,6 +571,34 @@ static void mesh_merge(Mesh *m) {
     free(m->v); m->v = nvv; m->nv = nu;
     free(slot); free(key); free(rep); free(newi); free(ref);
 }
+/* review P2-4 (2026-11-22): the STL holds float32 points, so points a few 1e-6 mm apart become one when it is written
+   and a sliver collapses (an edge in 4 faces, a face with two equal corners). Before the check and the write: every
+   point rounded to float32, equal points made one, faces with two equal corners dropped, and a face whose exact
+   opposite is also there dropped with it (a fold of no thickness). Returns how many faces were dropped. */
+static int cmp_tri3(const void *a, const void *b) { const int *x = a, *y = b; for (int k = 0; k < 4; k++) if (x[k] != y[k]) return x[k] < y[k] ? -1 : 1; return 0; }
+static int mesh_f32_clean(Mesh *m) {
+    int nt0 = m->nt, n = 0, *key; 
+    for (int i = 0; i < 3 * m->nv; i++) m->v[i] = (double)(float)m->v[i];
+    mesh_merge(m);
+    for (int t = 0; t < m->nt; t++) { int a = m->f[3 * t], b = m->f[3 * t + 1], c = m->f[3 * t + 2]; if (a == b || b == c || a == c) continue; m->f[3 * n] = a; m->f[3 * n + 1] = b; m->f[3 * n + 2] = c; n++; }
+    m->nt = n;
+    key = malloc(sizeof(int) * 4 * (size_t)(n ? n : 1));          /* sorted corners + the face number: opposite pairs side by side */
+    for (int t = 0; t < n; t++) { int q[3] = { m->f[3 * t], m->f[3 * t + 1], m->f[3 * t + 2] }, x;
+        if (q[0] > q[1]) { x = q[0]; q[0] = q[1]; q[1] = x; } if (q[1] > q[2]) { x = q[1]; q[1] = q[2]; q[2] = x; } if (q[0] > q[1]) { x = q[0]; q[0] = q[1]; q[1] = x; }
+        key[4 * t] = q[0]; key[4 * t + 1] = q[1]; key[4 * t + 2] = q[2]; key[4 * t + 3] = t; }
+    qsort(key, (size_t)n, sizeof(int) * 4, cmp_tri3);
+    {   unsigned char *drop = calloc((size_t)(n ? n : 1), 1); int k = 0;
+        for (int i = 0; i + 1 < n; i++) if (key[4 * i] == key[4 * i + 4] && key[4 * i + 1] == key[4 * i + 5] && key[4 * i + 2] == key[4 * i + 6]) {
+            int ta = key[4 * i + 3], tb = key[4 * i + 7], *fa = m->f + 3 * ta, *fb = m->f + 3 * tb, same = 0;
+            for (int r = 0; r < 3; r++) if (fa[0] == fb[r] && fa[1] == fb[(r + 1) % 3]) same = 1;          /* the same way round: a true duplicate, keep one */
+            drop[tb] = 1; if (!same) drop[ta] = 1; i++;
+        }
+        for (int t = 0; t < n; t++) if (!drop[t]) { memmove(m->f + 3 * k, m->f + 3 * t, sizeof(int) * 3); k++; }
+        m->nt = k; free(drop);
+    }
+    free(key);
+    return nt0 - m->nt;
+}
 /* trimesh.exchange.stl.export_stl: 80 zero bytes, u32 count, per face: the unit normal (triangles.normals: np.cross of
    the edges v1-v0 and v2-v1, made unit by 1/sqrt(x*x + y*y + z*z); zero when not above 1e-13) and the three corners,
    as float32, then u16 0 */
@@ -861,7 +889,7 @@ static const char *VARIANTS[8] = { "", "r1", "r2", "r3", "r4", "r5", "r6", "r7" 
 static const double KNOWN_SIZES[17] = { 20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 120, 130, 160 };
 static const double OVAL_SIZES[7][2] = { { 60, 35.5 }, { 75, 42 }, { 90, 52 }, { 105, 70 }, { 120, 92 }, { 150, 95 }, { 170, 109 } };
 typedef struct {
-    char variant[16], *errors, *reason, secs[32], slowest[64], steps[16], theme[256], *plan_line, *plan, *dropped, restarts[16], note[64], diff[16], *made;
+    char variant[16], *errors, *reason, secs[32], slowest[64], steps[16], theme[256], *plan_line, *plan, *dropped, restarts[16], note[128], diff[16], *made;
 } Try;
 typedef struct { char base[160]; int n, ok, ntries, detail; Try tries[8]; } BaseRes;
 typedef struct RunSet RunSet;
@@ -938,7 +966,7 @@ static int shot_png_col(const Mesh *soup, const char *png, int w, int h, double 
 }
 
 /* one base, mesher.build + mesher serve's picture: the report r (a JSON object as Sb text) or an error */
-typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight; double top_mm; Sb skipped; } Built;
+typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; } Built;
 static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built *B) {
     memset(B, 0, sizeof *B); ULONGLONG t = GetTickCount64(); char name[160]; nm(rs, n, name, sizeof name);
     char png2d[MAX_PATH * 3]; snprintf(B->path, sizeof B->path, "%s/%s/%s.stl", rs->out, rs->style, name); snprintf(png2d, sizeof png2d, "%.*s_2d.png", (int)strlen(B->path) - 4, B->path);
@@ -1021,7 +1049,9 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     if (smaller_files() && (!allow_supports() || supports_join())) {          /* smaller files: flat areas in fewer triangles (Manifold), the shape moves no more than 0.005 mm */
         char se[200]; if (mf_simplify(&m.v, &m.nv, &m.f, &m.nt, cfg_num("smaller_files_mm", 0.005), se, sizeof se) != 0) mg_log_caught("smaller files", "RuntimeError", se, "cport/mfjoin.c");
     }
+    { int dr = mesh_f32_clean(&m); if (dr && getenv("BBB_F32_LOG")) { FILE *lf = fopen(getenv("BBB_F32_LOG"), "a"); if (lf) { fprintf(lf, "%s: %d faces dropped at float32\n", B->path, dr); fclose(lf); } } }          /* the mesh as the STL will hold it */
     int odd, pin; edge_counts(&m, &odd, &pin, &B->watertight); B->tris = tris_field;
+    B->pinched = pin;          /* review P2-4: edges in more than two faces are said in the note, not hidden */
     double mn[3], mx[3]; mesh_bounds(&m, mn, mx); B->top_mm = py_round(mx[2] - jget(&B->head, "H")->d, 1);
     stl_write(B->path, &m); mesh_free(&m);
     if (cfg_bool("drawing_2d", 1) && !drawn && !py_drawn && have_sc) { double win[4]; char er[200]; if (d2_draw(&sc, png2d, 900, 0, win, er, sizeof er)) save_win(png2d, win); }
@@ -1164,7 +1194,8 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
             for (int i = 0; i < ns; i++) { if (i && !strcmp(sv[i], sv[i - 1])) { free(sv[i]); continue; } if (d.n) sb_puts(&d, ", "); sb_puts(&d, sv[i]); free(sv[i]); }
             free(sv); T->dropped = d.s ? d.s : xstrdup("");
         }
-        snprintf(T->restarts, sizeof T->restarts, "0"); snprintf(T->note, sizeof T->note, "%s", seam ? "rim seam closed" : ""); snprintf(T->diff, sizeof T->diff, "%s", diff);
+        snprintf(T->restarts, sizeof T->restarts, "0"); { char pn[90] = ""; if (B.pinched) snprintf(pn, sizeof pn, "%d edge%s in more than two faces (a slicer mends this)", B.pinched, B.pinched == 1 ? "" : "s");
+            snprintf(T->note, sizeof T->note, "%s%s%s", seam ? "rim seam closed" : "", seam && pn[0] ? "; " : "", pn); } snprintf(T->diff, sizeof T->diff, "%s", diff);
         if (!B.error) { Sb md = { 0 }; sb_printf(&md, "mesh: %s; pictures: %s", B.mesher, B.pictures[0] ? B.pictures : "-"); T->made = md.s; } else T->made = xstrdup("");
         {   /* r["errors"]: what went wrong inside the base (kitlog), joined for the report; run_set prints the first */
             JV *er = jget(&B.head, "errors"); Sb j = { 0 };
