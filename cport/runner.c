@@ -1531,6 +1531,7 @@ static int job_build(Args *a, const char *style) {
         if (rs.oval && !okv) rs_print("note: %s mm is not one of the common oval sizes (60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95, 170x109); building it anyway", rs.size_tag);
         if (!rs.oval && !known) rs_print("note: %s mm is not one of the common base sizes (20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 120, 130, 160); building it anyway", rs.size_tag);
         rs.SCALE = scale_s[0] ? strtod(scale_s, NULL) : cfg_num("scenery_scale", 1.0);
+        if (rs.SCALE != 1.0) { char w[360]; snprintf(w, sizeof w, "note: scenery scale %g (--scale / scenery_scale) makes the whole layout bigger, so the base shows part of it; it overrides --obj. For the size of things on the base use --obj (1 classic, 3 true for 32 mm) and leave --scale at 1.", rs.SCALE); ev("log", "s", "text", w); }          /* plan B4: one scale setting (--obj); --scale kept, said */
         if (rs.SCALE != 1.0 && figure_scale(A, rs.SCALE) == 1.0) { char s1[32], f1[32]; fmt_g(s1, sizeof s1, rs.SCALE); fmt_g(f1, sizeof f1, cfg_num("figure_scale_from_mm", 50)); rs_print("scale  : x%s asked, but a %s mm base is under %s mm: built in the classic look, with its detail", s1, rs.size_tag, f1); rs.SCALE = 1.0; }
         rs.LAYOUT = rs.SCALE == 1.0 ? A : py_round(fmax(30.0, A / rs.SCALE), 1);
         char lay[32], fin[32], skl[32]; fmt_g(lay, sizeof lay, rs.LAYOUT); fmt_g(fin, sizeof fin, A); fmt_g(skl, sizeof skl, rs.SCALE);
@@ -1598,7 +1599,7 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
         free(av); return r3 ? 2 : 0;
     }
     if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(opt(&a, "--pack", "")); free(av); return r2; }          /* the window's Models preview */
-    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--scale x] [--strength 0.25..2.5] [--theme name] [--printer fdm|resin] [--name {style}_{size}mm_{theme}_{seed}_{n}] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
+    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--obj 1..3 (size of things; 3 = true beside 32 mm)] [--strength 0.25..2.5] [--theme name] [--printer fdm|resin] [--name {style}_{size}mm_{theme}_{seed}_{n}] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;
     if (!strcmp(job, "choices")) rc = job_choices(&a, style);
