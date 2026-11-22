@@ -1276,6 +1276,9 @@ static int hull3(const double *P, int n, double scale, HFace **F) {
             if (nf == cap) { HFace *q = realloc(f, (size_t)(cap * 2) * sizeof *f); if (!q) { free(ea); free(f); return 0; } f = q; cap *= 2; }
             if (hface(&f[nf], P, ea[k * 2], ea[k * 2 + 1], i)) nf++;
         }
+        /* 2026-11-22: a true hull of n points has at most 2n - 4 faces; more means near-flat points broke it (one urban model
+           grew faces without end and the layout never finished): give up, the model then keeps its upright pose */
+        if (nf > 2 * n + 16) { free(ea); free(f); return 0; }
     }
     free(ea);
     *F = f; return nf;
