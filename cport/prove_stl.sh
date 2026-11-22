@@ -2,7 +2,7 @@
 # the end-to-end proof: the same bases through the normal runner, Python mesher vs C mesher; the STL files must be
 # byte-identical. PYTHONHASHSEED=0 because a few styles' layouts are not repeatable across processes otherwise.
 cd /o/bases || exit 1
-PY=/c/Python315/python.exe; OUT=work/cport/stl; rm -rf "$OUT"; mkdir -p "$OUT/py" "$OUT/c"
+PY="${TOOLS:-/x/tools}/python315/python.exe"; OUT=work/cport/stl; rm -rf "$OUT"; mkdir -p "$OUT/py" "$OUT/c"
 export PYTHONHASHSEED=0
 for a in "mine 30" "urban 40" "badlands 60" "swamp 60" "forest 100" "corridor 100" "temple 160" "graveyard 130" "coast 90x52"; do
   set -- $a

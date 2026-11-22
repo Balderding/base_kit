@@ -3,12 +3,12 @@ rem builds bbb_kit.exe: the window AND the whole kit in C (cport\*.c: the job ru
 rem the height field, the mesher, the pictures), into the kit folder. One self-contained exe: GEOS 3.14.1 is linked in
 rem (cport\geos_static, built by its build_geos.cmd; geos_link.c), the model packs are a resource (bbb_kit.rc), -static
 rem takes libstdc++ / libgcc / winpthread in: it imports only Windows' own DLLs and runs from any folder.
-rem Needs clang with the MinGW headers: O:\appsnotonc\llvm\env.cmd sets that up on this PC. Close a running bbb_kit.exe
+rem Needs clang with the MinGW headers: cport\tools.cmd sets that up from the tools folder (TOOLS, X:\tools). Close a running bbb_kit.exe
 rem first. The C parts must give bit-identical numbers to Python: no fast-math, no fused multiply-add.
 rem   build.cmd            -> ..\bbb_kit.exe
 rem   build.cmd <out.exe>  -> that file instead (a test build)
 setlocal
-call O:\appsnotonc\llvm\env.cmd
+call "%~dp0..\cport\tools.cmd"
 cd /d "%~dp0"
 set OUT=..\bbb_kit.exe
 if not "%~1"=="" set OUT=%~1
@@ -16,7 +16,7 @@ rem previews.bin: the Models window's pictures, packed into the exe. Missing: a 
 if not exist previews.bin (echo BBPV0) > previews.bin
 set PASS=1
 :link
-O:\appsnotonc\gcc\mingw64\bin\windres.exe bbb_kit.rc -O coff -o bbb_kit.res || exit /b 1
+"%GCCBIN%\windres.exe" bbb_kit.rc -O coff -o bbb_kit.res || exit /b 1
 set CP=..\cport
 set KIT=%CP%\runner.c %CP%\draw2d.c %CP%\pipeline.c %CP%\stylefns.c %CP%\make.c %CP%\compose.c %CP%\kinds.c %CP%\builders.c ^
  %CP%\scene.c %CP%\leaf.c %CP%\place.c %CP%\solids.c %CP%\solids3d.c %CP%\samplers.c %CP%\features.c %CP%\scatter.c %CP%\shp.c %CP%\pyexact.c %CP%\pyrandom.c %CP%\pyx.c ^

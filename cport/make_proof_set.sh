@@ -2,8 +2,8 @@
 # the C mesher's proof set: input + Python's answer for a spread of bases (fixed seeds, PYTHONHASHSEED=0)
 cd /o/bases || exit 1
 OUT=work/cport/mesh; mkdir -p "$OUT"
-PY=/c/Python315/python.exe
-export PYTHONHASHSEED=0 KIT_QUIET=1 KIT_WORKER=1 SALT=proof1 SETDIR=O:/bases/work/cport/out
+PY="${TOOLS:-/x/tools}/python315/python.exe"
+export PYTHONHASHSEED=0 KIT_QUIET=1 KIT_WORKER=1 SALT=proof1 SETDIR="$(cd "$(dirname "$0")/.." && pwd -W)/work/cport/out"
 BASE_MM=30  $PY cport/dump_mesh.py $OUT mine 3 urban 8
 BASE_MM=60  $PY cport/dump_mesh.py $OUT badlands 12 swamp 17
 BASE_MM=100 $PY cport/dump_mesh.py $OUT forest 6 corridor 19
