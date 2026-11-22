@@ -59,6 +59,12 @@ typedef int (*PlAtFn)(void *ctx, double *cx, double *cy);
 int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *region, int ground, const PlAllow *allow,
             PlAtFn at, void *actx, Geo **g, Num *z);
 
+/* speed plan (2026-11-22): while pl_find's make() runs, pl_pre offers find's own test of one try's footprint, so a
+   builder can skip work that only matters when the try is kept (a model's outline). fn: 1 kept, 0 rejected, SC_ERR.
+   armed: set by pl_find right around make(cx, cy), taken (cleared) by the first one to use it. BBB_NO_PRECHECK=1: off. */
+typedef struct { int (*fn)(void *ctx, const GEOSGeometry *g); void *ctx; int armed; } PlPre;
+extern _Thread_local PlPre pl_pre;
+
 int pl_notch(Scene *s, const GeoList *polys, double gap);          /* gg3.notch(s, polys, gap=0.3) (only with PL.notch) */
 /* gg3.up(s, polys, z, h, kind) -> *top (NUM_NONE = None). polys may hold NULL (None) entries. */
 int pl_up(Scene *s, const GeoList *polys, Num z, Num h, Kind *kind, Num *top);

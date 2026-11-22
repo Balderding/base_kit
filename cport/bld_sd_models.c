@@ -1144,6 +1144,11 @@ static _Thread_local const MRow *CUR;
 static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
     const MRow *R = CUR; double lim, mm, sink, tilt, tdir, top, ar, r, ang, yaw, mm2, tilt2, tdir2, t2; char pose, pose2; int mirror, mirror2, i;
     SoSolids *sol = SL(); GG *foot = NULL; GL *foots = gl(); SoLayer *y = NULL;
+    /* speed plan (2026-11-22): every footprint first, then the outlines (so_fine, the slow part: a union of the model's
+       triangles), only when pl_find will keep this try. The outlines draw no random numbers and the footprints do not
+       depend on them, so the base comes out the same; a try find throws away no longer makes them (most tries). */
+    SdrPre pre = sdr_pre; int use_pre = pre.on && pre.row == (const void *)R; sdr_pre.on = 0;
+    SoLayers bl = { 0 }; SoSolids *cs[8]; double ct[8]; int nc = 0;
     pose = R->poses[rch((int)strlen(R->poses))];
     if (R->cap) { lim = R->cap; if (R->capmin) lim = MN(R->cap, max_height() * 0.92); }          /* cap or (gg.max_height() * 0.92) */
     else lim = max_height() * 0.92;
@@ -1162,9 +1167,8 @@ static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
         mdl_settle_next(thrown || (!grows && sink < 0.08));
     }
     if (msolid(R->rel, mm, cx, cy, a, pose, sink, mirror, tilt, tdir, lim, sol, &foot, &top) != SO_OK) return SC_ERR;
-    if (ck(so_fine(sol, top, R->kind, &y)) < 0) return SC_ERR;
-    yk(y); push(lay, y); gl_add(foots, foot);
-    if (!grows && sink >= 0.03 && bank(foot, top, lay, foots) < 0) return SC_ERR;          /* bedded in: soil heaped round it */
+    gl_add(foots, foot);
+    if (!grows && sink >= 0.03 && bank(foot, top, &bl, foots) < 0) { lyl_free(&bl); return SC_ERR; }          /* bedded in: soil heaped round it */
     for (i = 0; i < R->nwith; i++) {
         if (!mdl_has(ROOT, R->with_[i].rel)) continue;          /* with_ = [w for w in with_ if os.path.exists(...)] */
         if (rnd() < 0.6) {
@@ -1175,12 +1179,28 @@ static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
             mdl_settle_next(1);          /* the companions lie on the ground: settled (2026-11-21) */
             if (msolid(R->with_[i].rel, mm2, p.x, p.y, yaw, pose2, 0.0, mirror2, tilt2, tdir2, lim, s2, &f2, &t2) != SO_OK) return SC_ERR; }
             if (!intersects(f2, foot) && !E_) {
-                if (ck(so_fine(s2, t2, R->kind, &y2)) < 0) return SC_ERR;
-                yk(y2); push(lay, y2); gl_add(foots, f2);
+                (void)y2; if (nc < 8) { cs[nc] = s2; ct[nc] = t2; nc++; } else { lyl_free(&bl); fail(); return SC_ERR; }
+                gl_add(foots, f2);
             }
         }
     }
-    RET(hull(foots));
+    GG *h = hull(foots);
+    int keep = 1;
+    if (use_pre && h && !E_) {          /* the footprint find will test: sdr_scaled's, when this detail is scaled */
+        int e = shp_is_empty(h);
+        if (e == 0 && fabs(pre.k - 1.0) >= 1e-6) {
+            GEOSGeometry *g = shp_scale(h, pre.k, pre.k, SHP_ORIGIN_POINT, pre.cx, pre.cy);
+            if (g) { int t = pre.fn(pre.ctx, g); shp_free(g); keep = t != 0; }          /* an error: made as before */
+        } else if (e >= 0) { int t = pre.fn(pre.ctx, h); keep = t != 0; }
+    }
+    if (keep) {          /* in the order they were always made: the model, its bank, its companions */
+        if (ck(so_fine(sol, top, R->kind, &y)) < 0) { lyl_free(&bl); return SC_ERR; }
+        yk(y); push(lay, y);
+        for (i = 0; i < bl.n; i++) push(lay, bl.v[i]);
+        for (i = 0; i < nc; i++) { SoLayer *y2 = NULL; if (ck(so_fine(cs[i], ct[i], R->kind, &y2)) < 0) { lyl_free(&bl); return SC_ERR; } yk(y2); push(lay, y2); }
+    }
+    lyl_free(&bl);
+    RET(h);
 }
 static int m_build(void *ctx, double cx, double cy, double a, PyRandom *rng, int hs, double sc, Geo **foot, SoLayers *lay) {
     const MRow *prev = CUR; int r; (void)hs; (void)sc;

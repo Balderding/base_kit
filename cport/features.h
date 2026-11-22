@@ -131,4 +131,10 @@ const SdrEntry *sdr_reg_get(const char *style, int i);
 void sdr_reg_clear(void);
 /* d(...).f(cx, cy, a, rng): an FtBuildFn with ctx = the SdrEntry (has_scale must be 0: f takes four arguments) */
 int sdr_f(void *entry, double cx, double cy, double a, PyRandom *rng, int has_scale, double scale, Geo **foot, SoLayers *layers);
+/* speed plan (2026-11-22): pl_find's try test, offered to the body of the registered detail being made (place.h pl_pre).
+   on: set while that detail's f0 runs; row: its ctx (the body checks it is the one); the body's footprint becomes the
+   tried one after sdr_scaled: scaled by k about (cx, cy) when |k - 1| >= 1e-6 and it is not empty. */
+typedef struct { int (*fn)(void *ctx, const GEOSGeometry *g); void *ctx; const void *row; double k, cx, cy; int on; } SdrPre;
+extern _Thread_local SdrPre sdr_pre;
+extern _Thread_local int sdr_pre_take;
 #endif

@@ -474,9 +474,12 @@ static void hold_put(Mk *m, Geo *foot, SoLayers *lay) {          /* hold["g"] = 
    lm.fn.mk(cx, cy):   got = build(cx, cy, rng.uniform(0, 2 * math.pi), rng, k); None or got[0] None -> None */
 static Geo *mk_make(void *c, int has_c, double cx, double cy, int *err) {
     Mk *m = (Mk *)c; double a; Geo *foot = NULL; SoLayers lay = { 0 }; int r;
+    int pre = pl_pre.armed && !m->lm && m->build == sdr_f; pl_pre.armed = 0;          /* speed plan: only a registered detail built straight here */
     if (!has_c) { *err = 1; return NULL; }          /* find always calls make(cx, cy) here (at is given) */
+    sdr_pre_take = pre;
     a = m->lm ? py_uniform(m->rng, 0, 2 * 3.141592653589793) : lf_aim(m->rng, cx, cy, 2 * 3.141592653589793);
     r = m->lm ? m->build(m->bctx, cx, cy, a, m->rng, 1, m->k, &foot, &lay) : m->build(m->bctx, cx, cy, a, m->rng, m->has_scale, m->scale, &foot, &lay);
+    sdr_pre_take = 0;
     if (r < 0) { geo_unref(foot); lyl_free(&lay); *err = 1; return NULL; }
     if (r == 1 || (m->lm && !foot)) { geo_unref(foot); lyl_free(&lay); return NULL; }
     hold_put(m, foot, &lay);
@@ -2796,6 +2799,10 @@ int sdr_reg_count(const char *style) { RegL *l = reg_of(style, 0); return l ? l-
 const SdrEntry *sdr_reg_get(const char *style, int i) { RegL *l = reg_of(style, 0); return l && i >= 0 && i < l->n ? &l->v[i] : NULL; }
 void sdr_reg_clear(void) { int i; for (i = 0; i < nreg; i++) { free(REG[i].style); free(REG[i].v); } free(REG); REG = NULL; nreg = 0; }
 
+/* speed plan: sdr_pre_take = mk_make asks this sdr_f call to offer pl_find's test; sdr_pre = the offer while e->f0 runs
+   (row = the entry's ctx, so only that body takes it; k, cx, cy: the scaling sdr_scaled gives the footprint after) */
+_Thread_local int sdr_pre_take;
+_Thread_local SdrPre sdr_pre;
 /* d(...).w.f(cx, cy, a, rng) */
 int sdr_f(void *entry, double cx, double cy, double a, PyRandom *rng, int has_scale, double scale, Geo **foot, SoLayers *layers) {
     const SdrEntry *e = (const SdrEntry *)entry; double k, ks; Geo *f0 = NULL; SoLayers l0 = { 0 }; int r;
@@ -2804,7 +2811,10 @@ int sdr_f(void *entry, double cx, double cy, double a, PyRandom *rng, int has_sc
     if (!kv_get(&SCALE, e->style, e->name, &ks)) ks = HAS_STAR ? STAR : 1.0;
     k = ks * sdr_real_factor(e->style, e->name, e->cls);
     if (k <= 0) return 1;          /* too small to be worth drawing on a base this size */
+    { int take = sdr_pre_take; sdr_pre_take = 0;
+      if (take) { sdr_pre.fn = pl_pre.fn; sdr_pre.ctx = pl_pre.ctx; sdr_pre.row = e->ctx; sdr_pre.k = k; sdr_pre.cx = cx; sdr_pre.cy = cy; sdr_pre.on = 1; } }
     r = e->f0(e->ctx, cx, cy, a, rng, 0, 1.0, &f0, &l0);
+    sdr_pre.on = 0;
     if (r != 0) { geo_unref(f0); lyl_free(&l0); return r; }
     if (fabs(k - 1.0) < 1e-6 || !f0) { *foot = f0; for (int i = 0; i < l0.n; i++) lyl_push(layers, l0.v[i]); lyl_free(&l0); return 0; }
     r = sdr_scaled(f0, &l0, cx, cy, k, foot, layers);

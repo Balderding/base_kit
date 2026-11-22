@@ -257,6 +257,57 @@ int pl_surf(Scene *s, Geo *g, Num *z) {
 }
 
 /* ---------------- find ---------------- */
+/* one try of find: would g be taken? 1 yes (*z), 0 no, SC_ERR. Pure: it reads the scene, changes nothing, draws no
+   random numbers, so asking it early (pl_pre) and again in the loop gives the same answer. */
+typedef struct { Scene *s; Geo *region; PlHits *hb; GeoList *hl; PSet *hold, *brid; double gap; int ground, terr; } PlTry;
+static int pl_try(const PlTry *T, Geo *g, Num *zout) {
+    Scene *s = T->s; int x, i; GEOSGeometry *gb; Num z = num_none();
+    *zout = num_none();
+    x = shp_is_empty(g->g);
+    if (x == 0) { x = shp_contains(T->region->g, g->g); x = x < 0 ? -1 : !x; }          /* g.is_empty or not region.contains(g) */
+    if (x) return x < 0 ? SC_ERR : 0;
+    gb = shp_buffer_q(g->g, T->gap, 16);
+    if (!gb) return SC_ERR;
+    x = pl_hits_hit(T->hb, gb);
+    if (x < 0) { shp_free(gb); return SC_ERR; }
+    if (!x) {
+        if (!T->terr) z = NF(SC.H);
+        else if (pl_surf(s, g, &z) < 0) { shp_free(gb); return SC_ERR; }
+    } else {
+        ShpIdx q = { 0 }; int bad = 0;
+        if (T->terr) { shp_free(gb); return 0; }
+        if (shp_tree_query(T->hb->tree, gb, SHP_PRED_NONE, &q) < 0) bad = -1;
+        for (i = 0; !bad && i < q.n; i++) {          /* any(p.intersects(gb) and not (id(p) in brid or (id(p) in hold and p.buffer(-0.3).contains(g)))) */
+            Geo *p = T->hl->v[q.i[i]]; int y = shp_intersects(p->g, gb);
+            if (y < 0) { bad = -1; break; }
+            if (!y || ps_has(T->brid, p)) continue;
+            if (ps_has(T->hold, p)) {
+                GEOSGeometry *b = shp_buffer_q(p->g, -0.3, 16); int c;
+                if (!b) { bad = -1; break; }
+                c = shp_contains(b, g->g); shp_free(b);
+                if (c < 0) { bad = -1; break; }
+                if (c) continue;
+            }
+            bad = 1;
+        }
+        shp_idx_free(&q);
+        if (bad < 0) { shp_free(gb); return SC_ERR; }
+        if (bad) { shp_free(gb); return 0; }
+        if (pl_surf(s, g, &z) < 0) { shp_free(gb); return SC_ERR; }
+    }
+    shp_free(gb);
+    if (z.t == NUM_NONE || (T->ground && z.v != SC.H)) return 0;
+    *zout = z; return 1;
+}
+_Thread_local PlPre pl_pre;
+static int pl_pre_fn(void *c, const GEOSGeometry *g) {          /* pl_pre.fn: the try's test on a footprint made early */
+    Geo *gg; Num z; int r; GEOSGeometry *k = shp_clone(g);
+    if (!k) return SC_ERR;
+    gg = geo_new(k); r = pl_try((const PlTry *)c, gg, &z); geo_unref(gg);
+    return r;
+}
+static int pre_on(void) { static int on = -1; if (on < 0) { const char *e = getenv("BBB_NO_PRECHECK"); on = !(e && e[0] == '1'); } return on; }
+
 int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *region, int ground, const PlAllow *allow,
             PlAtFn at, void *actx, Geo **gout, Num *zout) {
     GeoList hl = { 0 }, blk = { 0 }; PlHits hb, taken; PSet hold = { 0 }, brid = { 0 }; ShpPrep regp; int i, j, t, r = 0, found = 0, terr = pl_terr(s);
@@ -290,8 +341,9 @@ int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *reg
             }
         }
     }
+    PlTry T = { s, region, &hb, &hl, &hold, &brid, gap, ground, terr };
     for (t = 0; r == 0 && t < tries; t++) {
-        Geo *g = NULL; int err = 0, x; GEOSGeometry *gb; Num z;
+        Geo *g = NULL; int err = 0, x; Num z;
         if (at) {
             double cx, cy; GEOSGeometry *pt;
             if (at(actx, &cx, &cy) < 0) { r = SC_ERR; break; }
@@ -301,44 +353,15 @@ int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *reg
             shp_free(pt);
             if (x < 0) { r = SC_ERR; break; }
             if (!x) continue;
+            if (pre_on()) { pl_pre.fn = pl_pre_fn; pl_pre.ctx = &T; pl_pre.armed = 1; }          /* speed plan: the try's test offered to make() */
             g = make(mctx, 1, cx, cy, &err);
+            pl_pre.armed = 0;
         } else g = make(mctx, 0, 0.0, 0.0, &err);
         if (err) { geo_unref(g); r = SC_ERR; break; }
         if (!g) continue;
-        x = shp_is_empty(g->g);
-        if (x == 0) { x = shp_contains(region->g, g->g); x = x < 0 ? -1 : !x; }          /* g.is_empty or not region.contains(g) */
-        if (x) { geo_unref(g); if (x < 0) { r = SC_ERR; break; } continue; }
-        gb = shp_buffer_q(g->g, gap, 16);
-        if (!gb) { geo_unref(g); r = SC_ERR; break; }
-        x = pl_hits_hit(&hb, gb);
-        if (x < 0) { shp_free(gb); geo_unref(g); r = SC_ERR; break; }
-        if (!x) {
-            if (!terr) z = NF(SC.H);
-            else if (pl_surf(s, g, &z) < 0) { shp_free(gb); geo_unref(g); r = SC_ERR; break; }
-        } else {
-            ShpIdx q = { 0 }; int bad = 0;
-            if (terr) { shp_free(gb); geo_unref(g); continue; }
-            if (shp_tree_query(hb.tree, gb, SHP_PRED_NONE, &q) < 0) bad = -1;
-            for (i = 0; !bad && i < q.n; i++) {          /* any(p.intersects(gb) and not (id(p) in brid or (id(p) in hold and p.buffer(-0.3).contains(g)))) */
-                Geo *p = hl.v[q.i[i]]; int y = shp_intersects(p->g, gb);
-                if (y < 0) { bad = -1; break; }
-                if (!y || ps_has(&brid, p)) continue;
-                if (ps_has(&hold, p)) {
-                    GEOSGeometry *b = shp_buffer_q(p->g, -0.3, 16); int c;
-                    if (!b) { bad = -1; break; }
-                    c = shp_contains(b, g->g); shp_free(b);
-                    if (c < 0) { bad = -1; break; }
-                    if (c) continue;
-                }
-                bad = 1;
-            }
-            shp_idx_free(&q);
-            if (bad < 0) { shp_free(gb); geo_unref(g); r = SC_ERR; break; }
-            if (bad) { shp_free(gb); geo_unref(g); continue; }
-            if (pl_surf(s, g, &z) < 0) { shp_free(gb); geo_unref(g); r = SC_ERR; break; }
-        }
-        shp_free(gb);
-        if (z.t == NUM_NONE || (ground && z.v != SC.H)) { geo_unref(g); continue; }
+        x = pl_try(&T, g, &z);
+        if (x < 0) { geo_unref(g); r = SC_ERR; break; }
+        if (!x) { geo_unref(g); continue; }
         if (pl_evict(s, g) < 0) { geo_unref(g); r = SC_ERR; break; }
         *gout = g; *zout = z; found = 1;
         break;
