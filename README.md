@@ -44,6 +44,49 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## What is new in 2.3: square bases, a window that fits your screen, textured ground
+
+![Sixteen bases built by 2.3, two of every size from 30 to 160 mm](examples/sheet_2.3.0.png)
+
+*Sixteen bases freshly built by this version: two of every size from 30 to 160 mm, each in a different style.*
+
+![A 100x50 mm rectangle and a 25 mm square base, built by 2.3](examples/rect_100x50_graveyard.png)
+![A 25 mm square base](examples/square_25_highland.png)
+
+*New: square and rectangle bases (a 100x50 mm graveyard and a 25 mm highland square).*
+
+**Square and rectangle bases.** A new row of sizes in the window: 20, 25, 40 and 50 mm squares and 25x50 and 50x100 mm rectangles, with 1.5 mm rounded corners. The edge, the height and the magnet pockets are the same as on round bases. Details reach right into the corners. On the command line: `--size 25sq` or `--size 25x50r`.
+
+**The window fits your screen.** Everything scales with the window, from small laptop screens up to 4K (1080p is the normal size, 1440p 1.35x, 4K about 2x). The side panel scrolls for what does not fit.
+
+**Textured ground everywhere.** Every flat top gets a fine grain that suits its ground: soil, mud, sand, gravel, ash, planks and stone each have their own texture.
+
+**A Printer setting: FDM or Resin.** FDM gets a coarser grain that a nozzle can print and drops details too small for it. Resin keeps the finer grain and smaller details.
+
+**More natural scenes.**
+- Organic rocks, on by default, come in four shapes: rounded, chipped, layered and split. About half of them lean.
+- Models settle on their steadiest face, with a little soil banked around them.
+- Things on the ground sit slightly into it instead of standing on top.
+- Stone slabs, headstones, tombs and steps get angular chips out of their edges.
+- Debris lies along lines out from the base's subject, so each base tells one story.
+
+**New in the window.**
+- A theme picker: any of the style's themes, or one you choose.
+- **Style strength**, from 0.5 to 2. 2 makes bolder details that are easier to paint.
+- A design seed box, to build the same design again.
+- Three saved sets of settings.
+- **Several sizes**: build a batch in several sizes at once. Each size keeps its own cards and labels, and the whole batch goes into one folder.
+
+**Other changes.**
+- A side picture of every picked base (`_side.png`) shows the real edge and how tall things stand.
+- A file-name template (`file_name` in settings.json, or `--name`).
+- Your own themes in `themes.json` beside the exe are checked theme by theme, and the note says what was wrong and where.
+- Typing a design seed no longer triggers the window's shortcuts.
+
+**Known issue.** The urban style at 25 mm square can stop while drawing its choices (one card never arrives). Other urban sizes, and every other style at 25 mm square, are fine. The fix comes in the next update.
+
+Download `bbb_kit.exe`, or the zip with everything, and run it from any folder. Nothing needs installing.
+
 ## What is new in 2.2: true-size bases, room for the model, outcrops, an icon
 
 ![Sixteen bases built by 2.2](examples/sheet_2.2.0.png)
@@ -354,14 +397,14 @@ STL files; `python tools\make_examples.py` makes a fresh set).
 <!-- EXAMPLES -->
 | Size | | |
 |---|---|---|
-| **30 mm** | ![highland 30 mm](examples/030mm_1_highland.png)<br>highland: "ruined tower" | ![maahl 30 mm](examples/030mm_2_maahl.png)<br>maahl: "altar of sand" |
-| **40 mm** | ![frontier 40 mm](examples/040mm_1_frontier.png)<br>frontier: "water stop" | ![coast 40 mm](examples/040mm_2_coast.png)<br>coast: "jetty" |
-| **50 mm** | ![graveyard 50 mm](examples/050mm_1_graveyard.png)<br>graveyard: "fresh grave" | ![sundered 50 mm](examples/050mm_2_sundered.png)<br>sundered: "statue toppled in the square" |
-| **60 mm** | ![trederra 60 mm](examples/060mm_1_trederra.png)<br>trederra: "gun pit" | ![ferrum 60 mm](examples/060mm_2_ferrum.png)<br>ferrum: "slag heap" |
-| **80 mm** | ![cynder 80 mm](examples/080mm_1_cynder.png)<br>cynder: "obsidian field" | ![swamp 80 mm](examples/080mm_2_swamp.png)<br>swamp: "hanging tree" |
-| **100 mm** | ![ashveil 100 mm](examples/100mm_1_ashveil.png)<br>ashveil: "marker pylon" | ![thornwild 100 mm](examples/100mm_2_thornwild.png)<br>thornwild: "root tangle" |
-| **130 mm** | ![infestation 130 mm](examples/130mm_1_infestation.png)<br>infestation: "acid pool" | ![fortress 130 mm](examples/130mm_2_fortress.png)<br>fortress: "koi pond" |
-| **160 mm** | ![temple 160 mm](examples/160mm_1_temple.png)<br>temple: "sealed vault" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "broken wagon" |
+| **30 mm** | ![swamp 30 mm](examples/030mm_1_swamp.png)<br>swamp: "boat landing" | ![ashveil 30 mm](examples/030mm_2_ashveil.png)<br>ashveil: "buried transport" |
+| **40 mm** | ![graveyard 40 mm](examples/040mm_1_graveyard.png)<br>graveyard: "hanging tree" | ![beast 40 mm](examples/040mm_2_beast.png)<br>beast: "jaw line" |
+| **50 mm** | ![highland 50 mm](examples/050mm_1_highland.png)<br>highland: "ruined tower" | ![urban 50 mm](examples/050mm_2_urban.png)<br>urban: "bomb site" |
+| **60 mm** | ![cynder 60 mm](examples/060mm_1_cynder.png)<br>cynder: "ash burial" | ![sundered 60 mm](examples/060mm_2_sundered.png)<br>sundered: "fallen cathedral wall" |
+| **80 mm** | ![infestation 80 mm](examples/080mm_1_infestation.png)<br>infestation: "egg chamber" | ![corridor 80 mm](examples/080mm_2_corridor.png)<br>corridor: "airlock" |
+| **100 mm** | ![maahl 100 mm](examples/100mm_1_maahl.png)<br>maahl: "buried temple" | ![frontier 100 mm](examples/100mm_2_frontier.png)<br>frontier: "prospector s camp" |
+| **130 mm** | ![blight 130 mm](examples/130mm_1_blight.png)<br>blight: "spike garden" | ![obelis 130 mm](examples/130mm_2_obelis.png)<br>obelis: "glyph plaza" |
+| **160 mm** | ![mine 160 mm](examples/160mm_1_mine.png)<br>mine: "shaft head" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "boot hill" |
 <!-- /EXAMPLES -->
 
 **Every base is one place.** A base is not a pile of objects: it has a subject (a mine shaft, a wreck, a shrine), a
