@@ -742,5 +742,12 @@ void dump_scene(DumpCtx *d, const Scene *s) {
 }
 int sc_gcut(Scene *s, const GeoList *polys, Num depth, Kind *kind) { int r = sc_gcut_(s, polys, depth, kind); if (r >= 0 && sc_piece_hook) sc_piece_hook('c', polys); return r; }
 int sc_tcut(Scene *s, const GeoList *polys, Num z0, Num z1, Kind *kind) { int r = sc_tcut_(s, polys, z0, z1, kind); if (r >= 0 && sc_piece_hook) sc_piece_hook('c', polys); return r; }
-int sc_prism(Scene *s, const GeoList *polys, Num top, Kind *kind, Num z0, double minw, int foot, GeoList *out) { int r = sc_prism_(s, polys, top, kind, z0, minw, foot, out); if (r >= 0 && sc_piece_hook) sc_piece_hook('r', polys); return r; }
+int sc_prism(Scene *s, const GeoList *polys, Num top, Kind *kind, Num z0, double minw, int foot, GeoList *out) {
+    extern int cp_edge_wear; extern int wear_kind(const Kind *k); extern void wear_polys(GeoList *ps);
+    if (cp_edge_wear && wear_kind(kind)) {          /* plan B2 (2026-11-22): worn, chipped edges on stone slabs (place.c) */
+        GeoList w = { 0 }; int r; for (int i = 0; i < polys->n; i++) if (polys->v[i]) gl_push(&w, polys->v[i]);
+        wear_polys(&w); r = sc_prism_(s, &w, top, kind, z0, minw, foot, out); if (r >= 0 && sc_piece_hook) sc_piece_hook('r', &w); gl_free(&w); return r;
+    }
+    { int r = sc_prism_(s, polys, top, kind, z0, minw, foot, out); if (r >= 0 && sc_piece_hook) sc_piece_hook('r', polys); return r; }
+}
 int sc_stack(Scene *s, const GeoList *polys, Num h, const Tier *tiers, int nt, Kind *kind, Num z0, GeoList *tops, Num *top) { int r = sc_stack_(s, polys, h, tiers, nt, kind, z0, tops, top); if (r >= 0 && sc_piece_hook) sc_piece_hook('r', polys); return r; }

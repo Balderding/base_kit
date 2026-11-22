@@ -419,6 +419,40 @@ int pl_notch(Scene *s, const GeoList *polys, double gap) {
 }
 
 /* ---------------- up / mound / cut / topcut ---------------- */
+/* review plan B2 "edge wear on slabs" (2026-11-22): a stone slab, flagstone, headstone, tomb or step gets a few small
+   bites out of its outline (worn, chipped edges); its own hash, so the layout's random numbers are not touched.
+   Bites about 0.9 mm (FDM) or 0.6 mm (resin) across, give or take; a piece smaller than 4 mm2 is left as it is.
+   settings "edge_wear": false turns it off. */
+int cp_edge_wear = 1;          /* scene.c sc_prism calls these for every prism */
+int wear_kind(const Kind *k) {
+    static const char *W[] = { "slab", "flag", "paving", "headstone", "tomb", "grave", "step", "plinth", "altar", NULL };
+    if (!k || !k->s) return 0;
+    for (int i = 0; W[i]; i++) if (strstr(k->s, W[i])) return 1;
+    return 0;
+}
+void wear_polys(GeoList *ps) {
+    extern double kit_min_detail; double bite = kit_min_detail < 2.5 ? 0.6 : 0.9; GeoList out = { 0 };
+    for (int i = 0; i < ps->n; i++) {
+        GEOSGeometry *g = ps->v[i]->g, *w; const GEOSGeometry *L; double area = shp_area(g), len, bb[4]; uint32_t h; int n;
+        if (area < 4.0 || !(L = shp_exterior(g))) { gl_push(&out, ps->v[i]); continue; }
+        len = shp_length(L); shp_bounds(g, bb);
+        h = (uint32_t)(int64_t)floor(bb[0] * 997.0) * 2654435761u ^ (uint32_t)(int64_t)floor(bb[1] * 991.0) * 40503u ^ (uint32_t)(int64_t)floor(area * 100.0);
+#define WRND() (h = h * 1664525u + 1013904223u, (double)(h >> 8) / 16777216.0)
+        n = 3 + (int)(WRND() * 3); w = shp_clone(g);
+        for (int k = 0; k < n && w; k++) {
+            GEOSGeometry *pt = shp_interpolate(L, WRND() * len, 0), *c, *d;
+            if (!pt) continue;
+            c = shp_point_buffer(shp_x(pt), shp_y(pt), bite * (0.6 + 0.8 * WRND()), 1); shp_free(pt);          /* a square turned 45 degrees: an angular chip, not a round bite */
+            d = c ? shp_difference(w, c) : NULL; shp_free(c);
+            if (d && !shp_is_empty(d) && shp_area(d) > 0.8 * area) { shp_free(w); w = d; } else shp_free(d);
+        }
+#undef WRND
+        if (w && !shp_is_empty(w)) { ShpList l = { 0 }; shp_polys_of(w, &l); for (int k = 0; k < l.n; k++) { gl_push_own(&out, geo_new(l.g[k])); l.g[k] = NULL; } shp_list_free(&l); }
+        else gl_push(&out, ps->v[i]);
+        shp_free(w);
+    }
+    gl_free(ps); *ps = out;
+}
 int pl_up(Scene *s, const GeoList *polys, Num z, Num h, Kind *kind, Num *top) {
     GeoList ps = { 0 }, got = { 0 }; int i, r; Num t, z0;
     *top = num_none();
