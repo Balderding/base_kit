@@ -7,6 +7,7 @@
 #include "buildcmds.h"
 #include "shp.h"
 #include "pyx.h"
+#include "magnets.h"
 
 #define DEEP 0.3                          /* gg.DEEP */
 #define CAP_LAP 0.04                      /* gg.CAP_LAP */
@@ -406,18 +407,7 @@ static void sk_circle(BcGroup *g, const char *name, BcNum z, double r) {
     g_push(g, cmd("sketch.finish", v_dict()));
 }
 /* gg.magnet_centres(dia) */
-static int magnet_centres(double dia, double *xy) {
-    int n = dia <= 40 ? 1 : dia <= 60 ? 2 : dia <= 100 ? 3 : 4, k = 0;
-    const double pi = 3.141592653589793;
-    if (n <= 1) { xy[0] = 0.0; xy[1] = 0.0; return 1; }
-    double r = dia * 0.25;
-    for (int i = 0; i < n; i++) {
-        double a = pi / 2 + 2 * pi * i / n;
-        xy[2 * k] = rnd4(r * py_cos(a)); xy[2 * k + 1] = rnd4(r * py_sin(a)); k++;
-    }
-    if (dia > 100) { xy[2 * k] = 0.0; xy[2 * k + 1] = 0.0; k++; }
-    return k;
-}
+static int magnet_centres(double dia, double *xy) { return mag_centres(dia, xy); }          /* magnets.h: the one copy */
 /* gg.mag_sketch() + the MagCut extrude */
 static void mag_group(BcGroup *g, const BcCfg *c) {
     double xy[10]; int n = magnet_centres(c->base_mm, xy);

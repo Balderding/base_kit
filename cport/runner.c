@@ -15,6 +15,7 @@
 #include "mfjoin.h"
 #include "draw2d.h"
 #include "pyx.h"
+#include "magnets.h"
 #include "meshglue.h"
 #include "features.h"
 #include "grain.h"
@@ -727,20 +728,8 @@ static void mesh_bounds(const Mesh *m, double mn[3], double mx[3]) {
 }
 
 /* ---- gg.magnet_centres / oval_magnet_centres / max_height ---- */
-static int magnet_centres(double dia, double *xy) {
-    int n = dia <= 40 ? 1 : dia <= 60 ? 2 : dia <= 100 ? 3 : 4;
-    if (n <= 1) { xy[0] = xy[1] = 0; return 1; }
-    double r = dia * 0.25;
-    for (int i = 0; i < n; i++) { double t = M_PI / 2 + 2 * M_PI * i / n; xy[2 * i] = py_round(r * py_cos(t), 4); xy[2 * i + 1] = py_round(r * py_sin(t), 4); }
-    if (dia > 100) { xy[2 * n] = xy[2 * n + 1] = 0; n++; }
-    return n;
-}
-static int oval_magnet_centres(double A, double *xy) {
-    int n = A <= 60.5 ? 1 : A <= 105.5 ? 2 : 3; double x = py_round(A * 0.25, 4);
-    if (n == 1) { xy[0] = xy[1] = 0; return 1; }
-    if (n == 2) { xy[0] = -x; xy[1] = 0; xy[2] = x; xy[3] = 0; return 2; }
-    xy[0] = -x; xy[1] = 0; xy[2] = 0; xy[3] = 0; xy[4] = x; xy[5] = 0; return 3;
-}
+static int magnet_centres(double dia, double *xy) { return mag_centres(dia, xy); }          /* magnets.h: the one copy */
+static int oval_magnet_centres(double A, double *xy) { return mag_oval_centres(A, xy); }
 static double max_height(double mm) {
     double m = cfg_num("max_detail_height_mm", 3.3);
     if (m <= 0) return 1000.0;

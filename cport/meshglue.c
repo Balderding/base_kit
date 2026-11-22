@@ -9,6 +9,7 @@
 #include "meshglue.h"
 #include "shp.h"
 #include "pyx.h"
+#include "magnets.h"
 
 #define PI 3.141592653589793
 #define DEG2RAD (PI / 180.0)              /* CPython's degToRad */
@@ -152,23 +153,9 @@ static double *ellipse_offset(double a, double b, const double *T, int n, double
     return o;
 }
 /* gg.magnet_centres(dia) */
-static int magnet_centres(double dia, double *xy) {
-    int n = dia <= 40 ? 1 : dia <= 60 ? 2 : dia <= 100 ? 3 : 4, k = 0;
-    if (n <= 1) { xy[0] = 0.0; xy[1] = 0.0; return 1; }
-    double r = dia * 0.25;
-    for (int i = 0; i < n; i++) {
-        xy[k++] = py_round(r * py_cos(PI / 2 + 2 * PI * i / n), 4); xy[k++] = py_round(r * py_sin(PI / 2 + 2 * PI * i / n), 4);
-    }
-    if (dia > 100) { xy[k++] = 0.0; xy[k++] = 0.0; }
-    return k / 2;
-}
+static int magnet_centres(double dia, double *xy) { return mag_centres(dia, xy); }          /* magnets.h: the one copy */
 /* gg.oval_magnet_centres(A) */
-static int oval_magnet_centres(double A, double *xy) {
-    int n = A <= 60.5 ? 1 : A <= 105.5 ? 2 : 3; double x = py_round(A * 0.25, 4);
-    if (n == 1) { xy[0] = 0.0; xy[1] = 0.0; return 1; }
-    if (n == 2) { xy[0] = -x; xy[1] = 0.0; xy[2] = x; xy[3] = 0.0; return 2; }
-    xy[0] = -x; xy[1] = 0.0; xy[2] = 0.0; xy[3] = 0.0; xy[4] = x; xy[5] = 0.0; return 3;
-}
+static int oval_magnet_centres(double A, double *xy) { return mag_oval_centres(A, xy); }
 
 /* the exterior points of every polygon of polys(g), for the max(hypot(...)) of scale_plan: -1 = empty (max() raises) */
 static int max_ext_r(const GEOSGeometry *U, double cx, double cy, double *rp) {
