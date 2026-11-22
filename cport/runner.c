@@ -968,7 +968,7 @@ static int shot_png_col(const Mesh *soup, const char *png, int w, int h, double 
 }
 
 /* one base, mesher.build + mesher serve's picture: the report r (a JSON object as Sb text) or an error */
-typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; double t_lay, t_mesh, t_fin, t_pic; } Built;          /* t_*: seconds per stage (speed plan step 1) */
+typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; double t_lay, t_mesh, t_fin, t_pic, t_grain, t_join, t_simp, t_clean, t_stl; } Built;          /* t_*: seconds per stage (speed plan step 1) */
 /* review P2-1 + N2 (2026-11-22): where grain goes and which texture. The base's open ground gets its style's texture;
    ground-like patches (mud, sand, grit ...) their own; planks a wood grain along them; stone slabs and headstones small
    pits; water and the like stay smooth (gloss, resin); every other object keeps its own top. A grid of 0.1 mm cells
@@ -1094,6 +1094,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         for (int g = 0; g < sc.nop; g++) fprintf(kf, " op %s type=%d z0=%g b=%g np=%d\n", sc.op[g].kind ? sc.op[g].kind : "?", sc.op[g].optype, sc.op[g].z0, sc.op[g].b, sc.op[g].np);
         for (int g = 0; g < sc.ntc; g++) fprintf(kf, " tc %s np=%d\n", sc.tc[g].kind ? sc.tc[g].kind : "?", sc.tc[g].np); fclose(kf); } }
     mesh_merge(&m);
+    ULONGLONG tg0 = GetTickCount64();
     if (cfg_bool("ground_grain", 1)) {          /* plan B step 2: fine grain on every flat top (grain.c), so no open ground is smooth */
         uint32_t sd = 2166136261u; for (const char *c = name; *c; c++) sd = (sd ^ (unsigned char)*c) * 16777619u;
         GrainOpt go = { 0 }; int resin = printer_resin(); unsigned char *gm;
@@ -1104,6 +1105,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         const char *gl = getenv("BBB_GRAIN_LOG");
         if (gl && *gl) { FILE *lf = fopen(gl, "a"); if (lf) { fprintf(lf, "%s: faces %d -> %d, points moved %d\n", name, t0, m.nt, mv); fclose(lf); } }
     }
+    B->t_grain = (GetTickCount64() - tg0) / 1000.0;
     int tris_field = m.nt;          /* len(f): the surface's faces, before the solids */
     {   /* --supports on: m, extra = add_solids(...) (the shells were built by the layout helper: solids3d.c, the "BBS1" blob); trimesh.util.concatenate([m] + extra) */
         JV *sk3 = jget(&B->head, "skipped3d");
@@ -1121,6 +1123,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
             }
         }
     }
+    ULONGLONG tj0 = GetTickCount64();
     if (join_shells()) {          /* supports join / smooth details: the base and the shells one solid (Manifold); pieces left in the air dropped */
         MfJoin jr; char je[200];
         if (mf_join(&m.v, &m.nv, &m.f, &m.nt, &jr, je, sizeof je) == 0) {
@@ -1130,14 +1133,17 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
             if (t2[0]) { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, t2); }
         } else { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, je); mg_log_caught("join", "RuntimeError", je, "cport/mfjoin.c"); }
     }
+    ULONGLONG ts0 = GetTickCount64(); B->t_join = (ts0 - tj0) / 1000.0;
     if (smaller_files() && (!allow_supports() || supports_join())) {          /* smaller files: flat areas in fewer triangles (Manifold), the shape moves no more than 0.005 mm */
         char se[200]; if (mf_simplify(&m.v, &m.nv, &m.f, &m.nt, cfg_num("smaller_files_mm", 0.005), se, sizeof se) != 0) mg_log_caught("smaller files", "RuntimeError", se, "cport/mfjoin.c");
     }
+    ULONGLONG tc0 = GetTickCount64(); B->t_simp = (tc0 - ts0) / 1000.0;
     { int dr = mesh_f32_clean(&m); if (dr && getenv("BBB_F32_LOG")) { FILE *lf = fopen(getenv("BBB_F32_LOG"), "a"); if (lf) { fprintf(lf, "%s: %d faces dropped at float32\n", B->path, dr); fclose(lf); } } }          /* the mesh as the STL will hold it */
     int odd, pin; edge_counts(&m, &odd, &pin, &B->watertight); B->tris = tris_field;
     B->pinched = pin;          /* review P2-4: edges in more than two faces are said in the note, not hidden */
     double mn[3], mx[3]; mesh_bounds(&m, mn, mx); B->top_mm = py_round(mx[2] - jget(&B->head, "H")->d, 1);
-    stl_write(B->path, &m); mesh_free(&m);
+    ULONGLONG tw0 = GetTickCount64(); B->t_clean = (tw0 - tc0) / 1000.0;
+    stl_write(B->path, &m); mesh_free(&m); B->t_stl = (GetTickCount64() - tw0) / 1000.0;
     if (cfg_bool("drawing_2d", 1) && !drawn && !py_drawn && have_sc) { double win[4]; char er[200]; if (d2_draw(&sc, png2d, 900, 0, win, er, sizeof er)) save_win(png2d, win); }
     if (have_sc) d2_scene_free(&sc);
     free_blobs(bl, ln, nb);
@@ -1255,8 +1261,8 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
         }
         if (!B.error) { double tc = (GetTickCount64() - tck) / 1000.0; EnterCriticalSection(&rs->lock);          /* speed plan step 1: where the time went */
             JV *a1 = jget(&B.head, "t_scene"), *a2 = jget(&B.head, "t_input"), *a3 = jget(&B.head, "t_shells");
-            rs_print("  time %s: layout %.1f s (scene %.1f, command groups %.1f, shells %.1f), height field + mesh %.1f s, grain + join + STL %.1f s, picture %.1f s, checks %.1f s", R->base, B.t_lay,
-                     a1 ? a1->d : -1.0, a2 ? a2->d : -1.0, a3 ? a3->d : -1.0, B.t_mesh, B.t_fin, B.t_pic, tc);
+            rs_print("  time %s: layout %.1f s (scene %.1f, command groups %.1f, shells %.1f), height field + mesh %.1f s, grain + join + STL %.1f s (grain %.1f, join %.1f, smaller %.1f, clean + check %.1f, write %.1f), picture %.1f s, checks %.1f s", R->base, B.t_lay,
+                     a1 ? a1->d : -1.0, a2 ? a2->d : -1.0, a3 ? a3->d : -1.0, B.t_mesh, B.t_fin, B.t_grain, B.t_join, B.t_simp, B.t_clean, B.t_stl, B.t_pic, tc);
             LeaveCriticalSection(&rs->lock); }
         WCHAR ws[MAX_PATH * 3]; wpath(stl, ws, MAX_PATH * 3);
         if (reason.n && GetFileAttributesW(ws) != INVALID_FILE_ATTRIBUTES) {          /* the failed attempt is kept for a look */
