@@ -968,7 +968,7 @@ static int shot_png_col(const Mesh *soup, const char *png, int w, int h, double 
 }
 
 /* one base, mesher.build + mesher serve's picture: the report r (a JSON object as Sb text) or an error */
-typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; } Built;
+typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; double t_lay, t_mesh, t_fin, t_pic; } Built;          /* t_*: seconds per stage (speed plan step 1) */
 /* review P2-1 + N2 (2026-11-22): where grain goes and which texture. The base's open ground gets its style's texture;
    ground-like patches (mud, sand, grit ...) their own; planks a wood grain along them; stone slabs and headstones small
    pits; water and the like stay smooth (gloss, resin); every other object keeps its own top. A grid of 0.1 mm cells
@@ -1048,6 +1048,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     Sb rq = { 0 }; sb_printf(&rq, "{\"n\": %d, \"variant\": ", n); json_str(&rq, variant); sb_puts(&rq, ", \"name\": "); json_str(&rq, name); sb_puts(&rq, ", \"png2d\": "); json_str(&rq, png2d); sb_puts(&rq, "}");
     unsigned char **bl; size_t *ln; int nb;
     int r = layout_python_build(br, rq.s, base_limit(rs), &B->head, &bl, &ln, &nb); free(rq.s);
+    ULONGLONG tq = GetTickCount64(); B->t_lay = (tq - t) / 1000.0;
     char e[400];
     if (r < 0) { snprintf(e, sizeof e, "over %.0f s limit", base_limit(rs)); B->error = xstrdup(e); B->secs = py_rint((GetTickCount64() - t) / 1000.0); free_blobs(bl, ln, nb); return; }
     if (r == 0) { B->error = xstrdup("crash: the layout helper stopped"); B->secs = py_rint((GetTickCount64() - t) / 1000.0); free_blobs(bl, ln, nb); return; }
@@ -1076,6 +1077,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         snprintf(e, sizeof e, "crash: the C field builder failed (%.200s)", err.s ? err.s : ""); B->error = xstrdup(e);
         free(out.s); free(err.s); free_blobs(bl, ln, nb); if (have_sc) d2_scene_free(&sc); B->secs = py_rint((GetTickCount64() - t) / 1000.0); return;
     }
+    { ULONGLONG t2 = GetTickCount64(); B->t_mesh = (t2 - tq) / 1000.0; tq = t2; }
     uint32_t nv, nt; memcpy(&nv, out.s + 4, 4); memcpy(&nt, out.s + 8, 4); size_t en = 12 + 24 * (size_t)nv + 12 * (size_t)nt;
     Mesh m = { (int)nv, (int)nt, malloc(24 * (size_t)(nv ? nv : 1)), malloc(12 * (size_t)(nt ? nt : 1)) };
     memcpy(m.v, out.s + 12, 24 * (size_t)nv); memcpy(m.f, out.s + 12 + 24 * (size_t)nv, 12 * (size_t)nt);
@@ -1140,11 +1142,13 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     if (have_sc) d2_scene_free(&sc);
     free_blobs(bl, ln, nb);
     B->secs = py_round((GetTickCount64() - t) / 1000.0, 1);
+    { ULONGLONG t2 = GetTickCount64(); B->t_fin = (t2 - tq) / 1000.0; tq = t2; }
     { const char *kv[] = { "stage", "picture" }; live_note(rs->salt, n, 1, kv); }          /* mesher serve: the 3D picture */
     Mesh soup; char iso[MAX_PATH * 3], by[200]; snprintf(iso, sizeof iso, "%.*s_iso.png", (int)strlen(B->path) - 4, B->path);
     if (stl_read(B->path, &soup) && shot_png(&soup, iso, 900, 560, 30, -60, by, sizeof by)) snprintf(B->pictures, sizeof B->pictures, "%s", (by[0] && strncmp(by, "failed", 6)) ? by : "Python");
     else snprintf(B->note, sizeof B->note, "no picture: %s", by);
     mesh_free(&soup);
+    B->t_pic = (GetTickCount64() - tq) / 1000.0;
 }
 
 /* run_set.drop_specks(stl) then run_set.close_seams(stl) (meshglue.h, proven against trimesh): the STL rewritten when
@@ -1220,7 +1224,7 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
         Bridge *br = rs_bridge(rs); Built B; build_once(rs, br, n, v, &B); rs_give_back(rs, br);
         char stl[MAX_PATH * 3]; snprintf(stl, sizeof stl, "%s\\%s\\%s.stl", rs->out, rs->style, R->base);
         Sb reason = { 0 }; if (B.error) sb_puts(&reason, B.error);
-        int seam = 0; char diff[16] = "";
+        int seam = 0; char diff[16] = ""; ULONGLONG tck = GetTickCount64();
         if (!B.error) {
             const char *kv[] = { "stage", "checks" }; live_note(rs->salt, n, 1, kv);
             Sb probs = { 0 }; int specks; float *Hn = NULL; WCHAR ws[MAX_PATH * 3]; wpath(stl, ws, MAX_PATH * 3);
@@ -1249,6 +1253,11 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
             else if (ndrop > cfg_num("max_dropped_pieces", 4)) { char t[64]; snprintf(t, sizeof t, "%d pieces dropped", ndrop); sb_puts(&reason, t); }
             free(probs.s);
         }
+        if (!B.error) { double tc = (GetTickCount64() - tck) / 1000.0; EnterCriticalSection(&rs->lock);          /* speed plan step 1: where the time went */
+            JV *a1 = jget(&B.head, "t_scene"), *a2 = jget(&B.head, "t_input"), *a3 = jget(&B.head, "t_shells");
+            rs_print("  time %s: layout %.1f s (scene %.1f, command groups %.1f, shells %.1f), height field + mesh %.1f s, grain + join + STL %.1f s, picture %.1f s, checks %.1f s", R->base, B.t_lay,
+                     a1 ? a1->d : -1.0, a2 ? a2->d : -1.0, a3 ? a3->d : -1.0, B.t_mesh, B.t_fin, B.t_pic, tc);
+            LeaveCriticalSection(&rs->lock); }
         WCHAR ws[MAX_PATH * 3]; wpath(stl, ws, MAX_PATH * 3);
         if (reason.n && GetFileAttributesW(ws) != INVALID_FILE_ATTRIBUTES) {          /* the failed attempt is kept for a look */
             char fd[MAX_PATH * 3], dst[MAX_PATH * 3], s2[MAX_PATH * 3]; snprintf(fd, sizeof fd, "%s\\%s\\failed", rs->out, rs->style); make_dirs(fd);

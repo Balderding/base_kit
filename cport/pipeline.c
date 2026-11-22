@@ -454,7 +454,9 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
     live_start(n);
     memset(&out, 0, sizeof out); sf_s3d = bs_s3d = ns_s3d = &out.s3d;
     debug_hooks();
+    ULONGLONG tl0 = GetTickCount64();          /* speed plan step 1: the scene / the command groups / the shells, in seconds */
     s = mk_make(style, n, &out, &err);
+    ULONGLONG tl1 = GetTickCount64();
     lv_end();
     if (s && getenv("PIPE_DUMPS")) dump_one(1, s);
     if (!s) {
@@ -466,6 +468,7 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
     np = stand_pads(&out, &pads);
     ork_clear();
     r = mg_build_input(&b, style, &ENV, pads, np, runner_cfg_num("sketch_tolerance_mm", 0.03), runner_cfg_num("touching_tolerance_mm", 0.005), &bt);
+    ULONGLONG tl2 = GetTickCount64();
     if (r != 0) {
         snprintf(t, sizeof t, "crash: %.100s", mg_err[0] ? mg_err : "RuntimeError: no base in the command groups"); why(o, 1, t);
     } else {
@@ -501,7 +504,9 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
         if (ork_on) { int nr = 0; ork_build(&xf, bt.H, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3, &nr); ork_clear(); }          /* organic rocks (rocks3d.c) */
         s3_blob(&sh, &bbs);
         scene_blob(&b, s->ground ? s->ground : "", bt.has_plan, &bt.plan, 0, &bbd, &bad);
+        ULONGLONG tl3 = GetTickCount64();
         h = mgj_dict();
+        mgj_set(&h, "t_scene", mgj_float((tl1 - tl0) / 1000.0)); mgj_set(&h, "t_input", mgj_float((tl2 - tl1) / 1000.0)); mgj_set(&h, "t_shells", mgj_float((tl3 - tl2) / 1000.0));
         mgj_set(&h, "ok", mgj_int(1)); mgj_set(&h, "name", mgj_str(s->name)); mgj_set(&h, "sig", mgj_str(bt.sig)); mgj_set(&h, "skipped", strs_j(&bt.skipped));
         mgj_set(&h, "steps", mgj_int(bt.steps)); mgj_set(&h, "variant", mgj_str(RESEED_B)); mgj_set(&h, "want_mm", mgj_float(bt.want_mm)); mgj_set(&h, "H", mgj_float(bt.H));
         mgj_set(&h, "threads", mgj_int(threads_kit())); mgj_set(&h, "nsteps", mgj_int(bt.nsteps));
