@@ -81,12 +81,13 @@ enum { SIDE_W0 = 420, SIDE_MIN = 320, SIDE_FOOT = 92 };          /* SIDE_FOOT: R
 static int sideW = SIDE_W0, sideWant = SIDE_W0;          /* sideWant: what the user set (kept, saved); sideW: that, kept in bounds for this window */
 enum { DET_H0 = 170, DET_MIN = 110 };
 static int detailsH = DET_H0, detWant = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; detWant saved as detailsh */
+static int moreOpen;          /* U2: the side panel's "More settings" fold is open (saved as more in bbb_kit.ini; tests: open unless BBB_TEST_MORE=0) */
 static int divDrag, divHover;          /* R1 / R2: which line is being dragged / is under the mouse: 1 the side panel's, 2 the Details pane's */
 #define SIDE_W sideW
 enum { HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
 enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS,
-       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER, H_SQ };
+       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER, H_SQ, H_FOLD };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16], size[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -1131,8 +1132,7 @@ static void paint(HDC out, int W, int H) {
         chips(NULL, SIZES + NROUND + NOVAL, NSQ, 3, sizeMulti ? NROUND + NOVAL : selSize - NROUND - NOVAL, H_SQ, &y);          /* square and rectangle bases */
         chipsMask = 0;
         chip("Several", x0 + 3 * (cw + gap), y0 + ch + gap, cw, ch, sizeMulti, H_MULTI, 0); }          /* several sizes at once: in the oval row's free place */
-    chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
-    chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
+    chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y);
     {          /* how many: a number from 1 to 20. Type it, or use the minus and plus */
         int x0 = S(16), wAll = S(SIDE_W - 32), bh = S(30), bw = S(40) < wAll / 7 ? S(40) : wAll / 7, fresh = GetTickCount() - lastDigit < 1500; WCHAR nb[8];
         section(L"HOW MANY BASES  (1 TO 20)", x0, y, wAll, S(18)); y += S(20);
@@ -1143,6 +1143,12 @@ static void paint(HDC out, int W, int H) {
         swprintf(nb, 8, L"%d", selCount); ltxt(nb, x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, fBig, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, H_COUNT, 0);
         y += bh + S(8);
     }
+    {          /* U2 (2026-11-22): the rest of the settings fold away (progressive disclosure); M, or a click here, opens them */
+        chip(moreOpen ? "Fewer settings  (M)" : "More settings  (M)", S(16), y, S(SIDE_W - 32), S(26), moreOpen, H_FOLD, 0); y += S(32);
+    }
+    if (moreOpen) {
+    chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
+    chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
     chips(L"STYLE STRENGTH  (2 = BOLDER FOR PAINT)", STRENGTHS, NSTR, 5, selStr, H_STR, &y);
     chips(L"PRINTER  (GRAIN AND SMALLEST DETAIL)", PRINTERS, 2, 2, selPrinter, H_PRINTER, &y);
     {          /* the design seed: empty = new designs each time; type a word to get the same designs again */
@@ -1174,6 +1180,7 @@ static void paint(HDC out, int W, int H) {
         section(L"SPEED", x0, y, wAll, S(18)); y += S(20);
         chip("CPU threads", x0, y, half, S(24), spThr, H_SPEED, 0); chip("Video card", x0 + half + S(6), y, wAll - half - S(6), S(24), spGpu, H_SPEED, 1); y += S(34);
     }
+    }          /* U2: the fold */
     {          /* the panel must fit: if the full size runs past the bottom, draw it tight; back to full size when it fits again */
         int need = y + S(4) + S(SIDE_FOOT);          /* R4: the rows, then the footer with Show / build straight away under them */
         if (!sideTight) { sideNeed = need; if (need > H) { sideTight = 1; InvalidateRect(hMain, NULL, FALSE); } }
@@ -1461,6 +1468,7 @@ static void act2(int kind, int idx) {
     case H_STYLE: if (selStyle != idx) selTheme = 0; selStyle = idx; break;
     case H_SIZE: if (sizeMulti) { sizeMask ^= 1u << idx; if (sizeMask & (1u << idx)) selSize = idx; } else selSize = idx; break;
     case H_OVAL: if (sizeMulti) { sizeMask ^= 1u << (NROUND + idx); if (sizeMask & (1u << (NROUND + idx))) selSize = NROUND + idx; } else selSize = NROUND + idx; break;
+    case H_FOLD: moreOpen = !moreOpen; sideOff = 0; break;          /* U2: the settings fold */
     case H_SQ: { int q = NROUND + NOVAL + idx; if (sizeMulti) { sizeMask ^= 1u << q; if (sizeMask & (1u << q)) selSize = q; } else selSize = q; } break;
     case H_MULTI: sizeMulti = !sizeMulti; if (sizeMulti && !sizeMask) sizeMask = 1u << selSize; break;
     case H_THEME: { int nt = theme_count(); if (idx == 0) selTheme = 0; else if (nt) selTheme = (selTheme + idx + nt + 1) % (nt + 1); break; }
@@ -1621,6 +1629,7 @@ static void ini(int save) {
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
     if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcscpy(p, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
+    if (save) { swprintf(v, 16, L"%d", moreOpen); WritePrivateProfileStringW(L"window", L"more", v, p); } else moreOpen = GetPrivateProfileIntW(L"window", L"more", 0, p) ? 1 : 0;          /* U2 */
     if (save) { swprintf(v, 16, L"%d", sideWant); WritePrivateProfileStringW(L"window", L"sidew", v, p); swprintf(v, 16, L"%d", detWant); WritePrivateProfileStringW(L"window", L"detailsh", v, p); }          /* R1, R2 */
     else { sideW = sideWant = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p); detailsH = detWant = (int)GetPrivateProfileIntW(L"window", L"detailsh", DET_H0, p); }
     if (save) {          /* the window's size and place, so it opens next time the way it was left */
@@ -1728,6 +1737,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == VK_ESCAPE) { if (showHelp) act(H_HELP, 0); else act(H_STOP, 0); }
         else if (w == 'A' && GetKeyState(VK_CONTROL) < 0) act(H_ALL, 0);
         else if (w == 'D') act(H_DETAILS, 0);
+        else if (w == 'M' && GetKeyState(VK_CONTROL) >= 0) act(H_FOLD, 0);          /* U2: More settings */
         else if (w == 'L' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 0);          /* the look: L pixel / smooth, T textures, F pixel font */
         else if (w == 'T' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 1);
         else if (w == 'F' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 2);
@@ -1819,6 +1829,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         SC = fit_sc(tw, th); cw = (int)(tw / SC + 0.5); chh = (int)(th / SC + 0.5);
     }
     if (!selftest) ini(0);
+    if (selftest) { char e[8]; moreOpen = !(GetEnvironmentVariableA("BBB_TEST_MORE", e, sizeof e) && e[0] == '0'); }          /* U2: tests see every setting unless BBB_TEST_MORE=0 */
     swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
     speed_env();          /* the speed switches, for every job started from here on */
     make_fonts();
