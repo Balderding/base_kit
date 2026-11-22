@@ -70,6 +70,7 @@ static int setup(const char *mode) {
       if (!pl_config(1.0, getenv("NOTCH") && *getenv("NOTCH"), crocks, CSX, CSY)) return 0;
       PL.cover = runner_cfg_num("plate_cover", 0.97); PL.step = runner_cfg_num("max_step_mm", 0.3); PL.cover_big = runner_cfg_num("plate_cover_big", 0.9);
       sc_min_part = runner_cfg_num("min_part_mm", 0.5); sc_min_cut = runner_cfg_num("min_cut_mm", 0.3); kd_wet_hook_fn = pl_is_wet; pl_terrk_fn = pl_is_terrk;
+      { extern int cp_feet_pad; const char *e = getenv("KIT_FEET_PAD"); cp_feet_pad = e && (!strcmp(e, "0") || !strcmp(e, "1")) ? e[0] == '1' : runner_cfg_bool("feet_pad", 0); }          /* G2: off by default */
       { extern int cp_cart_on_track, cp_outcrops; extern double cp_model_room; cp_cart_on_track = runner_cfg_bool("cart_on_track", 1); cp_model_room = runner_cfg_num("model_room", 1.0); cp_outcrops = runner_cfg_bool("outcrops", 1); { extern int cp_story; cp_story = runner_cfg_bool("story_direction", 1); } { extern double cp_prop_sink; cp_prop_sink = runner_cfg_num("prop_sink_mm", 0.4); } { extern int cp_edge_wear; cp_edge_wear = runner_cfg_bool("edge_wear", 1); } } }          /* readable details */          /* one level under each detail */
     if (!solids_init(cfg_supports(), ft_true_scale(), SC.ts, SC.MINW, SC.R0, SC.H, 12.0)) return 0;
     { const char *e = getenv("KIT_DETAIL_STEP"); SO.step = e && *e ? strtod(e, NULL) : runner_cfg_num("detail_step_mm", 0.1); }          /* finer steps for rounded objects (0 = the Python kit's) */

@@ -794,6 +794,44 @@ static void clear_cuts(Sc *sc, Geo *space) {
         gl_free(pl); *pl = np;
     }
 }
+/* G2 (PLAN-better, 2026-11-22; the basing guides: a clear, level spot for the feet): settings "feet_pad", OFF by default.
+   With it on, the model's space keeps only the ground and its grain: every detail that reaches into it goes (low ones too:
+   rubble, plates laid as details, loose grit), and the cracks and cuts on the ground and on plates stop at its edge.
+   With it off nothing here runs, so the bases are byte-identical to before. */
+int cp_feet_pad = 0;
+static void feet_pad(Sc *sc, Geo *space) {
+    Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL; OpList keep = { 0 };
+    for (i = 0; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i]; int in = 0, key;
+        if (op_ground(s, o) && !(o->kind && in_soft(o->kind))) continue;          /* the ground stays; loose grit on it does not */
+        for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.05) in = 1;
+        if (!in) continue;
+        key = o->feat > 0 ? o->feat : -(i + 1);
+        for (k = 0; k < nb && bad[k] != key; k++) {}
+        if (k < nb) continue;
+        if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); }
+        bad[nb++] = key;
+    }
+    if (nb) {
+        for (i = 0; i < s->ops.n; i++) {
+            Op *o = s->ops.v[i]; for (k = 0; k < nb && !(bad[k] > 0 ? o->feat == bad[k] : bad[k] == -(i + 1)); k++) {}
+            if (k < nb) { chops_of(sc, o, 0, 0, 1); op_unref(o); } else ol_push_own(&keep, o);
+        }
+        free(s->ops.v); s->ops = keep;
+    }
+    free(bad);
+    clear_cuts(sc, space);
+    for (i = 0; i < s->tcuts.n; i++) {          /* the cuts on top of plates (cracks, seams): stopped at the pad's edge too */
+        GeoList *pl = &s->tcuts.v[i].polys, np = { 0 }; int hit = 0;
+        for (j = 0; j < pl->n; j++) if (intersects(pl->v[j], space)) { hit = 1; break; }
+        if (!hit) continue;
+        for (j = 0; j < pl->n; j++) {
+            if (!intersects(pl->v[j], space)) { gl_push(&np, pl->v[j]); continue; }
+            { GeoList *ps = g_polys(g_diff(pl->v[j], space)); for (k = 0; k < ps->n; k++) if (area(ps->v[k]) > 0.6 && g_wide(ps->v[k], SC.MINW)) gl_push(&np, ps->v[k]); }
+        }
+        gl_free(pl); *pl = np;
+    }
+}
 /* true size: where a track runs, the ground is cleared for it, as at a level crossing: raised paving cut back to the track's
    edge, the layout's loose ground pieces (kerb bricks, stones) taken away, the cut marks (grooves, gutters) stopped there.
    The subject and the details are not touched; old, nold: the ops there were before the track was laid (the track's own are the rest) */
@@ -2506,6 +2544,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         }
         if (cp_try(ce_, sc) < 0) cp_log(sc, "clear_edge");
         a.marks_only = 0; a.cracks = 1; if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
+        if (cp_feet_pad && cp_msp) feet_pad(sc, cp_msp);          /* G2: the feet pad, last, after every fill (off by default) */
     }
     free(late.v);
     for (i = 0; i < s->ops.n; i++) kmap_setdefault(&KD.col, s->ops.v[i]->kind ? s->ops.v[i]->kind->s : "None", "#8a8a8a");
