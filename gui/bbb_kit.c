@@ -1087,6 +1087,7 @@ static void obj_slider(int *y) {
 static void act(int kind, int idx);
 #include "nk_side.c"
 #endif
+#include "theme_sample.c"          /* U4: a picture of the chosen theme beside its name */
 static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
@@ -1344,6 +1345,7 @@ static void paint(HDC out, int W, int H) {
 #ifdef BBB_NK
     if (nkActed) { nkActed = 0; InvalidateRect(hMain, NULL, FALSE); }          /* a widget changed something: draw again with it */
 #endif
+    th_draw(W, H);          /* U4 */
     if (tipShown && tipText[0]) {          /* R3: the whole text of a label cut short, by the mouse */
         SIZE sz; int bw, bh, bx, by; tipNo = 1; SelectObject(DC, fSmall); GetTextExtentPoint32W(DC, tipText, (int)wcslen(tipText), &sz);
         bw = sz.cx + S(16); bh = sz.cy + S(10); if (bw > W - S(8)) bw = W - S(8);
@@ -1672,6 +1674,7 @@ static void hover_at(int x, int y) {
         redraw();
     }
     { int dv = on_divider(x, y); if (dv != divHover) { divHover = dv; redraw(); } }
+    th_hover(hovK == H_THEME && hovI == 0, x, y);          /* U4: the chosen theme's picture */
     { int d = divDrag ? divDrag : divHover; SetCursor(LoadCursor(NULL, d == 1 ? IDC_SIZEWE : d == 2 ? IDC_SIZENS : k != H_NONE ? IDC_HAND : IDC_ARROW)); }
 }
 static void make_fonts(void) {
@@ -1739,6 +1742,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_ENDED: on_ended((int)w, (DWORD)l); return 0;
     case WM_TIMER:
         if (w == 7) { KillTimer(h, 7); if (tipCur >= 0) { tipShown = 1; redraw(); } return 0; }          /* R3: the tooltip's half second is up */
+        if (w == 8) { th_poll(); return 0; }          /* U4: the theme picture's job */
         if (w == 9 && selftest == 6) {          /* --idletest: the CPU time this process used while it sat idle, and the redraws */
             static ULONGLONG c0 = 0, t0 = 0; FILETIME a, b2, k, u; GetProcessTimes(GetCurrentProcess(), &a, &b2, &k, &u);
             ULONGLONG c = (((ULONGLONG)k.dwHighDateTime << 32 | k.dwLowDateTime) + ((ULONGLONG)u.dwHighDateTime << 32 | u.dwLowDateTime)) / 10000, t = GetTickCount64();
@@ -1773,7 +1777,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
             else { RECT rc; GetClientRect(h, &rc); det_set((int)((rc.bottom - S(FOOT_H) - GET_Y_LPARAM(l)) / SC + 0.5)); }
             SetCursor(LoadCursor(NULL, divDrag == 1 ? IDC_SIZEWE : IDC_SIZENS)); redraw(); return 0; }          /* R1: the line follows the mouse */
         { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if ((w & MK_LBUTTON) && hovK == H_OBJ && hovI != selObj) act(H_OBJ, hovI); return 0; }          /* the slider follows a drag */
-    case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; tipCur = -1; tipShown = 0; KillTimer(h, 7); redraw(); return 0;
+    case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; tipCur = -1; tipShown = 0; KillTimer(h, 7); th_hover(0, 0, 0); redraw(); return 0;
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
     case WM_LBUTTONDBLCLK: { int d = on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (d) { if (d == 1) side_set(SIDE_W0); else det_set(DET_H0); SendMessageW(h, WM_SIZE, 0, 0); return 0; } }          /* R1: back to the default */
         /* any other double-click is a click, as it was before the window took double-clicks */
@@ -1964,6 +1968,19 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
                     if (tf) { fprintf(tf, "%s %s %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", which == 2 ? "detailsh" : which == 1 ? "sidew" : "no line at the press:", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
                 }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_THEME", NULL, 0)) {          /* U4: rest the mouse on a chosen theme; the picture is made (a real hidden job), kept, shown */
+                FILE *tf; WCHAR p2[MAX_PATH], cf[MAX_PATH]; int k, hx = -1, hy = -1; ULONGLONG t0 = GetTickCount64(); char key[160];
+                selTheme = 1; capture(NULL);
+                for (k = 0; k < nhit; k++) if (hits[k].kind == H_THEME && hits[k].idx == 0) { hx = (hits[k].r.left + hits[k].r.right) / 2; hy = (hits[k].r.top + hits[k].r.bottom) / 2; }
+                SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(hx, hy));
+                while (thProc && GetTickCount64() - t0 < 120000) { MSG m3; MsgWaitForMultipleObjects(1, &thProc, FALSE, 200, QS_ALLINPUT); while (PeekMessageW(&m3, NULL, 0, 0, PM_REMOVE)) DispatchMessageW(&m3); th_poll(); }
+                th_key(key, sizeof key); th_file(cf, MAX_PATH, key);
+                th_hover(1, hx, hy);          /* still resting there (an offscreen window gets WM_MOUSELEAVE at once: no real mouse over it) */
+                swprintf(p2, MAX_PATH, L"%ls.theme.bmp", stShot); capture(p2);
+                swprintf(p2, MAX_PATH, L"%ls.theme.txt", stShot); tf = _wfopen(p2, L"w");
+                if (tf) { fprintf(tf, "%s theme \"%s\" picture %d kept %d shown %d in %.1f s" "\n", thImg && thShow && GetFileAttributesW(cf) != INVALID_FILE_ATTRIBUTES ? "OK" : "FAIL", key, thImg != NULL,
+                                  GetFileAttributesW(cf) != INVALID_FILE_ATTRIBUTES, thShow, (GetTickCount64() - t0) / 1000.0); fclose(tf); }
             }
             if (GetEnvironmentVariableA("BBB_TEST_UNDO", NULL, 0)) {          /* U1: style, size, a pick, Clear; undo all four, redo one; compared with snapshots */
                 FILE *tf; WCHAR p2[MAX_PATH]; Snap s0, s1, s2, s3; int okA, okB, okC;
