@@ -799,11 +799,31 @@ static void clear_cuts(Sc *sc, Geo *space) {
    rubble, plates laid as details, loose grit), and the cracks and cuts on the ground and on plates stop at its edge.
    With it off nothing here runs, so the bases are byte-identical to before. */
 int cp_feet_pad = 0;
+/* the pad is the figure's own footprint where it stands (the middle of the model's space), not the whole space: an oval
+   0.55 x 0.38 of the figure's height (a 32 mm man: about 17.6 x 12.2 mm; 6 mm a metre times the object size, a man
+   1.8 m), half as big again for a many-legged model (walker, tripod, quad, scorpion, crawler, many); a tank's box is its
+   tracks, so the box itself. Never more than the model's space. BBB_PAD_LOG: each pad's size, a line per base. */
+static Geo *pad_shape(Sc *sc) {
+    double o = ft_obj_scale(), hf = o > 0 ? 10.8 * o : 32.0, a = 0.55 * hf / 2, b = 0.38 * hf / 2; const char *mn = CPC.kit_mini ? CPC.kit_mini : "";
+    Geo *g;
+    if (cp_mbox) g = cp_msp;
+    else {
+        if (!strcmp(mn, "walker") || !strcmp(mn, "tripod") || !strcmp(mn, "quad") || !strcmp(mn, "scorpion") || !strcmp(mn, "crawler") || !strcmp(mn, "many")) { a *= 1.5; b *= 1.5; }
+        g = LIn(LA(shp_scale(g_ptbuf(0, 0, 1.0, 32)->g, a, b, SHP_ORIGIN_POINT, 0.0, 0.0)), cp_msp);
+    }
+    { const char *lp = getenv("BBB_PAD_LOG"); FILE *f = lp && *lp ? fopen(lp, "a") : NULL; double bb[4];
+      if (f) { g_bounds(g, bb); fprintf(f, "base %.1f mm (%s, %s): pad %.1f x %.1f mm, model space %s %.1f mm\n", sc->mm, mn[0] ? mn : "default", cp_mbox ? "a tank's box" : "an oval", bb[2] - bb[0], bb[3] - bb[1], cp_mbox ? "box" : "disc", cp_mbox ? 2 * cp_mhx : 2 * cp_mrad); fclose(f); } }
+    return g;
+}
 static void feet_pad(Sc *sc, Geo *space) {
     Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL; OpList keep = { 0 };
     for (i = 0; i < s->ops.n; i++) {
         Op *o = s->ops.v[i]; int in = 0, key;
         if (op_ground(s, o) && !(o->kind && in_soft(o->kind))) continue;          /* the ground stays; loose grit on it does not */
+        if (op_top(o) <= SC.H + 1.2) {          /* a low piece mostly outside the pad (a rail, a plank, a floor passing under the feet) stays */
+            double ar = 0, ai = 0; for (j = 0; j < o->polys.n; j++) { ar += area(o->polys.v[j]); if (g_intersects(o->polys.v[j], space)) ai += area(LIn(o->polys.v[j], space)); }
+            if (ar > 0 && ai < 0.4 * ar) continue;
+        }
         for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.05) in = 1;
         if (!in) continue;
         key = o->feat > 0 ? o->feat : -(i + 1);
@@ -812,10 +832,32 @@ static void feet_pad(Sc *sc, Geo *space) {
         if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); }
         bad[nb++] = key;
     }
+    for (;;) {          /* nothing left floating: a kept piece standing higher on a piece that goes, goes too (again until none) */
+        int more = 0;
+        for (i = 0; i < s->ops.n; i++) {
+            Op *o = s->ops.v[i]; int key = o->feat > 0 ? o->feat : -(i + 1), d, gone = 0;
+            for (k = 0; k < nb && bad[k] != key && !(bad[k] > 0 && o->feat == bad[k]); k++) {}
+            if (k < nb || (op_ground(s, o) && !(o->kind && in_soft(o->kind)))) continue;
+            for (d = 0; d < s->ops.n && !gone; d++) {
+                Op *q = s->ops.v[d]; int qk = q->feat > 0 ? q->feat : -(d + 1), m, z, w;
+                if (d == i || o->n[0].v <= q->n[0].v + 0.01) continue;
+                for (m = 0; m < nb && bad[m] != qk; m++) {}
+                if (m == nb) continue;
+                for (z = 0; z < o->polys.n && !gone; z++) for (w = 0; w < q->polys.n && !gone; w++) if (g_intersects(o->polys.v[z], q->polys.v[w]) && area(LIn(o->polys.v[z], q->polys.v[w])) > 0.05) gone = 1;
+            }
+            if (gone) { if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); } bad[nb++] = key; more = 1; }
+        }
+        if (!more) break;
+    }
     if (nb) {
         for (i = 0; i < s->ops.n; i++) {
             Op *o = s->ops.v[i]; for (k = 0; k < nb && !(bad[k] > 0 ? o->feat == bad[k] : bad[k] == -(i + 1)); k++) {}
-            if (k < nb) { chops_of(sc, o, 0, 0, 1); op_unref(o); } else ol_push_own(&keep, o);
+            if (k < nb) {
+                { const char *lp = getenv("BBB_PAD_LOG"); FILE *f = lp && *lp ? fopen(lp, "a") : NULL; double bb[4] = { 0, 0, 0, 0 }, lo[2] = { 1e9, 1e9 }, hi[2] = { -1e9, -1e9 }; int z;
+                  for (z = 0; z < o->polys.n; z++) { g_bounds(o->polys.v[z], bb); lo[0] = pmin(lo[0], bb[0]); lo[1] = pmin(lo[1], bb[1]); hi[0] = pmax(hi[0], bb[2]); hi[1] = pmax(hi[1], bb[3]); }
+                  if (f) { fprintf(f, "  dropped: kind %s feat %d pieces %d from (%.1f, %.1f) to (%.1f, %.1f) top %.2f\n", o->kind ? o->kind->s : "?", o->feat, o->polys.n, lo[0], lo[1], hi[0], hi[1], op_top(o)); fclose(f); } }
+                chops_of(sc, o, 0, 0, 1); op_unref(o);
+            } else ol_push_own(&keep, o);
         }
         free(s->ops.v); s->ops = keep;
     }
@@ -2544,7 +2586,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         }
         if (cp_try(ce_, sc) < 0) cp_log(sc, "clear_edge");
         a.marks_only = 0; a.cracks = 1; if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
-        if (cp_feet_pad && cp_msp) feet_pad(sc, cp_msp);          /* G2: the feet pad, last, after every fill (off by default) */
+        if (cp_feet_pad && cp_msp) feet_pad(sc, pad_shape(sc));          /* G2: the feet pad, last, after every fill (off by default) */
     }
     free(late.v);
     for (i = 0; i < s->ops.n; i++) kmap_setdefault(&KD.col, s->ops.v[i]->kind ? s->ops.v[i]->kind->s : "None", "#8a8a8a");
