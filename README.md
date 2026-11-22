@@ -561,7 +561,7 @@ Other options:
 | Option | What it does |
 |---|---|
 | `-q` | Quiet: only one OK / FLAG line per base |
-| `--workers 3` | Build 3 bases at the same time (default "auto": a third of the CPU cores, 2 to 12) |
+| `--workers 3` | Build 3 bases at the same time (default "auto": half the CPU cores, at most 4, in `bbb_kit.exe`) |
 | `--seed abc12` | Rebuild exactly the bases of an earlier run: same theme, count and detail, plus its seed (printed at the start of every run) |
 | `--theme "tunnel mouth"` | Every base gets this theme of the style. A wrong name prints the style's themes |
 | `--plan file.json` | Build from a scene plan file (see "Editing a scene" below) |
@@ -636,7 +636,8 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `designer` | off | The local AI model that can write scene plans; see "The designer model" for its settings |
 | `big_base_height_factor` | 1.5 | Bases of 60 mm and up may carry detail this much taller (3.3 mm x 1.5) |
 | `out_folder` | `out` | Where runs are saved |
-| `workers` | "auto" | Bases built at the same time ("auto" = a third of the CPU cores, 2 to 12; or a number) |
+| `workers` | "auto" | Bases built at the same time ("auto" = half the CPU cores, at most 4, in `bbb_kit.exe`; or a number) |
+| `below_normal_priority` | true | The building runs below normal priority, so a game or other program in front keeps the CPU; idle cores still go to the kit |
 | `cpu_threads` | true | One base's height field and mesh on as many CPU threads as it needs, up to every thread the PC has, in C (a number = that many threads; false = one core, the proven path). The window's CPU threads switch wins |
 | `detail_step_mm` | 0.1 | The highest step on a rounded object (barrel, dome, log), in mm: smaller is smoother. 0 = the Python kit's steps (up to 18 per object) |
 | `smaller_files` | true | Each STL simplified by Manifold (flat parts in fewer triangles, the shape moves no more than `smaller_files_mm`, 0.005). The window's Smaller files switch wins |

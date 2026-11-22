@@ -1579,7 +1579,7 @@ static int job_build(Args *a, const char *style) {
         make_dirs(rs.out);
         rs_print("seed   : %s   folder: %s", rs.salt, rs.out);
         rs.workers = cfg_bool("live", 0) ? 1 : 0;
-        if (!rs.workers) { JV *w = cfg_get("workers"); if (!w || (w->t == 4 && (!strcmp(w->s, "auto") || !w->s[0] || !strcmp(w->s, "0"))) || (w->t == 3 && w->d == 0)) { int c = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) / 3; rs.workers = c < 2 ? 2 : c > 12 ? 12 : c; } else rs.workers = w->t == 3 ? (int)w->d : atoi(w->s); if (rs.workers < 1) rs.workers = 1; }
+        if (!rs.workers) { JV *w = cfg_get("workers"); if (!w || (w->t == 4 && (!strcmp(w->s, "auto") || !w->s[0] || !strcmp(w->s, "0"))) || (w->t == 3 && w->d == 0)) { int c = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) / 2; rs.workers = c < 1 ? 1 : c > 4 ? 4 : c; }          /* step 5: half the cores, at most 4 bases at once (was a third, at most 12) */ else rs.workers = w->t == 3 ? (int)w->d : atoi(w->s); if (rs.workers < 1) rs.workers = 1; }
         rs.nums = nums[g]; rs.nnums = nn[g];
         /* the layout helpers' environment: gui_job's + run_set's + build_once's */
         EnvSet es[24]; int ne = 0;
@@ -1631,6 +1631,9 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
     if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--obj 1..3 (size of things; 3 = true beside 32 mm)] [--strength 0.25..2.5] [--theme name] [--printer fdm|resin] [--name {style}_{size}mm_{theme}_{seed}_{n}] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;
+    /* speed plan step 5 (2026-11-22, the user games while bases build): the job and every helper it starts (they inherit
+       it) run below normal, so a game in front keeps the CPU; idle cores still go to the kit. settings below_normal_priority */
+    if (runner_cfg_bool("below_normal_priority", 1)) SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
     if (!strcmp(job, "choices")) rc = job_choices(&a, style);
     else rc = job_build(&a, style);
     free(av);
