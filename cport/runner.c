@@ -193,6 +193,7 @@ static void load_cfg(void) {
     if (t) { const char *s = t; if ((unsigned char)s[0] == 0xef) s += 3; jparse(s, &CFG); free(t); }
 }
 static JV *cfg_get(const char *k) { JV *v = jget(&CFG, k); return v ? v : jget(&CFG_DEF, k); }
+static int workers_auto(void);          /* below: the "workers" setting */
 static double cfg_num(const char *k, double d) { JV *v = cfg_get(k); return v && v->t == 3 ? v->d : v && (v->t == 1 || v->t == 2) ? v->t == 2 : d; }
 static int cfg_bool(const char *k, int d) { JV *v = cfg_get(k); if (!v) return d; if (v->t == 3) return v->d != 0; if (v->t == 4) return v->s[0] != 0; return v->t == 2; }
 static const char *cfg_str(const char *k, const char *d) { JV *v = cfg_get(k); return v && v->t == 4 ? v->s : d; }
@@ -449,7 +450,7 @@ static int job_choices(Args *a, const char *style) {
     int count = atoi(count_s), px = atoi(px_s); double A, B; int oval; read_size(size, &A, &B, &oval);
     double sc = figure_scale(A, scale_s[0] ? strtod(scale_s, NULL) : cfg_num("scenery_scale", 1.0));
     double lay = sc == 1.0 ? A : py_round(fmax(30.0, A / sc), 1);
-    int ncpu = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS); int jobs = jobs_s[0] ? atoi(jobs_s) : (ncpu - 1 > 1 ? ncpu - 1 : 1);
+    int jobs = jobs_s[0] ? atoi(jobs_s) : workers_auto();          /* 2026-11-22: the same cap as the build (the user games meanwhile) */
     char seed[64]; if (seed_s[0]) snprintf(seed, sizeof seed, "%s", seed_s); else new_seed(seed);
     char bm[32], fm[32], sk[32], ov[64]; fmt_g(bm, sizeof bm, lay); fmt_g(fm, sizeof fm, A); fmt_g(sk, sizeof sk, sc);
     if (oval) { char x[32], y[32]; fmt_g(x, sizeof x, A); fmt_g(y, sizeof y, B); snprintf(ov, sizeof ov, "%sx%s%s", x, y, oval == 2 ? "r" : ""); }
@@ -905,6 +906,14 @@ struct RunSet {
 static void rs_print(const char *fmt, ...) {          /* a line run_set prints: gui_job passes each on as a "log" event */
     char t[4096]; va_list ap; va_start(ap, fmt); vsnprintf(t, sizeof t, fmt, ap); va_end(ap);
     for (char *l = t, *e; *l; l = e) { e = strchr(l, '\n'); char c = 0; if (e) { c = *e; *e = 0; } if (*l) ev("log", "s", "text", l); if (!e) break; *e = c; e++; }
+}
+/* settings "workers": "auto" (or 0 / "") = half the CPU cores, at most 4 (step 5 of the speed plan, 2026-11-22), else
+   the number given; at least 1. Bases built at once, and the choice cards drawn at once. */
+static int workers_auto(void) {
+    runner_cfg_init(); JV *w = cfg_get("workers"); int n;
+    if (!w || (w->t == 4 && (!strcmp(w->s, "auto") || !w->s[0] || !strcmp(w->s, "0"))) || (w->t == 3 && w->d == 0)) { int c = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) / 2; n = c > 4 ? 4 : c; }
+    else n = w->t == 3 ? (int)w->d : atoi(w->s);
+    return n < 1 ? 1 : n;
 }
 static void nm(const RunSet *rs, int n, char *out, size_t cap) { snprintf(out, cap, "%s_%smm_%02d", rs->style, rs->size_tag, n); }          /* run_set.nm for numbers given as 3,7,12 */
 static double base_limit(const RunSet *rs) { double f = (rs->SIZE / 30.0) * (rs->SIZE / 30.0); return cfg_num("base_limit_secs", 120) * (f > 1.0 ? f : 1.0); }
@@ -1579,7 +1588,7 @@ static int job_build(Args *a, const char *style) {
         make_dirs(rs.out);
         rs_print("seed   : %s   folder: %s", rs.salt, rs.out);
         rs.workers = cfg_bool("live", 0) ? 1 : 0;
-        if (!rs.workers) { JV *w = cfg_get("workers"); if (!w || (w->t == 4 && (!strcmp(w->s, "auto") || !w->s[0] || !strcmp(w->s, "0"))) || (w->t == 3 && w->d == 0)) { int c = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) / 2; rs.workers = c < 1 ? 1 : c > 4 ? 4 : c; }          /* step 5: half the cores, at most 4 bases at once (was a third, at most 12) */ else rs.workers = w->t == 3 ? (int)w->d : atoi(w->s); if (rs.workers < 1) rs.workers = 1; }
+        if (!rs.workers) rs.workers = workers_auto();          /* step 5: half the cores, at most 4 bases at once (was a third, at most 12) */
         rs.nums = nums[g]; rs.nnums = nn[g];
         /* the layout helpers' environment: gui_job's + run_set's + build_once's */
         EnvSet es[24]; int ne = 0;
