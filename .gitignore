@@ -34,6 +34,7 @@ cport/geos_static/lib/
 
 # built by cport/manifold_static/build_manifold.cmd (Manifold 3.5.4 + Clipper2, static): not kept in git
 cport/manifold_static/lib/
+cport/manifold_static/include_tbb/
 
 # the list of model packs and their licence notes: kept locally only (all CC0, no credit needed)
 models/SOURCES.md

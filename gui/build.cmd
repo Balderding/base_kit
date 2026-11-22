@@ -31,7 +31,7 @@ set KIT=%CP%\runner.c %CP%\draw2d.c %CP%\pipeline.c %CP%\stylefns.c %CP%\make.c 
 rem BBB_NK=1: the window's Nuklear face (gui\nk\PLAN.md), still one exe: Nuklear is compiled in
 set NKF=
 if "%BBB_NK%"=="1" set NKF=-DBBB_NK -Ink nk\nk_ui.c -lshlwapi
-clang %CLANG_FLAGS% -O2 -Wno-unused-function -Wno-unused-parameter -Wno-unsequenced -ffp-contract=off -fno-fast-math -mwindows -static -I%CP% -I%CP%\manifold_static\include -o "%OUT%" %NKF% bbb_kit.c live.c %KIT% bbb_kit.res -L%CP%\geos_static\lib -L%CP%\manifold_static\lib -lgeos_c -lgeos -lmanifoldc -lmanifold -lClipper2 -lstdc++ -lwinpthread -ld3d11 -ldxgi -ldxguid -luuid -lgdiplus -lole32 -lgdi32 -luser32 -lshell32 -lwinhttp -lbcrypt -lkernel32 -lm || exit /b 1
+clang %CLANG_FLAGS% -O2 -Wno-unused-function -Wno-unused-parameter -Wno-unsequenced -ffp-contract=off -fno-fast-math -mwindows -static -I%CP% -I%CP%\manifold_static\include -o "%OUT%" %NKF% bbb_kit.c live.c %KIT% %CP%\tbbcap.cpp -I%CP%\manifold_static\include_tbb bbb_kit.res -L%CP%\geos_static\lib -L%CP%\manifold_static\lib -lgeos_c -lgeos -lmanifoldc -lmanifold -lClipper2 -ltbb12 -lstdc++ -lwinpthread -ld3d11 -ldxgi -ldxguid -luuid -lgdiplus -lole32 -lgdi32 -luser32 -lshell32 -lwinhttp -lbcrypt -lkernel32 -lm || exit /b 1
 rem the model pictures from the exe just built (its own models and sizes; kept ones are not drawn again), into previews.bin;
 rem when they changed, linked once more so the exe carries them
 if "%PASS%"=="2" goto built

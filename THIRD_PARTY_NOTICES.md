@@ -8,6 +8,7 @@ the parts below. Their licence texts are in the `licenses` folder beside this fi
 | GEOS 3.14.1 (libgeos.org) | the geometry library, linked into the exe | GNU LGPL 2.1 | `licenses/GEOS-LGPL-2.1.txt` |
 | Manifold 3.5.4 (github.com/elalish/manifold) | joins the objects into the base as one solid (supports on, "Join into one solid"), linked into the exe | Apache 2.0 | `licenses/Manifold-Apache-2.0.txt` |
 | Clipper2 (github.com/AngusJohnson/Clipper2, commit 46f6391) | part of Manifold, linked into the exe | Boost Software License 1.0 | `licenses/Clipper2-BSL-1.0.txt` |
+| oneTBB 2022.3.0 (github.com/uxlfoundation/oneTBB) | lets Manifold join a base on several cores, linked into the exe | Apache 2.0 | `licenses/oneTBB-Apache-2.0.txt` |
 | DejaVu Sans glyphs | the small font of the report sheets (pixels made from the font) | Bitstream Vera / DejaVu licence | `licenses/DejaVu-fonts.txt` |
 | Silkscreen (The Silkscreen Project Authors) | the window's pixel font (pixels made from the font) | SIL Open Font License 1.1 | `docs/fonts/OFL.txt` |
 | mingw-w64 winpthreads | thread support, linked into the exe | MIT | `licenses/winpthreads.txt` |
