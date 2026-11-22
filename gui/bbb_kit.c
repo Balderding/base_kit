@@ -75,7 +75,13 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_BAR 0xFFC9D3E6u           /* label ink on a navy bar */
 #define C_STONEL 0xFF20242Bu        /* the stone texture's light and dark grain on the side panel */
 #define C_STONED 0xFF16181Eu
-enum { SIDE_W = 420, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
+/* resize plan R1 (2026-11-22): the side panel's width in design px (x SC on screen), dragged by the line between it and the
+   cards; double-click puts it back. Saved as sidew in bbb_kit.ini. SIDE_W stays the name every row uses. */
+enum { SIDE_W0 = 420, SIDE_MIN = 320 };
+static int sideW = SIDE_W0;
+static int divDrag, divHover;          /* R1: the line is being dragged / under the mouse */
+#define SIDE_W sideW
+enum { HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
 enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS,
        H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER, H_SQ };
@@ -93,7 +99,7 @@ enum { DESIGN_W = 1650, DESIGN_H = 1240 };          /* 1240 since 2026-11-21: th
 /* 2026-11-22: the scale follows the SCREEN size, not the side panel's full height (the panel scrolls): FIT_W x FIT_H is what
    a scale of 1 fills, so a maximized 1080p window is 1.0, 1440p about 1.35, 4K about 2; text stays a comfortable size */
 enum { FIT_W = 1650, FIT_H = 1000 };
-static double fit_sc(int w, int h) { double s = fmin(w / (double)FIT_W, h / (double)FIT_H); s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
+static double fit_sc(int w, int h) { double s = fmin(w / (double)(FIT_W - SIDE_W0 + sideW), h / (double)FIT_H);          /* R6: a wider side panel widens it */ s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
 static int sideOff, sideMax, hitDy, txtDy, titleH;          /* the side panel's scroll (px), how far it can go, and the shift its click areas get */
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200], batchFolder[64];          /* batchFolder: several sizes, the batch's picked_ folder name */
@@ -1141,6 +1147,7 @@ static void paint(HDC out, int W, int H) {
     }
     GdipResetWorldTransform(G); txtDy = hitDy = 0;
     if (sideMax > 0) { int th = (int)((double)H * H / (H + sideMax)), ty = (int)((double)sideOff / sideMax * (H - th)); fillrect(mx - S(7), 0, S(6), H, C_SIDE); rr(mx - S(6), ty + S(2), S(4), th - S(4), S(2), C_LINE, 0, 0); }          /* its scroll bar */
+    if (divHover || divDrag) fillrect(mx - S(1), 0, S(3), H, C_ACC);          /* R1: the line lit while it can be dragged */
 
 #else
     nkui_frame(); nk_side(H); nk_top(mx, mw); nkui_render(G); (void)y;          /* the side panel and the top row in Nuklear */
@@ -1443,6 +1450,15 @@ static void act2(int kind, int idx) {
     }
     redraw();
 }
+/* R1: the line between the side panel and the cards (a strip 4 px either side of it), and its width kept in bounds:
+   at least SIDE_MIN, at most what leaves the cards one column (196 + pads) */
+static int on_divider(int x, int y) { int mx = S(sideW); (void)y; return !showHelp && x >= mx - S(4) && x <= mx + S(4); }
+static void side_set(int w) {
+    RECT rc; int mxw; GetClientRect(hMain, &rc); mxw = (int)(rc.right / SC) - 260;
+    if (w > mxw) w = mxw;
+    if (w < SIDE_MIN) w = SIDE_MIN;
+    sideW = w;
+}
 static void hover_at(int x, int y) {
     int i, k = H_NONE, id = -1; POINT p = { x, y };
     for (i = nhit - 1; i >= 0; i--) if (PtInRect(&hits[i].r, p)) { k = hits[i].kind; id = hits[i].idx; break; }
@@ -1500,7 +1516,8 @@ static void hover_at(int x, int y) {
         }
         redraw();
     }
-    SetCursor(LoadCursor(NULL, k != H_NONE ? IDC_HAND : IDC_ARROW));
+    { int dv = on_divider(x, y); if (dv != divHover) { divHover = dv; redraw(); } }
+    SetCursor(LoadCursor(NULL, divDrag || divHover ? IDC_SIZEWE : k != H_NONE ? IDC_HAND : IDC_ARROW));
 }
 static void make_fonts(void) {
     HFONT *fs[] = { &fTitle, &fLabel, &fUI, &fSmall, &fBig, &fBtn, &fMono }; int px[] = { 19, 11, 13, 12, 18, 15, 12 }, wt[] = { 700, 600, 400, 400, 600, 600, 400 }, i;
@@ -1516,6 +1533,9 @@ static void ini(int save) {
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
+    if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcscpy(p, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
+    if (save) { swprintf(v, 16, L"%d", sideW); WritePrivateProfileStringW(L"window", L"sidew", v, p); }          /* R1 */
+    else sideW = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p);
     if (save) {          /* the window's size and place, so it opens next time the way it was left */
         WINDOWPLACEMENT wp; static const WCHAR *k[] = { L"left", L"top", L"right", L"bottom" }; LONG *e[4];
         memset(&wp, 0, sizeof wp); wp.length = sizeof wp; GetWindowPlacement(hMain, &wp); e[0] = &wp.rcNormalPosition.left; e[1] = &wp.rcNormalPosition.top; e[2] = &wp.rcNormalPosition.right; e[3] = &wp.rcNormalPosition.bottom;
@@ -1576,10 +1596,16 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == 5) { if (shrinkI < 0) KillTimer(h, 5); }
         else anim++;
         redraw(); return 0;
-    case WM_MOUSEMOVE: { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if ((w & MK_LBUTTON) && hovK == H_OBJ && hovI != selObj) act(H_OBJ, hovI); return 0; }          /* the slider follows a drag */
+    case WM_MOUSEMOVE: if (divDrag) { side_set((int)(GET_X_LPARAM(l) / SC + 0.5)); SetCursor(LoadCursor(NULL, IDC_SIZEWE)); redraw(); return 0; }          /* R1: the line follows the mouse */
+        { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if ((w & MK_LBUTTON) && hovK == H_OBJ && hovI != selObj) act(H_OBJ, hovI); return 0; }          /* the slider follows a drag */
     case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; redraw(); return 0;
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
-    case WM_LBUTTONDOWN: hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (hovK != H_NONE) act(hovK, hovI); return 0;
+    case WM_LBUTTONDBLCLK: if (on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l))) { side_set(SIDE_W0); SendMessageW(h, WM_SIZE, 0, 0); return 0; }          /* R1: back to the default */
+        /* any other double-click is a click, as it was before the window took double-clicks */
+    case WM_LBUTTONDOWN: if (on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l))) { divDrag = 1; SetCapture(h); redraw(); return 0; }          /* R1: drag the line */
+        hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (hovK != H_NONE) act(hovK, hovI); return 0;
+    case WM_LBUTTONUP: if (divDrag) { divDrag = 0; ReleaseCapture(); SendMessageW(h, WM_SIZE, 0, 0); return 0; }          /* R1: let go: the scale fits the new split */
+        break;
     case WM_MOUSEWHEEL:
         { POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) }; ScreenToClient(h, &pt); if (pt.x < S(SIDE_W) && sideMax > 0) { sideOff -= GET_WHEEL_DELTA_WPARAM(w) * S(90) / 120; if (sideOff < 0) sideOff = 0; if (sideOff > sideMax) sideOff = sideMax; redraw(); return 0; } }
         scrollY -= GET_WHEEL_DELTA_WPARAM(w) * S(90) / 120;
@@ -1621,7 +1647,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 #ifdef BBB_NK
         if (NK) { nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme); }
 #endif
-        } } redraw(); return 0; }
+        } side_set(sideW); } redraw(); return 0; }
     case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, 900, 560 };          /* as small as 900 x 560 px: the scale follows the window, the side panel scrolls */
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
     case 0x02E0: { RECT *r = (RECT *)l; SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
@@ -1685,7 +1711,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
 #endif
     wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
     { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) swprintf(sub, 300, L"%.290hs", kd_themes_note); }          /* review P2-3: what happened with themes.json, at start */
-    memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
+    memset(&wc, 0, sizeof wc); wc.style = CS_DBLCLKS; wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     if (selftest) ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
     hMain = CreateWindowExW(ex, L"bbb_kit", L"Balderding's Ballin Base Kit", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
@@ -1710,6 +1736,22 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         { MSG m2; while (PeekMessageW(&m2, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m2); DispatchMessageW(&m2); } }
         { char e[32]; int tw2, th2; if (GetEnvironmentVariableA("BBB_TEST_CLIENT", e, sizeof e) && sscanf(e, "%dx%d", &tw2, &th2) == 2) {          /* a test: the window's inside exactly this big (a screen size), one picture + the UI check, then quit */
             RECT wr = { 0, 0, tw2, th2 }; AdjustWindowRect(&wr, st, FALSE); SetWindowPos(hMain, NULL, 0, 0, wr.right - wr.left, wr.bottom - wr.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            { char e2[16]; if (GetEnvironmentVariableA("BBB_TEST_SIDEW", e2, sizeof e2)) { side_set(atoi(e2)); SendMessageW(hMain, WM_SIZE, 0, 0); } }          /* R1: the line here */
+            if (GetEnvironmentVariableA("BBB_TEST_DRAG", e, sizeof e)) {          /* R1: a drag sent to the window itself (no real mouse): press on the line, move, let go */
+                int x1, y1, x2, y2, before = sideW, want; FILE *tf; WCHAR p2[MAX_PATH];
+                if (sscanf(e, "%d,%d,%d,%d", &x1, &y1, &x2, &y2) == 4) {
+                    if (x1 < 0) x1 = S(sideW);          /* -1: on the line, wherever the scale put it */
+                    SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(x1, y1)); SendMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(x1, y1));
+                    double sc0 = SC; SendMessageW(hMain, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(x2, y2)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(x2, y2));
+                    int after = sideW, saved = -1, back = -1, def;
+                    { int keep = sideW; side_set((int)(x2 / sc0 + 0.5)); want = sideW; side_set(SIDE_W0); def = sideW; sideW = keep; }
+                    if (GetEnvironmentVariableA("BBB_TEST_INI", NULL, 0)) { ini(1); sideW = SIDE_W0; ini(0); saved = sideW; sideW = after; }          /* written, then read back */
+                    if (GetEnvironmentVariableA("BBB_TEST_DBLCLK", NULL, 0)) { SendMessageW(hMain, WM_LBUTTONDBLCLK, MK_LBUTTON, MAKELPARAM(S(sideW), y1)); back = sideW; }
+                    int ok = after == want && after != before && (saved < 0 || saved == after) && (back < 0 || back == def);
+                    swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
+                    if (tf) { fprintf(tf, "%s sidew %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
+                }
+            }
             capture(stShot); ui_check(L"screen"); return 0; } }
         if (GetEnvironmentVariableA("BBB_TEST_SEEDKEYS", NULL, 0)) {          /* a test: typing f, d, Enter in the seed box must not fire the shortcuts */
             int lf = lookFont, sd = showDetails, bz = busy, nc = ncell; WPARAM ks[3] = { 'F', 'D', VK_RETURN }, cs[3] = { 'f', 'd', 13 }; FILE *tf; WCHAR p2[MAX_PATH];
