@@ -1652,6 +1652,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     NK = nkui_init("Segoe UI", S(13)); nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme);
 #endif
     wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
+    { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) swprintf(sub, 300, L"%.290hs", kd_themes_note); }          /* review P2-3: what happened with themes.json, at start */
     memset(&wc, 0, sizeof wc); wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     if (selftest) ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;

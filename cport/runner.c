@@ -436,6 +436,7 @@ static DWORD WINAPI choice_worker(void *arg) {          /* one choices.py helper
     return 0;
 }
 static int job_choices(Args *a, const char *style) {
+    { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) ev("log", "s", "text", kd_themes_note); }          /* themes.json: say what was taken (review P2-3) */
     const char *size = opt(a, "--size", "30"), *detail = opt(a, "--detail", "mix"), *count_s = opt(a, "--count", "20");
     const char *mini = opt(a, "--mini", ""), *sup = opt(a, "--supports", ""), *scale_s = opt(a, "--scale", ""), *seed_s = opt(a, "--seed", "");
     const char *jobs_s = opt(a, "--jobs", ""), *px_s = opt(a, "--px", "360"), *obj_s = opt(a, "--obj", "");
@@ -1403,7 +1404,7 @@ static int job_build(Args *a, const char *style) {
             for (int i = 1; i <= cnt && i <= 1024; i++) nums[0][nn[0]++] = i;
         }
     }
-    { extern void kinds_init(void); extern char kd_themes_note[300]; kinds_init(); if (kd_themes_note[0]) ev("log", "s", "text", kd_themes_note); }          /* themes.json: say what was taken */
+    { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) ev("log", "s", "text", kd_themes_note); }          /* themes.json: say what was taken */
     if (!ng) { ev("error", "s", "text", "nothing was picked (give --picks seed:n,... or --count N [--seed word])"); return 2; }
     char ts[32], dest[MAX_PATH * 3]; strftime_now(ts, sizeof ts, "%Y%m%d_%H%M%S"); snprintf(dest, sizeof dest, "%s\\picked_%s", out_root(), ts); make_dirs(dest);
     ev("folder", "s", "folder", dest);

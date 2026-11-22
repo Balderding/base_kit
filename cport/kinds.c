@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <errno.h>
 #include "kinds.h"
 
 Kinds KD;
@@ -519,7 +520,7 @@ const KStyle *kd_style(const char *name) { int i; if (!name) return NULL; for (i
    { "graveyard": [ { "theme": "my plot", "subject": ..., "path": ..., "props": ..., ... }, ... ], ... }
    A theme with the name of a built-in one of that style takes its place; any other is added. The keys are those of the
    built-in themes (bbb_kit.exe --job themes writes them all to themes.builtin.json to copy from). */
-char kd_themes_note[300];          /* what happened with the file ("" = no file) */
+char kd_themes_note[600];          /* what happened with the file ("" = no file) */
 static void kd_exe_dir(char *out, size_t cap) {
     out[0] = 0;
 #ifdef _WIN32
@@ -527,36 +528,64 @@ static void kd_exe_dir(char *out, size_t cap) {
       if (n && n < sizeof p) { p[n] = 0; s = strrchr(p, '\\'); if (s) *s = 0; snprintf(out, cap, "%s", p); } }
 #endif
 }
-static char *kd_read_text(const char *path) {
+static int kd_read_text(const char *path, char **out, char *why, size_t wcap) {          /* 1 read, 0 no file, -1 there but unusable (why) */
     FILE *f = fopen(path, "rb"); long n; char *b;
-    if (!f) return NULL;
+    *out = NULL;
+    if (!f) { FILE *g = fopen(path, "r"); if (g) fclose(g); if (errno == ENOENT) return 0; snprintf(why, wcap, "could not be read"); return -1; }
     fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
-    if (n < 0 || n > (16 << 20)) { fclose(f); return NULL; }
+    if (n < 0 || n > (16 << 20)) { fclose(f); snprintf(why, wcap, "too big (over 16 MB)"); return -1; }
     b = (char *)malloc((size_t)n + 1); if (b && fread(b, 1, (size_t)n, f) != (size_t)n) { free(b); b = NULL; }
-    fclose(f); if (b) b[n] = 0;
-    return b;
+    fclose(f); if (!b) { snprintf(why, wcap, "could not be read"); return -1; }
+    b[n] = 0; *out = b;
+    return 1;
+}
+/* review P2-3 (2026-11-22): one theme checked before it is taken; returns NULL when fine, else what is wrong */
+static const char *kd_theme_bad(const KVal *t, char *why, size_t cap) {
+    static const char *TXT[] = { "theme", "subject", "path", "props", "also" }; int i, j;
+    if (t->t != KV_DICT) return "each theme must be { \"theme\": \"name\", ... }";
+    for (i = 0; i < t->n; i++) {
+        const char *k = t->k[i]; const KVal *v = t->v[i]; int known = 0;
+        for (j = 0; j < 5; j++) if (!strcmp(k, TXT[j])) { known = 1; if (v->t != KV_STR) { snprintf(why, cap, "\"%s\" must be text", k); return why; } }
+        if (!strcmp(k, "ban")) { known = 1; if (v->t != KV_LIST) { snprintf(why, cap, "\"ban\" must be a list of text"); return why; }
+            for (j = 0; j < v->n; j++) if (v->v[j]->t != KV_STR) { snprintf(why, cap, "\"ban\" must be a list of text"); return why; } }
+        if (!strcmp(k, "pal")) { known = 1; if (v->t != KV_DICT) { snprintf(why, cap, "\"pal\" must be { \"part\": \"material\" }"); return why; }
+            for (j = 0; j < v->n; j++) if (v->v[j]->t != KV_STR) { snprintf(why, cap, "\"pal\" \"%s\" must be text", v->k[j]); return why; } }
+        if (!strcmp(k, "clutter")) { known = 1; if (v->t != KV_DICT) { snprintf(why, cap, "\"clutter\" must be { \"debris\": number, ... }"); return why; }
+            for (j = 0; j < v->n; j++) {
+                if (strcmp(v->k[j], "debris") && strcmp(v->k[j], "growth") && strcmp(v->k[j], "marks")) { snprintf(why, cap, "\"clutter\" has \"%s\" (it knows debris, growth, marks)", v->k[j]); return why; }
+                if (v->v[j]->t != KV_INT && v->v[j]->t != KV_FLOAT) { snprintf(why, cap, "\"clutter\" \"%s\" must be a number", v->k[j]); return why; } } }
+        if (!known) { snprintf(why, cap, "unknown key \"%s\" (it knows theme, subject, path, props, also, ban, pal, clutter)", k); return why; }
+    }
+    { const char *nm = kv_s(t, "theme"); if (!nm || !nm[0]) return "it has no \"theme\" name"; }
+    return NULL;
 }
 static void kd_user_themes(void) {
-    char dir[1024], path[1100], err[200] = ""; char *txt; KVal *U; int i, j, k, added = 0, replaced = 0, unknown = 0;
+    char dir[1024], path[1100], err[200] = "", why[300] = "", first[300] = ""; char *txt; KVal *U; int i, j, k, added = 0, replaced = 0, skipped = 0, rd;
     kd_themes_note[0] = 0;
     { const char *e = getenv("BBB_THEMES"); if (e && *e) snprintf(path, sizeof path, "%s", e); else { kd_exe_dir(dir, sizeof dir); if (!dir[0]) return; snprintf(path, sizeof path, "%s\\themes.json", dir); } }
-    if (!(txt = kd_read_text(path))) return;
+    rd = kd_read_text(path, &txt, why, sizeof why);
+    if (rd == 0) return;
+    if (rd < 0) { snprintf(kd_themes_note, sizeof kd_themes_note, "%s not used: %s", path, why); return; }
     U = kv_parse_json_e(txt, err, sizeof err); free(txt);
-    if (!U || U->t != KV_DICT) { snprintf(kd_themes_note, sizeof kd_themes_note, "themes.json not used: %s", U ? "it must be { \"style\": [ themes ] }" : err); if (U) kv_free(U); return; }
+    if (!U || U->t != KV_DICT) { snprintf(kd_themes_note, sizeof kd_themes_note, "%s not used: %s", path, U ? "it must be { \"style\": [ themes ] }" : err); if (U) kv_free(U); return; }
     for (i = 0; i < U->n; i++) {
         KStyle *st = NULL; KVal *l = U->v[i];
         for (j = 0; j < KD.nstyles; j++) if (!strcmp(KD.styles[j].name, U->k[i])) st = &KD.styles[j];
-        if (!st || l->t != KV_LIST) { unknown++; continue; }
+        if (!st) { skipped++; if (!first[0]) snprintf(first, sizeof first, "\"%s\" is not a style", U->k[i]); continue; }
+        if (l->t != KV_LIST) { skipped++; if (!first[0]) snprintf(first, sizeof first, "%s: must be a list of themes [ ... ]", U->k[i]); continue; }
         if (!st->themes) st->themes = kv_list();
         for (j = 0; j < l->n; j++) {
-            KVal *t = l->v[j]; const char *nm = t->t == KV_DICT ? kv_s(t, "theme") : NULL; int at = -1;
-            if (!nm) { unknown++; continue; }
+            KVal *t = l->v[j]; const char *bad = kd_theme_bad(t, why, sizeof why), *nm; int at = -1;
+            if (bad) { const char *n0 = t->t == KV_DICT ? kv_s(t, "theme") : NULL; skipped++;
+                if (!first[0]) snprintf(first, sizeof first, "%s theme \"%s\": %s", U->k[i], n0 ? n0 : "?", bad); continue; }
+            nm = kv_s(t, "theme");
             for (k = 0; k < st->themes->n; k++) { const char *o = kv_s(st->themes->v[k], "theme"); if (o && !strcmp(o, nm)) at = k; }
             l->v[j] = NULL;          /* taken over (U is kept: nothing frees it) */
             if (at >= 0) { st->themes->v[at] = t; replaced++; } else { kv_push(st->themes, t); added++; }
         }
     }
-    snprintf(kd_themes_note, sizeof kd_themes_note, "themes.json: %d theme%s added, %d replaced%s", added, added == 1 ? "" : "s", replaced, unknown ? " (some entries skipped: an unknown style or a theme without \"theme\")" : "");
+    if (skipped) snprintf(kd_themes_note, sizeof kd_themes_note, "%s: %d theme%s added, %d replaced, %d skipped: %s%s", path, added, added == 1 ? "" : "s", replaced, skipped, first, skipped > 1 ? " (and more)" : "");
+    else snprintf(kd_themes_note, sizeof kd_themes_note, "%s: %d theme%s added, %d replaced", path, added, added == 1 ? "" : "s", replaced);
 }
 /* every style's themes as JSON (bbb_kit.exe --job themes) */
 static void kd_jw(FILE *f, const KVal *x, int ind) {

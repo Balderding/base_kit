@@ -87,7 +87,7 @@ typedef struct {
 extern Kinds KD;
 
 void kinds_init(void);                        /* once; again does nothing */
-extern char kd_themes_note[300];              /* themes.json beside the exe: what was taken ("" = no file) */
+extern char kd_themes_note[600];              /* themes.json beside the exe: what was taken ("" = no file) */
 int kd_themes_write(const char *path);        /* every style's themes as JSON (--job themes); 0 = written */
 void kinds_layout_hook(const char *style);    /* style_blight / style_obelis _register at their layout start */
 void kinds_install_features(void);            /* features.install: its colours and the "<floor>_p" names (in the order the
