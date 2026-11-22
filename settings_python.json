@@ -1,0 +1,13 @@
+{
+  "solidcraft_cli": "O:\\appsnotonc\\solidcraft\\solidcraft-cli.exe",
+  "slow_step_secs": 60,
+  "step_limit_per_command_secs": 1.5,
+  "trim_limit_secs": 10,
+  "chamfer_budget_secs": 45,
+  "merge_joins": true,
+  "merge_chunk": 12,
+  "join_on_parent": true,
+  "engine": "mesh",
+  "mesh_keep_running": true,
+  "models_download": true
+}

@@ -583,6 +583,7 @@ lower because the floor pattern is shared by design.
 ## 6. Settings (settings.json)
 
 Everything is optional.
+The old Python kit's own keys (the SolidCraft path, its merge and chamfer timings, `engine`, `models_download`) are in `settings_python.json`; bbb_kit.exe does not use them.
 
 | Setting | Default | What it does |
 |---|---|---|

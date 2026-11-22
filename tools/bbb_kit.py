@@ -37,7 +37,10 @@ kit(f"styles to do    : {', '.join(styles)}  ({nplans} plans asked for per style
 kit(f"designer server : {URL}")
 MODELS_OPT = opt("--models", "on")
 try:          # the public-domain model packs: said out loud what is fetched and from where, then fetched once (tools\get_models.py)
-    with open(os.path.join(KIT, "settings.json"), encoding="utf-8") as _fh: _dl = json.load(_fh).get("models_download", True)
+    _dl = True
+    for _nm in ("settings_python.json", "settings.json"):          # models_download lives in settings_python.json since 2026-11-22
+        if os.path.exists(os.path.join(KIT, _nm)):
+            with open(os.path.join(KIT, _nm), encoding="utf-8") as _fh: _dl = json.load(_fh).get("models_download", _dl)
 except Exception: _dl = True
 if MODELS_OPT != "off" and _dl:
     try:

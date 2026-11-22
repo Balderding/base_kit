@@ -21,9 +21,10 @@ _DEFAULTS = {
 
 def load():
     cfg = dict(_DEFAULTS)
-    p = os.path.join(HERE, "settings.json")
-    if os.path.exists(p):
-        with open(p, encoding="utf-8") as f: cfg.update(json.load(f))
+    for name in ("settings_python.json", "settings.json"):          # the Python kit's own keys (2026-11-22), then the shared ones (which win)
+        p = os.path.join(HERE, name)
+        if os.path.exists(p):
+            with open(p, encoding="utf-8") as f: cfg.update(json.load(f))
     if not os.path.isabs(cfg["out_folder"]): cfg["out_folder"] = os.path.join(HERE, cfg["out_folder"])
     os.makedirs(cfg["out_folder"], exist_ok=True)
     if str(cfg.get("workers", "auto")).strip().lower() in ("auto", "0", ""):          # "auto": a third of the cores, 2 to 12 (each worker builds one base at a time)
