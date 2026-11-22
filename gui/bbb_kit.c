@@ -77,7 +77,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_STONED 0xFF16181Eu
 /* resize plan R1 (2026-11-22): the side panel's width in design px (x SC on screen), dragged by the line between it and the
    cards; double-click puts it back. Saved as sidew in bbb_kit.ini. SIDE_W stays the name every row uses. */
-enum { SIDE_W0 = 420, SIDE_MIN = 320 };
+enum { SIDE_W0 = 420, SIDE_MIN = 320, SIDE_FOOT = 92 };          /* SIDE_FOOT: R4, the side panel's footer (Show / build straight away), design px */
 static int sideW = SIDE_W0, sideWant = SIDE_W0;          /* sideWant: what the user set (kept, saved); sideW: that, kept in bounds for this window */
 enum { DET_H0 = 170, DET_MIN = 110 };
 static int detailsH = DET_H0, detWant = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; detWant saved as detailsh */
@@ -527,7 +527,8 @@ static void txt(const WCHAR *s, int x, int y, int w, int h, HFONT f, ARGB c, UIN
     }
     DrawTextW(DC, s, -1, &r, fl | DT_NOPREFIX);
 }
-static void hit(int x, int y, int w, int h, int kind, int idx) { y += hitDy; if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
+static int hitClip;          /* R4: while the side panel's rows are drawn: the footer's top; a click area under it is cut there (the footer covers it) */
+static void hit(int x, int y, int w, int h, int kind, int idx) { y += hitDy; if (hitClip && x < hitClip >> 16) { int cy = hitClip & 0xFFFF; if (y >= cy) return; if (y + h > cy) h = cy - y; } if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
 static int hov(int kind, int idx) { return hovK == kind && hovI == idx; }
 
 /* ---------- the pixel drawing kit: boxes with notched corners and a bevel, discs, dither textures made in code ----------
@@ -1074,6 +1075,7 @@ static void paint(HDC out, int W, int H) {
 
 #ifndef BBB_NK
     if (sideOff > sideMax) sideOff = sideMax; if (sideOff < 0) sideOff = 0;          /* never past the end (sideMax from the last paint) */
+    hitClip = (mx << 16) | ((H - S(SIDE_FOOT)) & 0xFFFF);          /* R4: the rows' click areas stop at the footer */
     GdipTranslateWorldTransform(G, 0, (REAL)-sideOff, MatrixOrderAppend); txtDy = hitDy = -sideOff;          /* GDI+ shapes by the transform, GDI text and click areas by the same shift */          /* the side panel, scrolled */
     /* the left side: what to make */
     if (lookFont && pick_spec(2, L"Balderding's Ballin Base Kit", S(SIDE_W - 24)) < 3 && pick_spec(2, L"Balderding's Ballin", S(SIDE_W - 24)) >= 3) {          /* the pixel title: on two lines, so it can be big */
@@ -1148,20 +1150,25 @@ static void paint(HDC out, int W, int H) {
         section(L"SPEED", x0, y, wAll, S(18)); y += S(20);
         chip("CPU threads", x0, y, half, S(24), spThr, H_SPEED, 0); chip("Video card", x0 + half + S(6), y, wAll - half - S(6), S(24), spGpu, H_SPEED, 1); y += S(34);
     }
-    swprintf(b, 200, ncell ? L"Show %d new choices" : L"Show %d choices", selCount);
-    button(b, S(16), y, S(SIDE_W - 32), S(40), busy ? 3 : (!np ? 1 : 0), H_SHOW); y += S(46);
-    { int ns = 0, q; for (q = 0; q < NSIZES; q++) ns += (sizeMask >> q) & 1u;
-      if (sizeMulti && ns > 1) swprintf(b, 200, L"Or build %d of each of %d sizes straight away", selCount, ns);
-      else swprintf(b, 200, selCount == 1 ? L"Or build 1 straight away" : L"Or build %d straight away", selCount); }
-    button(b, S(16), y, S(SIDE_W - 32), S(30), busy ? 3 : 0, H_QUICK);
     {          /* the panel must fit: if the full size runs past the bottom, draw it tight; back to full size when it fits again */
-        int need = y + S(30) + S(8);
+        int need = y + S(4) + S(SIDE_FOOT);          /* R4: the rows, then the footer with Show / build straight away under them */
         if (!sideTight) { sideNeed = need; if (need > H) { sideTight = 1; InvalidateRect(hMain, NULL, FALSE); } }
         else if (sideNeed <= H) { sideTight = 0; InvalidateRect(hMain, NULL, FALSE); }
         sideMax = sideTight && need > H ? need - H + S(8) : 0; if (sideOff > sideMax) sideOff = sideMax;          /* still too tall when tight: it scrolls */
     }
-    GdipResetWorldTransform(G); txtDy = hitDy = 0;
-    if (sideMax > 0) { int th = (int)((double)H * H / (H + sideMax)), ty = (int)((double)sideOff / sideMax * (H - th)); fillrect(mx - S(7), 0, S(6), H, C_SIDE); rr(mx - S(6), ty + S(2), S(4), th - S(4), S(2), C_LINE, 0, 0); }          /* its scroll bar */
+    GdipResetWorldTransform(G); txtDy = hitDy = 0; hitClip = 0;
+    {          /* R4 (2026-11-22): Show and Build straight away in a footer of the side panel that does not scroll: always in sight */
+        int fh = S(SIDE_FOOT), f0 = H - fh, by = f0 + S(10);
+        fillrect(0, f0, mx, fh, C_SIDE); if (lookPix && lookTex) texfill(0, f0, mx, fh, 2, C_STONEL, 0);
+        fillrect(S(16), f0, S(SIDE_W - 32), lookPix ? PX : 1, C_LINE);
+        swprintf(b, 200, ncell ? L"Show %d new choices" : L"Show %d choices", selCount);
+        button(b, S(16), by, S(SIDE_W - 32), S(40), busy ? 3 : (!np ? 1 : 0), H_SHOW); by += S(46);
+        { int ns = 0, q; for (q = 0; q < NSIZES; q++) ns += (sizeMask >> q) & 1u;
+          if (sizeMulti && ns > 1) swprintf(b, 200, L"Or build %d of each of %d sizes straight away", selCount, ns);
+          else swprintf(b, 200, selCount == 1 ? L"Or build 1 straight away" : L"Or build %d straight away", selCount); }
+        button(b, S(16), by, S(SIDE_W - 32), S(30), busy ? 3 : 0, H_QUICK);
+    }
+    if (sideMax > 0) { int Hs = H - S(SIDE_FOOT), th = (int)((double)Hs * Hs / (Hs + sideMax)), ty = (int)((double)sideOff / sideMax * (Hs - th)); fillrect(mx - S(7), 0, S(6), Hs, C_SIDE); rr(mx - S(6), ty + S(2), S(4), th - S(4), S(2), C_LINE, 0, 0); }          /* its scroll bar, above the footer */
     if (divHover == 1 || divDrag == 1) fillrect(mx - S(1), 0, S(3), H, C_ACC);          /* R1: the line lit while it can be dragged */
 
 #else
@@ -1710,6 +1717,14 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 #endif
         } side_fit(); det_fit(); } redraw(); return 0; }          /* R1/R2: what was asked, fitted to this size */
     case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, 900, 560 };          /* as small as 900 x 560 px: the scale follows the window, the side panel scrolls */
+        {   /* R5: at the smallest scale (0.6): the side panel at its narrowest + what the card side needs; the top, one card row,
+               the bottom bar and the side panel's footer with a little of its rows above; never under 900 x 560 */
+            double s0 = 0.6, k = SC; int w, hh;
+            SC = s0; w = (int)((SIDE_MIN + main_need()) * s0 + 0.5); SC = k;
+            hh = (int)((HEAD_H + STRIP_H + 196 + 40 + 36 + FOOT_H) * s0 + 0.5); if (hh < (int)((SIDE_FOOT + 240) * s0)) hh = (int)((SIDE_FOOT + 240) * s0);
+            if (w > r.right) r.right = w;
+            if (hh > r.bottom) r.bottom = hh;
+        }
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
     case 0x02E0: { RECT *r = (RECT *)l; SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
     case WM_DESTROY: if (hJob) TerminateJobObject(hJob, 1); if (!selftest) ini(1); PostQuitMessage(0); return 0;
@@ -1819,6 +1834,14 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
                     if (tf) { fprintf(tf, "%s %s %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", which == 2 ? "detailsh" : which == 1 ? "sidew" : "no line at the press:", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
                 }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_FOOT", NULL, 0)) {          /* R4: Show and Build straight away drawn fully inside the window */
+                FILE *tf; WCHAR p2[MAX_PATH]; RECT cr; int k, show = 0, quick = 0; GetClientRect(hMain, &cr); capture(NULL);
+                for (k = 0; k < nhit; k++) { RECT q = hits[k].r; int in = q.left >= 0 && q.top >= 0 && q.right <= cr.right && q.bottom <= cr.bottom;
+                    if (hits[k].kind == H_SHOW) show = in ? 1 : -1;
+                    if (hits[k].kind == H_QUICK) quick = in ? 1 : -1; }
+                swprintf(p2, MAX_PATH, L"%ls.foot.txt", stShot); tf = _wfopen(p2, L"w");
+                if (tf) { fprintf(tf, "%s show %d quick %d side_max %d window %ldx%ld" "\n", show == 1 && quick == 1 ? "OK" : "FAIL", show, quick, sideMax, cr.right, cr.bottom); fclose(tf); }
             }
             if (GetEnvironmentVariableA("BBB_TEST_TIP", NULL, 0)) {          /* R3: the cut labels, and the first one's tooltip after a (sent) rest of the mouse */
                 FILE *tf; WCHAR p2[MAX_PATH]; int n0;
