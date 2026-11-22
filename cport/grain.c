@@ -32,9 +32,17 @@ static int is_flat(const double *v, const int *t) {          /* a horizontal fac
     if (!(l > 1e-12 && nz / l > 0.99995)) return 0;
     if (GO && GO->mask) {
         int i = (int)floor(((a[0] + b[0] + c[0]) / 3 - GO->mx0) / GO->mstep), j = (int)floor(((a[1] + b[1] + c[1]) / 3 - GO->my0) / GO->mstep);
-        if (i >= 0 && j >= 0 && i < GO->mw && j < GO->mh && GO->mask[(size_t)j * GO->mw + i]) return 0;
+        if (i >= 0 && j >= 0 && i < GO->mw && j < GO->mh && GO->mask[(size_t)j * GO->mw + i] == GT_SMOOTH) return 0;
     }
     return 1;
+}
+static int tex_at(double x, double y, double *ang) {          /* the texture under a point (GT_*), and a plank's direction */
+    int t = GO->deftex ? GO->deftex : GT_SOIL; *ang = 0;
+    if (GO->mask) {
+        int i = (int)floor((x - GO->mx0) / GO->mstep), j = (int)floor((y - GO->my0) / GO->mstep);
+        if (i >= 0 && j >= 0 && i < GO->mw && j < GO->mh) { size_t q = (size_t)j * GO->mw + i; int c = GO->mask[q]; if (c) t = c; if (GO->ang) *ang = GO->ang[q] * 3.14159265358979 / 180.0; }
+    }
+    return t;
 }
 static double d2(const double *v, int a, int b) { double x = v[3 * a] - v[3 * b], y = v[3 * a + 1] - v[3 * b + 1], z = v[3 * a + 2] - v[3 * b + 2]; return x * x + y * y + z * z; }
 
@@ -50,6 +58,35 @@ static double vnoise(double x, double y) {
     double sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
     double a = lat(ix, iy), b = lat(ix + 1, iy), c = lat(ix, iy + 1), d = lat(ix + 1, iy + 1);
     return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
+}
+
+/* round stones on a grid: each cell of size cs may hold one (chance p), radius r0..r1 (times cs); 0..1, a dome */
+static double pebbles(double x, double y, double cs, double p, double r0, double r1, uint32_t salt) {
+    int ix = (int)floor(x / cs), iy = (int)floor(y / cs); double best = 0;
+    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+        int cx = ix + dx, cy = iy + dy; uint32_t h = (uint32_t)cx * 0x8da6b343u ^ (uint32_t)cy * 0xd8163841u ^ (SEED ^ salt) * 0xcb1ab31fu;
+        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+        if ((h & 0xffff) / 65536.0 >= p) continue;
+        { uint32_t h2 = h * 0x27d4eb2fu ^ (h >> 16); double px = (cx + 0.15 + 0.7 * ((h2 & 0xff) / 255.0)) * cs, py = (cy + 0.15 + 0.7 * (((h2 >> 8) & 0xff) / 255.0)) * cs, r = (r0 + (r1 - r0) * (((h2 >> 16) & 0xff) / 255.0)) * cs;
+          double d = hypot(x - px, y - py); if (d < r) { double b = sqrt(1 - (d / r) * (d / r)); if (b > best) best = b; } }
+    }
+    return best;
+}
+/* review N2 (2026-11-22): the height pattern of one texture at (x,y), about -1..1 (times amp) */
+static double tex_height(int t, double x, double y, double ang, double w1, double w2, double w3, int coarse) {
+    double n1 = vnoise(x / w1, y / w1), n2 = vnoise(x / w2 + 17.3, y / w2 - 5.1), n3 = vnoise(x / w3 - 31.7, y / w3 + 9.4);
+    double soil = coarse ? 0.65 * n1 + 0.35 * n2 : 0.55 * n1 + 0.30 * n2 + 0.15 * n3, cs = coarse ? 1.0 : 0.7;
+    switch (t) {
+    case GT_MUD: return 0.55 * vnoise(x / (1.4 * w1), y / (1.4 * w1)) + 0.15 * n2;          /* soft and slow */
+    case GT_SAND: return 0.3 * soil + 1.3 * pebbles(x, y, 2.6 * cs, 0.35, 0.18, 0.32, 0x51u) - 0.15;          /* fine ground, a few pebbles */
+    case GT_GRAVEL: return 0.25 * soil + 1.2 * pebbles(x, y, 1.5 * cs, 0.9, 0.25, 0.42, 0x6au) - 0.45;          /* stones packed together */
+    case GT_ASH: return 0.45 * soil + 0.9 * pebbles(x, y, 3.2 * cs, 0.2, 0.15, 0.3, 0x7bu) - 0.1;          /* soft drifts, a few clinkers */
+    case GT_PLANK: {          /* wood grain: lines along the plank, gently wandering */
+        double u = x * cos(ang) + y * sin(ang), v = -x * sin(ang) + y * cos(ang), sp = coarse ? 1.3 : 0.7, g = sin(3.14159265 * (v + 0.35 * vnoise(u / 5.0, v / 2.0)) / sp);
+        return 0.5 - 1.1 * g * g * g * g + 0.1 * n2; }
+    case GT_STONE: return 0.15 * soil - 1.2 * pebbles(x, y, 2.2 * cs, 0.3, 0.12, 0.22, 0x8cu);          /* worn stone: small pits */
+    default: return soil;
+    }
 }
 
 /* ---------------------------------------------------------------- distance to an area's edge (Dijkstra over the edges) */
@@ -158,8 +195,7 @@ int grain_apply(double **vp, int *nvp, int **fp, int *ntp, const GrainOpt *o, ui
                 if (!flat[i] || edge[i]) continue;
                 s = dist[i] >= FADE ? 1.0 : dist[i] / FADE; s = s * s * (3 - 2 * s);
                 x = v[3 * i]; y = v[3 * i + 1];
-                n = o->coarse ? 0.65 * vnoise(x / w1, y / w1) + 0.35 * vnoise(x / w2 + 17.3, y / w2 - 5.1)          /* FDM: no octave finer than about 2 points */
-                              : 0.55 * vnoise(x / w1, y / w1) + 0.30 * vnoise(x / w2 + 17.3, y / w2 - 5.1) + 0.15 * vnoise(x / w3 - 31.7, y / w3 + 9.4);
+                { double an; int tx = tex_at(x, y, &an); n = tex_height(tx, x, y, an, w1, w2, w3, o->coarse); }          /* FDM: no octave finer than about 2 points */
                 v[3 * i + 2] += amp * s * n; moved++;
             }
         }

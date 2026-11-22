@@ -967,24 +967,47 @@ static int shot_png_col(const Mesh *soup, const char *png, int w, int h, double 
 
 /* one base, mesher.build + mesher serve's picture: the report r (a JSON object as Sb text) or an error */
 typedef struct { char *error; double secs; JV head; char path[MAX_PATH * 3], mesher[128], pictures[200], note[200]; int cells, tris, watertight, pinched; double top_mm; Sb skipped; } Built;
-/* review P2-1 (2026-11-22): where grain may go. Ground and ground-like patches (mud, earth, sand ...) yes; water and
-   the like stay smooth (gloss, resin), and the tops of objects (headstones, slabs, planks, bones) keep their own look.
-   A grid of 0.1 mm cells over the base, 1 = no grain, from the scene's shapes (scene -> mm: x * sc + tx). */
-static int grain_ground_kind(const char *k) {
-    static const char *G[] = { "mud", "earth", "grit", "sand", "soil", "dirt", "ash", "gravel", "rubble", "scree", "dust", "silt", "loam", "clay", "peat", "snow", "mound", "heap", "bank", "ground", "rut", "crack", "pit", "glyph", "seam", "mudcrack", NULL };
-    for (int i = 0; G[i]; i++) if (!strcmp(k, G[i])) return 1;
-    return 0;
+/* review P2-1 + N2 (2026-11-22): where grain goes and which texture. The base's open ground gets its style's texture;
+   ground-like patches (mud, sand, grit ...) their own; planks a wood grain along them; stone slabs and headstones small
+   pits; water and the like stay smooth (gloss, resin); every other object keeps its own top. A grid of 0.1 mm cells
+   over the base (scene -> mm: x * sc + tx). */
+static int grain_op_tex(const char *k) {
+    static const struct { const char *w; int t; } M[] = {
+        { "mud", GT_MUD }, { "sand", GT_SAND }, { "grit", GT_GRAVEL }, { "gravel", GT_GRAVEL }, { "rubble", GT_GRAVEL }, { "scree", GT_GRAVEL },
+        { "ash", GT_ASH }, { "cinder", GT_ASH }, { "earth", GT_SOIL }, { "soil", GT_SOIL }, { "dirt", GT_SOIL }, { "loam", GT_SOIL }, { "clay", GT_SOIL },
+        { "peat", GT_SOIL }, { "silt", GT_SOIL }, { "dust", GT_SOIL }, { "mound", GT_SOIL }, { "heap", GT_SOIL }, { "bank", GT_SOIL }, { "snow", GT_MUD },
+        { "plank", GT_PLANK }, { "board", GT_PLANK }, { "deck", GT_PLANK }, { "wood", GT_PLANK }, { "crate", GT_PLANK },
+        { "slab", GT_STONE }, { "flag", GT_STONE }, { "paving", GT_STONE }, { "tomb", GT_STONE }, { "headstone", GT_STONE }, { "grave", GT_STONE },
+        { "step", GT_STONE }, { "altar", GT_STONE }, { "plinth", GT_STONE }, { "tile", GT_STONE }, { NULL, 0 } };
+    for (int i = 0; M[i].w; i++) if (strstr(k, M[i].w)) return M[i].t;
+    return GT_SMOOTH;
 }
 static int grain_smooth_kind(const char *k) {          /* ground cuts that stay smooth */
-    static const char *W[] = { "water", "ice", "pool", "pond", "puddle", "lava", "acid", "oil", "tar", "slime", "blood", "metal", "plate", "grate", "tile", "plank", "slab", "flag", "flagstone", "paving", "floor", NULL };
+    static const char *W[] = { "water", "ice", "pool", "pond", "puddle", "lava", "acid", "oil", "tar", "slime", "blood", "metal", "plate", "grate", NULL };
     for (int i = 0; W[i]; i++) if (strstr(k, W[i])) return 1;
     return 0;
 }
-static void grain_fill(unsigned char *g, int w, int h, double x0, double y0, double st, const D2Poly *p, double sc, double tx, double ty) {
+static int grain_style_tex(const char *st) {          /* each style's own ground (settings "ground_texture" wins: soil mud sand gravel ash) */
+    static const struct { const char *s; int t; } M[] = {
+        { "mine", GT_GRAVEL }, { "corridor", GT_GRAVEL }, { "urban", GT_GRAVEL }, { "fortress", GT_GRAVEL }, { "ferrum", GT_GRAVEL }, { "trederra", GT_GRAVEL },
+        { "sundered", GT_GRAVEL }, { "dungeon", GT_GRAVEL }, { "temple", GT_GRAVEL },
+        { "badlands", GT_SAND }, { "frontier", GT_SAND }, { "coast", GT_SAND }, { "maahl", GT_SAND }, { "obelis", GT_SAND }, { "targa", GT_SAND },
+        { "swamp", GT_MUD }, { "infestation", GT_MUD }, { "cynder", GT_ASH }, { "ashveil", GT_ASH }, { NULL, 0 } };
+    static const char *NM[] = { "", "soil", "mud", "sand", "gravel", "ash" };
+    const char *o = cfg_str("ground_texture", "");
+    for (int i = 1; i <= 5; i++) if (!strcmp(o, NM[i])) return i;
+    for (int i = 0; M[i].s; i++) if (!strcmp(st, M[i].s)) return M[i].t;
+    return GT_SOIL;
+}
+static void grain_fill(unsigned char *g, unsigned char *ga, int w, int h, double x0, double y0, double st, const D2Poly *p, double sc, double tx, double ty, int val) {
     if (p->type != 1 || p->nr < 1) return;
-    int tot = 0; for (int r = 0; r < p->nr; r++) tot += p->len[r];
-    double bx0 = 1e30, by0 = 1e30, bx1 = -1e30, by1 = -1e30;
-    for (int i = 0; i < p->len[0]; i++) { double x = p->xy[2 * i] * sc + tx, y = p->xy[2 * i + 1] * sc + ty; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+    double bx0 = 1e30, by0 = 1e30, bx1 = -1e30, by1 = -1e30, bestl = -1, deg = 0;
+    for (int i = 0; i < p->len[0]; i++) {
+        double x = p->xy[2 * i] * sc + tx, y = p->xy[2 * i + 1] * sc + ty, xn = p->xy[2 * ((i + 1) % p->len[0])] * sc + tx, yn = p->xy[2 * ((i + 1) % p->len[0]) + 1] * sc + ty, l = hypot(xn - x, yn - y);
+        if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
+        if (l > bestl) { bestl = l; deg = atan2(yn - y, xn - x) * 180.0 / 3.14159265358979; }          /* a plank runs along its longest side */
+    }
+    while (deg < 0) deg += 180; while (deg >= 180) deg -= 180;
     int i0 = (int)floor((bx0 - x0) / st), i1 = (int)ceil((bx1 - x0) / st), j0 = (int)floor((by0 - y0) / st), j1 = (int)ceil((by1 - y0) / st);
     if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0; if (i1 > w - 1) i1 = w - 1; if (j1 > h - 1) j1 = h - 1;
     for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) {
@@ -997,20 +1020,19 @@ static void grain_fill(unsigned char *g, int w, int h, double x0, double y0, dou
             }
             at += n;
         }
-        if (in) g[(size_t)j * w + i] = 1;
+        if (in) { g[(size_t)j * w + i] = (unsigned char)val; if (ga) ga[(size_t)j * w + i] = (unsigned char)deg; }
     }
-    (void)tot;
 }
-static unsigned char *grain_mask(const D2Scene *s, const Mesh *m, GrainOpt *o) {
-    double mn[3], mx[3], sc = s->has_sp ? s->sc : 1.0, tx = s->has_sp ? s->tx : 0, ty = s->has_sp ? s->ty : 0, st = 0.1; int w, h, any = 0; unsigned char *g;
+static unsigned char *grain_mask(const D2Scene *s, const Mesh *m, const char *style, GrainOpt *o, unsigned char **angp) {
+    double mn[3], mx[3], sc = s->has_sp ? s->sc : 1.0, tx = s->has_sp ? s->tx : 0, ty = s->has_sp ? s->ty : 0, st = 0.1; int w, h; unsigned char *g, *ga;
+    o->deftex = grain_style_tex(style); *angp = NULL;
     mesh_bounds(m, mn, mx); w = (int)ceil((mx[0] - mn[0]) / st) + 2; h = (int)ceil((mx[1] - mn[1]) / st) + 2;
     if (w <= 0 || h <= 0 || (size_t)w * h > 40000000u) return NULL;
-    g = calloc((size_t)w * h, 1); if (!g) return NULL;
-    for (int k = 0; k < s->ngc; k++) if (s->gc[k].kind && grain_smooth_kind(s->gc[k].kind)) for (int q = 0; q < s->gc[k].np; q++) { grain_fill(g, w, h, mn[0] - st, mn[1] - st, st, &s->gc[k].p[q], sc, tx, ty); any = 1; }
-    for (int k = 0; k < s->ntc; k++) if (s->tc[k].kind && grain_smooth_kind(s->tc[k].kind)) for (int q = 0; q < s->tc[k].np; q++) { grain_fill(g, w, h, mn[0] - st, mn[1] - st, st, &s->tc[k].p[q], sc, tx, ty); any = 1; }
-    for (int k = 0; k < s->nop; k++) if (s->op[k].kind && !grain_ground_kind(s->op[k].kind)) for (int q = 0; q < s->op[k].np; q++) { grain_fill(g, w, h, mn[0] - st, mn[1] - st, st, &s->op[k].p[q], sc, tx, ty); any = 1; }
-    if (!any) { free(g); return NULL; }
-    o->mask = g; o->mw = w; o->mh = h; o->mx0 = mn[0] - st; o->my0 = mn[1] - st; o->mstep = st;
+    g = calloc((size_t)w * h, 1); ga = calloc((size_t)w * h, 1); if (!g || !ga) { free(g); free(ga); return NULL; }
+    for (int k = 0; k < s->ngc; k++) if (s->gc[k].kind && grain_smooth_kind(s->gc[k].kind)) for (int q = 0; q < s->gc[k].np; q++) grain_fill(g, NULL, w, h, mn[0] - st, mn[1] - st, st, &s->gc[k].p[q], sc, tx, ty, GT_SMOOTH);
+    for (int k = 0; k < s->ntc; k++) if (s->tc[k].kind && grain_smooth_kind(s->tc[k].kind)) for (int q = 0; q < s->tc[k].np; q++) grain_fill(g, NULL, w, h, mn[0] - st, mn[1] - st, st, &s->tc[k].p[q], sc, tx, ty, GT_SMOOTH);
+    for (int k = 0; k < s->nop; k++) if (s->op[k].kind) { int t = grain_op_tex(s->op[k].kind); for (int q = 0; q < s->op[k].np; q++) grain_fill(g, t == GT_PLANK ? ga : NULL, w, h, mn[0] - st, mn[1] - st, st, &s->op[k].p[q], sc, tx, ty, t); }
+    o->mask = g; o->mw = w; o->mh = h; o->mx0 = mn[0] - st; o->my0 = mn[1] - st; o->mstep = st; o->ang = ga; *angp = ga;
     return g;
 }
 static int printer_resin(void) {          /* review N1: "printer": "fdm" (standard, the user's) or "resin"; --printer wins */
@@ -1072,8 +1094,9 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         uint32_t sd = 2166136261u; for (const char *c = name; *c; c++) sd = (sd ^ (unsigned char)*c) * 16777619u;
         GrainOpt go = { 0 }; int resin = printer_resin(); unsigned char *gm;
         go.amp = (resin ? cfg_num("ground_grain_mm", 0.12) : cfg_num("ground_grain_fdm_mm", 0.25)) * strength(); go.coarse = !resin;          /* review P2-2: FDM grain big enough to print */
-        gm = have_sc && cfg_bool("grain_by_ground", 1) ? grain_mask(&sc, &m, &go) : NULL;
-        int t0 = m.nt, mv = grain_apply(&m.v, &m.nv, &m.f, &m.nt, &go, sd); free(gm);
+        unsigned char *ga = NULL; go.deftex = grain_style_tex(rs->style);
+        gm = have_sc && cfg_bool("grain_by_ground", 1) ? grain_mask(&sc, &m, rs->style, &go, &ga) : NULL;
+        int t0 = m.nt, mv = grain_apply(&m.v, &m.nv, &m.f, &m.nt, &go, sd); free(gm); free(ga);
         const char *gl = getenv("BBB_GRAIN_LOG");
         if (gl && *gl) { FILE *lf = fopen(gl, "a"); if (lf) { fprintf(lf, "%s: faces %d -> %d, points moved %d\n", name, t0, m.nt, mv); fclose(lf); } }
     }
