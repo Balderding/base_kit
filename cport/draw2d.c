@@ -271,6 +271,17 @@ static void draw_ellipse(Img *im, const double box[4], uint32_t ink, int fill, i
     while (ellipse_next(&st, &X0, &Y, &X1) != -1) hline(im, x0 + (X0 + a) / 2, y0 + (Y + b) / 2, x0 + (X1 + a) / 2, ink);
 }
 
+/* a square or rectangle base (2026-11-22): its box filled, or its outline width px wide; the picture is too small for
+   the 1.5 mm corners to matter */
+static void draw_box(Img *im, const double box[4], uint32_t ink, int fill, int width) {
+    int x0 = (int)box[0], y0 = (int)box[1], x1 = (int)box[2], y1 = (int)box[3];
+    for (int y = y0; y <= y1; y++) {
+        if (fill || y < y0 + width || y > y1 - width) hline(im, x0, y, x1, ink);
+        else { hline(im, x0, y, x0 + width - 1, ink); hline(im, x1 - width + 1, y, x1, ink); }
+    }
+}
+#define SHAPE(im, e, ink, fill, width) do { if (s->has_oval == 2 && ring) draw_box(im, e, ink, fill, width); else draw_ellipse(im, e, ink, fill, width); } while (0)
+
 /* ---------------------------------------------------------------- Paste.c */
 /* Image.paste(colour, (x0, y0, x0 + mask.w, y0 + mask.h), mask) with an L mask: ImagingFill2 + fill_mask_L */
 static void fill_mask(Img *out, const unsigned char ink[4], const Img *mask, int dx0, int dy0) {
@@ -582,11 +593,11 @@ int d2_render(const D2Scene *s, int px, int transparent, unsigned char **pix, in
     }
     unsigned char zero[4] = { 0, 0, 0, 0 };
     Img *m = img_new(W, W, 1, zero);
-    { double e[4] = ELL(clip[0], clip[1], clip[2], clip[3]); draw_ellipse(m, e, 255, 1, 0); }
+    { double e[4] = ELL(clip[0], clip[1], clip[2], clip[3]); SHAPE(m, e, 255, 1, 0); }
     paste(img, C.lay, m, 0, 0); img_free(C.lay); img_free(m);
     if (ring) {
         int w = (int)(3.0 / 72 * (pxd / 3) * SS); if (w < 2) w = 2;
-        double e[4] = ELL(clip[0], clip[1], clip[2], clip[3]); parse_rgb("#1a1a1a", tmp); shade(tmp, 1.0, ink); draw_ellipse(img, e, ink32(ink), 0, w);
+        double e[4] = ELL(clip[0], clip[1], clip[2], clip[3]); parse_rgb("#1a1a1a", tmp); shade(tmp, 1.0, ink); SHAPE(img, e, ink32(ink), 0, w);
     }
     Img *out;
     if (d2_test_full) {
@@ -597,7 +608,7 @@ int d2_render(const D2Scene *s, int px, int transparent, unsigned char **pix, in
     if (transparent) {
         Img *a = img_new(W, W, 1, zero);
         if (!ring) { double e[4] = ELL(0.0, 0.0, R0 + 0.6, R0 + 0.6); draw_ellipse(a, e, 255, 1, 0); }
-        else { double e[4] = ELL(clip[0], clip[1], clip[2] * 1.01, clip[3] * 1.01); draw_ellipse(a, e, 255, 1, 0); }
+        else { double e[4] = ELL(clip[0], clip[1], clip[2] * 1.01, clip[3] * 1.01); SHAPE(a, e, 255, 1, 0); }
         unsigned int t;
         for (size_t i = 0; i < (size_t)W * W; i++) {          /* convert("RGBA") + putalpha(a), then the premultiplied RGBa resize needs */
             unsigned char *q = img->p + 4 * i; unsigned int al = a->p[i];

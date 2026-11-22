@@ -117,10 +117,12 @@ static int setup(const char *mode) {
         for (const char *p = ov; *p && j < 120; p++) t[j++] = (char)tolower((unsigned char)*p);
         t[j] = 0; { char *mm; while ((mm = strstr(t, "mm"))) memmove(mm, mm + 2, strlen(mm + 2) + 1); }
         x = strchr(t, 'x');
+        { size_t L = strlen(t); if (L && t[L - 1] == 'r') { t[L - 1] = 0; ENV.has_oval = 2; } }          /* "25x50r": a square or rectangle (2026-11-22) */
         if (x) {
             *x = 0; char *s0 = t, *s1 = x + 1; while (*s0 == ' ') s0++; while (*s1 == ' ') s1++;
-            if (ft_pyfloat(s0, &a) == 0 && ft_pyfloat(s1, &b) == 0 && a > 0 && b > 0) { ENV.has_oval = 1; ENV.oval[0] = a > b ? a : b; ENV.oval[1] = a > b ? b : a; }
-        }
+            if (ft_pyfloat(s0, &a) == 0 && ft_pyfloat(s1, &b) == 0 && a > 0 && b > 0) { ENV.has_oval = ENV.has_oval == 2 ? 2 : 1; ENV.oval[0] = a > b ? a : b; ENV.oval[1] = a > b ? b : a; }
+            else ENV.has_oval = 0;
+        } else ENV.has_oval = 0;
     }
     { char d[MAX_PATH * 3]; const char *e = getenv("KIT_ERRORS_DIR"); if (e && *e) snprintf(d, sizeof d, "%s", e); else snprintf(d, sizeof d, "%s\\out", runner_kit()); mg_log_dir(d); }
     READY = 1;

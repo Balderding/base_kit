@@ -242,7 +242,8 @@ void ork_build(const SmShellXf *xf, double H, int has_oval, double A, double B, 
     GEOSGeometry *rim; int *idx;
     *nrocks = 0;
     if (!NPC) return;
-    { GEOSGeometry *d = shp_point_buffer(0, 0, has_oval ? 1.0 : rlim, 32); rim = has_oval && d ? shp_scale(d, A / 2.0 - 0.97, B / 2.0 - 0.97, SHP_ORIGIN_POINT, 0, 0) : d; if (has_oval) shp_free(d); }
+    if (has_oval == 2) { extern GEOSGeometry *mg_rrect_poly(double A, double B, double d); rim = mg_rrect_poly(A, B, 0.97); }          /* a square or rectangle base */
+    else { GEOSGeometry *d = shp_point_buffer(0, 0, has_oval ? 1.0 : rlim, 32); rim = has_oval && d ? shp_scale(d, A / 2.0 - 0.97, B / 2.0 - 0.97, SHP_ORIGIN_POINT, 0, 0) : d; if (has_oval) shp_free(d); }
     qsort(PC, (size_t)NPC, sizeof(OrkPiece), cmp_area);
     /* the rocks: a piece joins the one it mostly stands in, when it is higher (a tier, a heap's band, a lump on top) */
     UF = (int *)malloc(sizeof(int) * (size_t)NPC); for (int i = 0; i < NPC; i++) UF[i] = i;

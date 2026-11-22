@@ -5,6 +5,7 @@
 #include <math.h>
 #include "shp.h"
 #include "smooth3d.h"
+extern GEOSGeometry *mg_rrect_poly(double A, double B, double d);          /* meshglue.c: a square or rectangle base inset by d */
 #include "manifold/manifoldc.h"
 
 double sm_shell_grid_mm = 0.08;
@@ -188,10 +189,10 @@ int sm_shell_build(const FtS3d *e, const SoSolids *sol, const GEOSGeometry *foot
     {   /* cut straight down to what the layout kept of the marker (its ghost ops, laid out, on the finished base) and to
            the rim */
         ManifoldBox *bb = manifold_bounding_box(manifold_alloc_box(), u); ManifoldVec3 lo = manifold_box_min(bb), hi = manifold_box_max(bb);
-        GEOSGeometry *d = shp_point_buffer(0, 0, has_oval ? 1.0 : rlim, 32), *rim = has_oval && d ? shp_scale(d, A / 2.0 - 0.97, B / 2.0 - 0.97, SHP_ORIGIN_POINT, 0, 0) : d;
+        GEOSGeometry *d = has_oval == 2 ? NULL : shp_point_buffer(0, 0, has_oval ? 1.0 : rlim, 32), *rim = has_oval == 2 ? mg_rrect_poly(A, B, 0.97) : has_oval && d ? shp_scale(d, A / 2.0 - 0.97, B / 2.0 - 0.97, SHP_ORIGIN_POINT, 0, 0) : d;          /* 2: a square or rectangle base */
         GEOSGeometry *r1 = NULL, *r2 = NULL, *keep = NULL; ManifoldPolygons *pp = NULL; ManifoldManifold *pr, *pr2, *cut;
         manifold_delete_box(bb);
-        if (has_oval) shp_free(d);
+        if (has_oval) shp_free(d);          /* NULL for a rectangle: fine */
         if (region && !shp_is_empty(region)) {
             r1 = xf->on ? shp_scale(region, xf->f, xf->f, SHP_ORIGIN_POINT, 0.0, 0.0) : shp_clone(region);
             r2 = r1 && xf->on ? shp_translate(r1, xf->tx, xf->ty) : (r1 ? shp_clone(r1) : NULL);

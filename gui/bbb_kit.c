@@ -1627,12 +1627,23 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 #include "uicheck.c"          /* the UI check of --resizetest (BBB_TEST_UICHECK) */
+static LONG WINAPI crash_note(EXCEPTION_POINTERS *ep) {          /* BBB_CRASH_LOG: where a helper crashed (code, address, offset in this exe), then the usual end */
+    char p[MAX_PATH]; FILE *f; HMODULE me = GetModuleHandleW(NULL);
+    if (GetEnvironmentVariableA("BBB_CRASH_LOG", p, MAX_PATH) && (f = fopen(p, "a"))) {
+        void *a = ep->ExceptionRecord->ExceptionAddress; void *st[24]; USHORT n = CaptureStackBackTrace(0, 24, st, NULL);
+        fprintf(f, "crash %08lx at %p (exe+0x%llx)\n", ep->ExceptionRecord->ExceptionCode, a, (unsigned long long)((char *)a - (char *)me));
+        for (USHORT i = 0; i < n; i++) fprintf(f, "  exe+0x%llx\n", (unsigned long long)((char *)st[i] - (char *)me));
+        { CONTEXT *c = ep->ContextRecord; DWORD64 *sp = (DWORD64 *)c->Rsp; for (int i = 0; i < 64; i++) { DWORD64 v = sp[i]; if (v > (DWORD64)me && v < (DWORD64)me + 0x4000000) fprintf(f, "  stack exe+0x%llx\n", (unsigned long long)(v - (DWORD64)me)); } }
+        fclose(f);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     WNDCLASSW wc; MSG msg; RECT wa, r; WCHAR t[MAX_PATH], e[MAX_PATH], *sl; FILE *f; int cw = 1290, chh = 896; JOBOBJECT_EXTENDED_LIMIT_INFORMATION ji; DWORD ex = 0; BOOL dark = TRUE;
     GdiplusStartupInput gin = { 1, NULL, FALSE, FALSE }; ULONG_PTR gtok; HMODULE u32 = GetModuleHandleW(L"user32.dll"), dwm; HDC sdc;
     (void)hp;
     if (!strncmp(cmdA, "--core-layout", 13)) {          /* a layout helper of a job: --core-layout <choices|build> <style> (cport\pipeline.c) */
-        char md[16] = "", st[64] = ""; sscanf(cmdA + 13, " %15s %63s", md, st); return pipe_serve(md, st);
+        char md[16] = "", st[64] = ""; sscanf(cmdA + 13, " %15s %63s", md, st); if (GetEnvironmentVariableA("BBB_CRASH_LOG", NULL, 0)) SetUnhandledExceptionFilter(crash_note); return pipe_serve(md, st);
     }
     if (!strncmp(cmdA, "--core-", 7)) return bbb_core_main(cmdA);          /* the kit's other C parts: height field + mesh, pictures (cport\core.c); no window */
     if (!strncmp(cmdA, "--job ", 6)) {          /* a job without the window: bbb_kit.exe --job choices|build <style> ... (gui_job.py's arguments); its JSON lines on stdout */

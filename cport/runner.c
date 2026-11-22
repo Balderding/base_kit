@@ -299,9 +299,11 @@ static int read_size(const char *txt, double *a, double *b, int *oval) {
     char t[64]; int j = 0;
     for (const char *p = txt; *p && j < 60; p++) { char c = (char)tolower((unsigned char)*p); if (c == ' ') continue; if (c == '*') c = 'x'; t[j++] = c; }
     t[j] = 0; char *mm = strstr(t, "mm"); while (mm) { memmove(mm, mm + 2, strlen(mm + 2) + 1); mm = strstr(t, "mm"); }
+    int rect = 0; { size_t L = strlen(t); if (L > 2 && !strcmp(t + L - 2, "sq")) { t[L - 2] = 0; rect = 1; } else if (L > 1 && t[L - 1] == 'r' && strchr(t, 'x')) { t[L - 1] = 0; rect = 1; } }          /* 2026-11-22: "25sq", "25x50r" */
     char *x = strchr(t, 'x'); *oval = 0;
     if (x) { *x = 0; double u = strtod(t, NULL), v = strtod(x + 1, NULL); *a = u > v ? u : v; *b = u > v ? v : u; *oval = *a != *b; }
     else { *a = strtod(t, NULL); *b = *a; }
+    if (rect && *a > 0) *oval = 2;          /* a square or rectangle: on the oval path, its own outline */
     return 1;
 }
 
@@ -450,7 +452,7 @@ static int job_choices(Args *a, const char *style) {
     int ncpu = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS); int jobs = jobs_s[0] ? atoi(jobs_s) : (ncpu - 1 > 1 ? ncpu - 1 : 1);
     char seed[64]; if (seed_s[0]) snprintf(seed, sizeof seed, "%s", seed_s); else new_seed(seed);
     char bm[32], fm[32], sk[32], ov[64]; fmt_g(bm, sizeof bm, lay); fmt_g(fm, sizeof fm, A); fmt_g(sk, sizeof sk, sc);
-    if (oval) { char x[32], y[32]; fmt_g(x, sizeof x, A); fmt_g(y, sizeof y, B); snprintf(ov, sizeof ov, "%sx%s", x, y); }
+    if (oval) { char x[32], y[32]; fmt_g(x, sizeof x, A); fmt_g(y, sizeof y, B); snprintf(ov, sizeof ov, "%sx%s%s", x, y, oval == 2 ? "r" : ""); }
     EnvSet es[16]; int ne = 0;
     es[ne++] = (EnvSet){ "PYTHONWARNINGS", "ignore" }; es[ne++] = (EnvSet){ "PYTHONUNBUFFERED", "1" }; es[ne++] = (EnvSet){ "PYTHONIOENCODING", "utf-8" };
     es[ne++] = (EnvSet){ "SALT", seed }; es[ne++] = (EnvSet){ "RESEED", "" }; es[ne++] = (EnvSet){ "BASE_MM", bm }; es[ne++] = (EnvSet){ "KIT_QUIET", "1" };
@@ -894,7 +896,7 @@ typedef struct {
 typedef struct { char base[160]; int n, ok, ntries, detail; Try tries[8]; } BaseRes;
 typedef struct RunSet RunSet;
 struct RunSet {
-    const char *style, *salt; double SIZE, OVAL[2]; int oval; double SCALE, LAYOUT; char out[MAX_PATH * 3], size_tag[64];
+    const char *style, *salt; double SIZE, OVAL[2]; int oval; double SCALE, LAYOUT; char out[MAX_PATH * 3], size_tag[64], ovtag[64];          /* oval: 1 an oval, 2 a square or rectangle; ovtag: "AxB" / "AxBr" for KIT_OVAL */
     int workers, nnums, *nums; volatile LONG next, flagged, stop; ULONGLONG t0;
     CRITICAL_SECTION lock; Recent *recent; int nrecent; Bridge *free_br; int nfree, capfree;
     WCHAR *envw; const EnvSet *env; int nenv; BaseRes *res; int nres;
@@ -1371,7 +1373,8 @@ static void run_style(RunSet *rs) {
 typedef struct { const char *style, *size, *seed, *dest; double scale; int *seen, okc, bad; double obj, mm, fig; const char *mini; } PickCtx;          /* obj: --obj (0 = classic), fig: the figure post's height (mm) */
 static void size_tag_gui(const char *txt, char *out, size_t cap) {          /* gui_job.size_tag */
     double a, b; int ov; read_size(txt, &a, &b, &ov); char x[32], y[32]; fmt_g(x, sizeof x, a); fmt_g(y, sizeof y, b);
-    if (a == b) snprintf(out, cap, "%s", x); else snprintf(out, cap, "%sx%s", x, y);
+    if (ov == 2) { if (a == b) snprintf(out, cap, "%ssq", x); else snprintf(out, cap, "%sx%sr", x, y); }          /* a square or rectangle */
+    else if (a == b) snprintf(out, cap, "%s", x); else snprintf(out, cap, "%sx%s", x, y);
 }
 static void copy_file(const char *a, const char *b) { WCHAR x[MAX_PATH * 3], y[MAX_PATH * 3]; wpath(a, x, MAX_PATH * 3); wpath(b, y, MAX_PATH * 3); CopyFileW(x, y, FALSE); }
 /* the picked file's name (plan B4, 2026-11-22): settings "file_name" or --name, with {style} {size} {theme} {seed} {n} {date};
@@ -1532,10 +1535,14 @@ static int job_build(Args *a, const char *style) {
         /* run_set.py <style> 16,17, --seed x --size 60 -q [--mini --supports --scale] */
         RunSet rs; memset(&rs, 0, sizeof rs); InitializeCriticalSection(&rs.lock); rs.style = style; rs.salt = seeds[g];
         double A, B; int ov; read_size(size, &A, &B, &ov); rs.SIZE = A; rs.oval = ov; rs.OVAL[0] = A; rs.OVAL[1] = B;
-        if (rs.oval) { char x[32], y[32]; fmt_g(x, sizeof x, A); fmt_g(y, sizeof y, B); snprintf(rs.size_tag, sizeof rs.size_tag, "%sx%s", x, y); } else fmt_g(rs.size_tag, sizeof rs.size_tag, A);
+        if (rs.oval) { char x[32], y[32]; fmt_g(x, sizeof x, A); fmt_g(y, sizeof y, B); snprintf(rs.size_tag, sizeof rs.size_tag, "%sx%s", x, y); snprintf(rs.ovtag, sizeof rs.ovtag, "%sx%s%s", x, y, rs.oval == 2 ? "r" : "");
+            if (rs.oval == 2) { if (A == B) snprintf(rs.size_tag, sizeof rs.size_tag, "%ssq", x); else snprintf(rs.size_tag, sizeof rs.size_tag, "%sx%sr", x, y); } }          /* names: 25sq, 25x50r */
+        else fmt_g(rs.size_tag, sizeof rs.size_tag, A);
         int known = 0; for (int i = 0; i < 17; i++) if (KNOWN_SIZES[i] == A) known = 1;
         int okv = 0; for (int i = 0; i < 7; i++) if (OVAL_SIZES[i][0] == A && OVAL_SIZES[i][1] == B) okv = 1;
-        if (rs.oval && !okv) rs_print("note: %s mm is not one of the common oval sizes (60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95, 170x109); building it anyway", rs.size_tag);
+        if (rs.oval == 2) { static const double RS[6][2] = { { 20, 20 }, { 25, 25 }, { 40, 40 }, { 50, 50 }, { 50, 25 }, { 100, 50 } }; int okr = 0; for (int i = 0; i < 6; i++) if (RS[i][0] == A && RS[i][1] == B) okr = 1;
+            if (!okr) rs_print("note: %s is not one of the common square or rectangle sizes (20sq, 25sq, 40sq, 50sq, 25x50r, 50x100r); building it anyway", rs.size_tag); }
+        else if (rs.oval && !okv) rs_print("note: %s mm is not one of the common oval sizes (60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95, 170x109); building it anyway", rs.size_tag);
         if (!rs.oval && !known) rs_print("note: %s mm is not one of the common base sizes (20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 120, 130, 160); building it anyway", rs.size_tag);
         rs.SCALE = scale_s[0] ? strtod(scale_s, NULL) : cfg_num("scenery_scale", 1.0);
         if (rs.SCALE != 1.0) { char w[360]; snprintf(w, sizeof w, "note: scenery scale %g (--scale / scenery_scale) makes the whole layout bigger, so the base shows part of it; it overrides --obj. For the size of things on the base use --obj (1 classic, 3 true for 32 mm) and leave --scale at 1.", rs.SCALE); ev("log", "s", "text", w); }          /* plan B4: one scale setting (--obj); --scale kept, said */
@@ -1563,7 +1570,7 @@ static int job_build(Args *a, const char *style) {
         EnvSet es[24]; int ne = 0;
         es[ne++] = (EnvSet){ "PYTHONWARNINGS", "ignore" }; es[ne++] = (EnvSet){ "PYTHONUNBUFFERED", "1" }; es[ne++] = (EnvSet){ "PYTHONIOENCODING", "utf-8" };
         es[ne++] = (EnvSet){ "KIT_LIVE", LIVE_DIR }; es[ne++] = (EnvSet){ "SALT", rs.salt }; es[ne++] = (EnvSet){ "BASE_MM", lay }; es[ne++] = (EnvSet){ "SETDIR", rs.out };
-        es[ne++] = (EnvSet){ "KIT_QUIET", "1" }; es[ne++] = (EnvSet){ "KIT_WORKER", "1" }; es[ne++] = (EnvSet){ "KIT_OVAL", rs.oval ? rs.size_tag : NULL };
+        es[ne++] = (EnvSet){ "KIT_QUIET", "1" }; es[ne++] = (EnvSet){ "KIT_WORKER", "1" }; es[ne++] = (EnvSet){ "KIT_OVAL", rs.oval ? rs.ovtag : NULL };
         if (rs.SCALE != 1.0) { es[ne++] = (EnvSet){ "KIT_FINAL_MM", fin }; es[ne++] = (EnvSet){ "KIT_SCALE", skl }; }
         char obv[32]; double obd = obj_of(opt(a, "--obj", ""), rs.SCALE); fmt_g(obv, sizeof obv, obd); if (obd > 0) es[ne++] = (EnvSet){ "KIT_OBJ", obv };
         if (mini[0]) es[ne++] = (EnvSet){ "KIT_MINI", mini };

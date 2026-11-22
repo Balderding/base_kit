@@ -154,6 +154,48 @@ static double *ellipse_offset(double a, double b, const double *T, int n, double
 }
 /* gg.magnet_centres(dia) */
 static int magnet_centres(double dia, double *xy) { return mag_centres(dia, xy); }          /* magnets.h: the one copy */
+/* square and rectangle bases (2026-11-22, plan B1): has_oval == 2 is a rounded rectangle A x B with corners of RRECT_RC
+   mm, on the oval path (laid out round on the long size, cut to the shape). The ring starts at (a, 0) and goes round
+   anticlockwise like the ellipse's, the points evenly spaced along it; nrm gets each point's outward normal. */
+#define RRECT_RC 1.5
+static void rrect_at(double a, double b, double rc, double s, double *x, double *y, double *nx, double *ny) {
+    double ea = a - rc, eb = b - rc, q = 0.5 * PI * rc, seg[9] = { eb, q, 2 * ea, q, 2 * eb, q, 2 * ea, q, eb }; int k;
+    for (k = 0; k < 8 && s > seg[k]; k++) s -= seg[k];
+    switch (k) {
+    case 0: *x = a; *y = s; *nx = 1; *ny = 0; return;
+    case 1: { double t = s / rc; *x = ea + rc * cos(t); *y = eb + rc * sin(t); *nx = cos(t); *ny = sin(t); return; }
+    case 2: *x = ea - s; *y = b; *nx = 0; *ny = 1; return;
+    case 3: { double t = 0.5 * PI + s / rc; *x = -ea + rc * cos(t); *y = eb + rc * sin(t); *nx = cos(t); *ny = sin(t); return; }
+    case 4: *x = -a; *y = eb - s; *nx = -1; *ny = 0; return;
+    case 5: { double t = PI + s / rc; *x = -ea + rc * cos(t); *y = -eb + rc * sin(t); *nx = cos(t); *ny = sin(t); return; }
+    case 6: *x = -ea + s; *y = -b; *nx = 0; *ny = -1; return;
+    case 7: { double t = 1.5 * PI + s / rc; *x = ea + rc * cos(t); *y = -eb + rc * sin(t); *nx = cos(t); *ny = sin(t); return; }
+    default: *x = a; *y = -eb + s; *nx = 1; *ny = 0; return;
+    }
+}
+static int rrect_ring(double a, double b, double rc, int n, double **pts, double **nrm) {
+    double P = 4 * (a - rc) + 4 * (b - rc) + 2 * PI * rc, *xy = (double *)malloc(sizeof(double) * 2 * (size_t)n), *nn = (double *)malloc(sizeof(double) * 2 * (size_t)n);
+    if (rc < 0) rc = 0;
+    for (int i = 0; i < n; i++) rrect_at(a, b, rc, P * i / n, &xy[2 * i], &xy[2 * i + 1], &nn[2 * i], &nn[2 * i + 1]);
+    *pts = xy; if (nrm) *nrm = nn; else free(nn);
+    return n;
+}
+static double *rrect_offset(const double *xy, const double *nn, int n, double d) {          /* each point moved d inwards (d under the corner radius) */
+    double *o = (double *)malloc(sizeof(double) * 2 * (size_t)(n ? n : 1));
+    for (int i = 0; i < n; i++) { o[2 * i] = xy[2 * i] - d * nn[2 * i]; o[2 * i + 1] = xy[2 * i + 1] - d * nn[2 * i + 1]; }
+    return o;
+}
+/* the shape inset by d, as a polygon (shells and rocks are kept inside it): rocks3d.c, smooth3d.c */
+GEOSGeometry *mg_rrect_poly(double A, double B, double d) {
+    double *xy; int n = rrect_ring(A / 2.0 - d, B / 2.0 - d, RRECT_RC - d > 0.05 ? RRECT_RC - d : 0.05, 240, &xy, NULL); GEOSGeometry *g = shp_polygon(xy, n); free(xy); return g;
+}
+/* a point pressed back inside the rounded rectangle a x b (half sizes) with corners rc */
+static void rrect_clamp(double a, double b, double rc, double *x, double *y) {
+    double ea = a - rc, eb = b - rc, ax = fabs(*x), ay = fabs(*y);
+    if (ax > ea && ay > eb) { double dx = ax - ea, dy = ay - eb, d = hypot(dx, dy); if (d > rc) { ax = ea + dx * rc / d; ay = eb + dy * rc / d; } }
+    else { if (ax > a) ax = a; if (ay > b) ay = b; }
+    *x = *x < 0 ? -ax : ax; *y = *y < 0 ? -ay : ay;
+}
 /* gg.oval_magnet_centres(A) */
 static int oval_magnet_centres(double A, double *xy) { return mag_oval_centres(A, xy); }
 
@@ -182,8 +224,9 @@ static GEOSGeometry *pads_union(const GEOSGeometry *const *pads, int npads) {
 /* mesher._oval_plan(s, ov, sc) */
 static int oval_plan(const MgEnv *e, const GEOSGeometry *const *pads, int npads, MgPlan *out) {
     double A = e->oval[0], B = e->oval[1], a = A / 2.0, b = B / 2.0, fin = A, sc = e->scale, tx = 0.0, ty = 0.0;
-    double *ring, *T; int nr = ellipse_ring(a, b, 240, &ring, &T);
-    double *off = ellipse_offset(a, b, T, nr, 2.4);
+    double *ring, *T; int nr; double *off;
+    if (e->has_oval == 2) { nr = rrect_ring(a - 2.4, b - 2.4, RRECT_RC > 2.45 ? RRECT_RC - 2.4 : 0.05, 240, &off, NULL); rrect_ring(a, b, RRECT_RC, 240, &ring, NULL); T = NULL; }          /* a rounded rectangle: its inset shape (off) and its outline (ring, for COVERS) */
+    else { nr = ellipse_ring(a, b, 240, &ring, &T); off = ellipse_offset(a, b, T, nr, 2.4); }
     GEOSGeometry *inner = shp_polygon(off, nr), *padsg = NULL, *U = NULL, *c = NULL, *Q = NULL;
     free(off);
     out->sc = sc; out->fin = fin; out->pads = NULL;
@@ -595,8 +638,9 @@ int mg_field_ops(const MgEnv *e, const BcGroups *groups, MgBase *base, int *has_
                     GEOSGeometry *poly; double ref_area = 0; int has_ref = 0;
                     mg_base_free(base);
                     if (e->has_oval) {
-                        double oa = e->oval[0] / 2.0, ob = e->oval[1] / 2.0, *ring, *T; int n = ellipse_ring(oa, ob, NSEG_OVAL, &ring, &T);
-                        double *topr = ellipse_offset(oa, ob, T, n, H * rim_tan);
+                        double oa = e->oval[0] / 2.0, ob = e->oval[1] / 2.0, *ring, *T, *topr; int n;
+                        if (e->has_oval == 2) { n = rrect_ring(oa, ob, RRECT_RC, NSEG_OVAL, &ring, &T); topr = rrect_offset(ring, T, n, H * rim_tan); }          /* a rounded rectangle: the same rim, the same 12 degrees */
+                        else { n = ellipse_ring(oa, ob, NSEG_OVAL, &ring, &T); topr = ellipse_offset(oa, ob, T, n, H * rim_tan); }
                         poly = shp_polygon(topr, n); free(T);
                         base->has_oval = 1; base->TR = topr; base->nTR = n; base->OU = ring; base->nOU = n;
                         ref_area = PI * py_pow(rt - 0.02, 2); has_ref = 1;
@@ -756,7 +800,7 @@ int mg_sig(const BcScene *s, const char *style, const MgEnv *e, char *out, int c
     buf_s(&b, "]");
     mg_md5_hex(b.b, b.n, h); free(b.b); h[16] = 0;
     fmt_g(t1, sizeof t1, e->base_mm);
-    if (e->has_oval) { fmt_g(t2, sizeof t2, e->oval[1]); snprintf(out, (size_t)cap, "%s%so%s%s", style, t1, t2, h); }
+    if (e->has_oval) { fmt_g(t2, sizeof t2, e->oval[1]); snprintf(out, (size_t)cap, "%s%s%s%s%s", style, t1, e->has_oval == 2 ? "r" : "o", t2, h); }          /* r: a rounded rectangle */
     else snprintf(out, (size_t)cap, "%s%s%s", style, t1, h);
     return 0;
 }
@@ -1230,7 +1274,8 @@ static double np_hypot(double x, double y) {          /* np.hypot: the CRT's hyp
 int mg_solid_fit(MgMesh *t, int has_oval, double A, double B, double rlim) {
     if (t->nt == 0) return fail("IndexError: too many indices for array");          /* trimesh's volume of no faces raises */
     if (mg_volume(t) < 0) for (int i = 0; i < t->nt; i++) { int x = t->f[3 * i]; t->f[3 * i] = t->f[3 * i + 2]; t->f[3 * i + 2] = x; }          /* invert: faces reversed */
-    if (has_oval) {
+    if (has_oval == 2) { double oa = A / 2.0 - 0.97, ob = B / 2.0 - 0.97; for (int i = 0; i < t->nv; i++) rrect_clamp(oa, ob, RRECT_RC - 0.97 > 0.05 ? RRECT_RC - 0.97 : 0.05, &t->v[3 * i], &t->v[3 * i + 1]); }
+    else if (has_oval) {
         double oa = A / 2.0 - 0.97, ob = B / 2.0 - 0.97;
         for (int i = 0; i < t->nv; i++) { double d = np_hypot(t->v[3 * i] / oa, t->v[3 * i + 1] / ob); if (d > 1.0) { t->v[3 * i] /= d; t->v[3 * i + 1] /= d; } }
     } else
