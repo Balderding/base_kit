@@ -1405,6 +1405,7 @@ static void help(int W, int H) {
                               L"0 to 9:  how many bases (1 then 5 is 15).      + and -:  one more, one fewer.\n"
                               L"Arrows, Home, End:  move over the designs.      Space:  pick the one the arrows are on.\n"
                               L"Page Up / Down:  the style.      [ and ]:  the base size.      M:  more settings, or fewer.\n"
+                              L"Ctrl+Z, Ctrl+Y:  undo or redo a setting or a pick (built files are never touched).\n"
                               L"Mouse wheel:  scroll the designs. Drag the window's edge to make it any size; it opens the same way next time.", x2, y, cwid);
     y = para(L"THE LOOK", L"L:  pixel or smooth look.     T:  textures (pixel look only).     F:  pixel or plain font for the short words.\n"
                               L"The switches at the top right do the same; the kit remembers them.\n"
@@ -1469,8 +1470,57 @@ static void set_io(int k, int save) {          /* out\bbb_kit.ini [setN]: style,
     swprintf(sub, 300, L"Set %d loaded: %hs, %d base%ls.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s");
 }
 static void act2(int kind, int idx);
+/* U1 (2026-11-22): undo / redo (Ctrl+Z, Ctrl+Y) of the settings and the picks. A snapshot of every setting the user
+   chooses, the sizes, the seed and which cards are picked is kept before each click or key that changes one; builds,
+   files and the cards themselves are never undone (an STL is never deleted by an undo). A pick comes back only on the
+   same card (seed and number), if it is still shown. */
+static void make_fonts(void);
+typedef struct { int v[40]; unsigned mask; char seed[16]; int n; char cs[MAXC][16]; int cn[MAXC]; unsigned char pk[MAXC]; } Snap;
+static int **snap_vars(int *n) {
+    static int *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3],
+                        &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &selTheme,
+                        &selStr, &sizeMulti, &selPrinter, &moreOpen };
+    *n = (int)(sizeof V / sizeof V[0]); return V;
+}
+static void snap_take(Snap *s) {
+    int n, i, **V = snap_vars(&n); memset(s, 0, sizeof *s);
+    for (i = 0; i < n; i++) s->v[i] = *V[i];
+    s->mask = sizeMask; strcpy(s->seed, seedBuf); s->n = ncell;
+    for (i = 0; i < ncell; i++) { strcpy(s->cs[i], cells[i].seed); s->cn[i] = cells[i].n; s->pk[i] = (unsigned char)cells[i].picked; }
+}
+static int snap_eq(const Snap *a, const Snap *b) {
+    int n, i; snap_vars(&n);
+    for (i = 0; i < n; i++) if (a->v[i] != b->v[i]) return 0;
+    if (a->mask != b->mask || strcmp(a->seed, b->seed) || a->n != b->n) return 0;
+    for (i = 0; i < a->n; i++) if (a->pk[i] != b->pk[i] || a->cn[i] != b->cn[i] || strcmp(a->cs[i], b->cs[i])) return 0;
+    return 1;
+}
+static void snap_put(const Snap *s) {
+    int n, i, j, **V = snap_vars(&n), fontWas = lookFont, pixWas = lookPix;
+    for (i = 0; i < n; i++) *V[i] = s->v[i];
+    sizeMask = s->mask; strcpy(seedBuf, s->seed);
+    for (j = 0; j < ncell; j++) for (i = 0; i < s->n; i++) if (cells[j].n == s->cn[i] && !strcmp(cells[j].seed, s->cs[i])) { if (cells[j].state == ST_NONE) cells[j].picked = s->pk[i]; break; }
+    speed_env();
+    if (fontWas != lookFont || pixWas != lookPix) make_fonts();
+    redraw();
+}
+enum { NUNDO = 40 };
+static Snap undoS[NUNDO], redoS[NUNDO]; static int nUndo, nRedo;
+static int undoable(int kind) { return kind != H_SHOW && kind != H_GO && kind != H_QUICK && kind != H_STOP && kind != H_OPEN && kind != H_HELP && kind != H_MODELS && kind != H_NONE; }
+static void undo_step(int redo) {          /* Ctrl+Z (redo 0) / Ctrl+Y (redo 1) */
+    Snap now, *from = redo ? redoS : undoS, *to = redo ? undoS : redoS; int *nf = redo ? &nRedo : &nUndo, *nt = redo ? &nUndo : &nRedo;
+    if (!*nf || busy) return;
+    snap_take(&now);
+    if (*nt == NUNDO) { memmove(to, to + 1, sizeof(Snap) * (NUNDO - 1)); (*nt)--; }
+    to[(*nt)++] = now;
+    snap_put(&from[--(*nf)]);
+    swprintf(sub, 300, redo ? L"Redone. Ctrl+Z undoes it again (%d more to undo)." : L"Undone. Ctrl+Y redoes it (%d more to undo).", nUndo);
+}
 static void act(int kind, int idx) {          /* every click and key: do it, then start or stop the animation timer */
+    static Snap before, after; int u = undoable(kind) && !busy;
+    if (u) snap_take(&before);
     act2(kind, idx); anim_tick();
+    if (u) { snap_take(&after); if (!snap_eq(&before, &after)) { if (nUndo == NUNDO) { memmove(undoS, undoS + 1, sizeof(Snap) * (NUNDO - 1)); nUndo--; } undoS[nUndo++] = before; nRedo = 0; } }          /* U1: kept for Ctrl+Z */
 }
 static void act2(int kind, int idx) {
     int i;
@@ -1746,6 +1796,8 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == VK_F1 || (w == VK_OEM_2 && GetKeyState(VK_SHIFT) < 0)) act(H_HELP, 0);          /* F1, or ? (Shift+/) */
         else if (w == VK_ESCAPE) { if (showHelp) act(H_HELP, 0); else act(H_STOP, 0); }
         else if (w == 'A' && GetKeyState(VK_CONTROL) < 0) act(H_ALL, 0);
+        else if (w == 'Z' && GetKeyState(VK_CONTROL) < 0) undo_step(0);          /* U1: undo a setting or a pick */
+        else if (w == 'Y' && GetKeyState(VK_CONTROL) < 0) undo_step(1);
         else if (w == 'D') act(H_DETAILS, 0);
         else if (w == 'M' && GetKeyState(VK_CONTROL) >= 0) act(H_FOLD, 0);          /* U2: More settings */
         else if ((w == VK_LEFT || w == VK_RIGHT || w == VK_UP || w == VK_DOWN || w == VK_HOME || w == VK_END) && ncell) {          /* U3: the arrows move over the cards */
@@ -1912,6 +1964,17 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
                     if (tf) { fprintf(tf, "%s %s %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", which == 2 ? "detailsh" : which == 1 ? "sidew" : "no line at the press:", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
                 }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_UNDO", NULL, 0)) {          /* U1: style, size, a pick, Clear; undo all four, redo one; compared with snapshots */
+                FILE *tf; WCHAR p2[MAX_PATH]; Snap s0, s1, s2, s3; int okA, okB, okC;
+                snap_take(&s0);
+                act(H_STYLE, (selStyle + 3) % NSTYLES); act(H_SIZE, 2); snap_take(&s1); act(H_CARD, 1); act(H_CLEAR, 0); snap_take(&s2);
+                undo_step(0); undo_step(0); { Snap t; snap_take(&t); okA = snap_eq(&t, &s1); }          /* two back: style + size changed, the pick and Clear gone */
+                undo_step(0); undo_step(0); snap_take(&s3); okB = snap_eq(&s3, &s0);          /* all the way back */
+                undo_step(1); { Snap t; snap_take(&t); okC = t.v[0] != s0.v[0] && t.v[1] == s0.v[1]; }          /* redo one: the style again */
+                swprintf(p2, MAX_PATH, L"%ls.undo.txt", stShot); tf = _wfopen(p2, L"w");
+                if (tf) { fprintf(tf, "%s two undos back to after style+size %d | four undos back to the start %d | one redo the style again %d | undo stack %d redo %d" "\n", okA && okB && okC ? "OK" : "FAIL", okA, okB, okC, nUndo, nRedo); fclose(tf); }
+                (void)s2;
             }
             if (GetEnvironmentVariableA("BBB_TEST_KEYS", NULL, 0)) {          /* U3 / U2: Right Right Down, Space, Page Down, ], M, sent to the window; what they did */
                 FILE *tf; WCHAR p2[MAX_PATH]; int st0 = selStyle, sz0 = selSize, mo0 = moreOpen, pk0, f1, sc0 = scrollY; capture(NULL);
