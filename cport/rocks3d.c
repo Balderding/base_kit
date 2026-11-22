@@ -189,6 +189,9 @@ static int ork_one(const int *idx, int n, const SmShellXf *xf, double Hdeck, con
             double ca[6], cr[6], ch[6], ck[6], la = ORND() * 6.2832, per = V / (3.0 + floor(ORND() * 3)), sa = ORND() * 3.1416, wc = fmax(0.12 / M, 0.04 * rw);
             for (int c = 0; c < nch; c++) { ca[c] = ORND() * 6.2832; cr[c] = (0.12 + 0.28 * ORND()) * rw; ch[c] = 1.0 - (0.45 - 0.35 * ORND()) * fmin(1.6, kit_strength); ck[c] = (1.0 + 1.5 * ORND()) * kit_strength; }
             (void)la;
+            /* 2026-11-22 (plan B2 "rocks may tilt"): about half the rocks lean, one side sunk lower, as if settled
+               into the ground; the high side keeps its height, so it is never taller than before */
+            int tilt = ORND() < 0.5; double ta = ORND() * 6.2832, tl = (0.15 + 0.25 * ORND()) * fmin(1.5, kit_strength);
             for (int j = 0; j < ny; j++) for (int k = 0; k < nx; k++) {
                 size_t q = (size_t)j * nx + k; double x = x0 + k * g - cx, y = y0 + j * g - cy, z = Z[q], t;
                 if (z < -1e29 || z <= zf) continue;
@@ -206,6 +209,7 @@ static int ork_one(const int *idx, int n, const SmShellXf *xf, double Hdeck, con
                 }
                 t = ork_noise(x * fr * 5.1 - 3.3, y * fr * 5.1 + 8.8, seed ^ 0xa5a5a5u);          /* wear: fine pits */
                 if (t > 0.35) z -= 0.05 * kit_strength * V * (t - 0.35) / 0.65;
+                if (tilt) { double u = (x * cos(ta) + y * sin(ta)) / (0.5 * rw); u = u < -1 ? -1 : u > 1 ? 1 : u; z = zg + (z - zg) * (1 - tl * 0.5 * (1 - u)); }
                 if (z < zf) z = zf;
                 Z[q] = z;
             }
