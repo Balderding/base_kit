@@ -1,5 +1,5 @@
 {
-  "solidcraft_cli": "O:\\appsnotonc\\solidcraft\\solidcraft-cli.exe",
+  "solidcraft_cli": "solidcraft-cli",
   "slow_step_secs": 60,
   "step_limit_per_command_secs": 1.5,
   "trim_limit_secs": 10,
