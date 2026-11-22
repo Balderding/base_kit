@@ -898,7 +898,11 @@ static void card(int i, int x, int y, int w, int h) {
         txt(st, x + pad, capY + S(20), iw, S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); break; }
     case ST_OK: swprintf(b, 160, L"BUILT  %.0f s", c->secs); pill(b, x + pad, capY + S(20), S(96), S(18), C_ACC, C_ONACC); break;
     case ST_VARIANT: { int pw = c->img3c ? iw - S(86) : iw; pill(L"built as a new variant", x + pad, capY + S(20), pw < S(160) ? pw : S(160), S(18), C_GOLD, C_ONGOLD); break; }          /* room for the COLOUR toggle */
-    case ST_FAIL: pill(L"not built: failed the check", x + pad, capY + S(20), iw < S(180) ? iw : S(180), S(18), C_GOLD, C_ONGOLD); break;
+    case ST_FAIL: {          /* F3 (2026-11-22): why, on the card itself (cut with ..., the whole reason in its tooltip), not only in Details */
+        int pw = S(72) < iw ? S(72) : iw;
+        pill(L"not built", x + pad, capY + S(20), pw, S(18), C_GOLD, C_ONGOLD);
+        if (iw - pw - S(6) > S(20)) txt(c->why[0] ? c->why : L"failed the check", x + pad + pw + S(6), capY + S(20), iw - pw - S(6), S(18), fSmall, C_GOLD, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        break; }
     default: swprintf(b, 160, L"detail %d of 4", c->tier); txt(b, x + pad, capY + S(20), iw, S(18), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE);
     }
     { RECT cr = { x, y, x + w, y + h }, vis; if (IntersectRect(&vis, &cr, &gridR)) hit(vis.left, vis.top, vis.right - vis.left, vis.bottom - vis.top, H_CARD, i); }          /* only the part of the card that shows (not under the bottom bar)  */
@@ -1891,7 +1895,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                 else { swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w"); if (tf) { fprintf(tf, "OK cut 0" "\n"); fprintf(tf, "sidew %d main_need %d lookW %d scale %.2f" "\n", sideW, main_need(), lookW, SC); fclose(tf); } }
             }
             if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* F1: cards building, built, failed, waiting, for the contrast test */
-                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
+                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; wcscpy(cells[4].why, L"print check: too similar to urban_40mm_02 (12% different)"); cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
             capture(stShot);
             if (GetEnvironmentVariableA("BBB_TEST_TEXTS", NULL, 0)) {          /* F1: every text's box and colour, for work\\rest\\contrast.py */
                 WCHAR p2[MAX_PATH]; FILE *tf; int k; swprintf(p2, MAX_PATH, L"%ls.texts.txt", stShot); tf = _wfopen(p2, L"w, ccs=UTF-8");
