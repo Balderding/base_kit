@@ -1349,6 +1349,13 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
                         DeleteFileW(wt); free(px4);
                     }
                 }
+                if (okp && cfg_bool("side_picture", 1)) {          /* plan B4 (2026-11-22): the side view, low and level, shows the real edge and how tall things are */
+                    char sp[MAX_PATH * 3], by3[200] = ""; Mesh bare; int sok = 0; snprintf(sp, sizeof sp, "%s\\%s_side.png", P->dest, nw);
+                    if (stl_read(stl, &bare)) {          /* the base alone (no figure), from level */
+                        sok = shot_png(&bare, tmp, 1200, 300, 0, -90, by3, sizeof by3) && d2_see_through(tmp, sp, 600, er, sizeof er); mesh_free(&bare); }
+                    if (!sok) { char msg[400]; snprintf(msg, sizeof msg, "no side picture for %s: %s", R->base, by3[0] ? by3 : er); ev("log", "s", "text", msg); }
+                    DeleteFileW(wt);
+                }
                 mesh_free(&soup);
             }
             if (!okp) {

@@ -605,6 +605,7 @@ Everything is optional.
 | `style_strength` | 1 | How bold the style is, 0.25 to 2.5: deeper cracks, bolder rocks, coarser ground grain (catch washes and drybrushing). `--strength` and the window's Style strength row win |
 | `ground_grain` | true | Fine grain on every flat ground top, `ground_grain_mm` (0.12) high, times the style strength |
 | `organic_rocks` | true | Rocks shaped as real stone: rounded, chipped, layered or split, with chips and pits; about half lean |
+| `side_picture` | true | A level side view of each picked base (`_side.png` beside its STL): the real edge and how tall things stand |
 | `file_name` | `{style}_{size}mm_{theme}_{seed}_{n}` | The picked files' names. Also `{date}`. Only letters, digits, - and _ are kept. `--name` wins |
 | `supports_join` | true | With supports on, the objects are joined into the base as one solid (Manifold), pieces in the air left out. false = each object its own shell. The window's Join switch wins |
 | `video_card` | true | 3D pictures drawn by the video card (Direct3D 11; Windows' software renderer if there is no card). false = Python draws them. The window's Video card switch wins |
