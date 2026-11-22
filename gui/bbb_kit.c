@@ -60,7 +60,7 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_ONGOLD 0xFF14213Du
 /* the pixel look's ramp (work\ui_research\REPORT.md), made from the colours above. No red anywhere: navy, teal, green, gold */
 #define C_EDGE 0xFF0D0F13u          /* the dark outline round every pixel box */
-#define C_OFF 0xFF5F6775u           /* ink of a button that is off */
+#define C_OFF 0xFF8C95A3u           /* ink of a button that is off (F1 2026-11-22: was 5F6775, 2.55:1 on the card colour; now about 4.7:1, still dimmer than C_DIM) */
 #define C_BEVH 0xFF343946u          /* bevel: the lit top and left edge of a box */
 #define C_BEVHH 0xFF3E4452u
 #define C_BEVD 0xFF1C1F26u          /* bevel: the shaded bottom and right edge */
@@ -523,6 +523,10 @@ static void fillrect(int x, int y, int w, int h, ARGB c) {
 }
 /* R3 (2026-11-22): a one-line text too long for its box is cut with "..." and kept here with its whole text; resting the
    mouse on it for half a second shows the whole text (drawn by the window itself, timer 7) */
+typedef struct { RECT r; unsigned c; WCHAR s[80]; } TextRec;          /* F1 (2026-11-22): every text of the last paint, for the contrast test */
+static TextRec texts[700]; static int ntext; static int hitClip;          /* hitClip: R4, see hit() */
+static void text_rec(int x, int y, int w, int h, unsigned c, const WCHAR *s) { if (hitClip && x < hitClip >> 16 && y >= (hitClip & 0xFFFF)) return;          /* under the side panel's footer: not seen */
+    if (ntext < 700) { SetRect(&texts[ntext].r, x, y, x + w, y + h); texts[ntext].c = c; wcsncpy(texts[ntext].s, s, 79); texts[ntext].s[79] = 0; ntext++; } }
 typedef struct { RECT r; WCHAR s[200]; } Tip;
 static Tip tips[96]; static int ntip, tipNo, tipCur = -1, tipShown, tipX, tipY; static WCHAR tipText[200];
 static void txt(const WCHAR *s, int x, int y, int w, int h, HFONT f, ARGB c, UINT fl) {
@@ -536,8 +540,9 @@ static void txt(const WCHAR *s, int x, int y, int w, int h, HFONT f, ARGB c, UIN
         }
     }
     DrawTextW(DC, s, -1, &r, fl | DT_NOPREFIX);
+    if (!tipNo) text_rec(r.left, r.top, r.right - r.left, r.bottom - r.top, c, s);
 }
-static int hitClip;          /* R4: while the side panel's rows are drawn: the footer's top; a click area under it is cut there (the footer covers it) */
+/* hitClip (declared above): R4, while the side panel's rows are drawn: the footer's top; a click area under it is cut there (the footer covers it) */
 static void hit(int x, int y, int w, int h, int kind, int idx) { y += hitDy; if (hitClip && x < hitClip >> 16) { int cy = hitClip & 0xFFFF; if (y >= cy) return; if (y + h > cy) h = cy - y; } if (nhit < 400) { SetRect(&hits[nhit].r, x, y, x + w, y + h); hits[nhit].kind = kind; hits[nhit].idx = idx; nhit++; } }
 static int hov(int kind, int idx) { return hovK == kind && hovI == idx; }
 
@@ -690,6 +695,7 @@ static void pf_draw(int sp, const WCHAR *s, int x, int y, int w, int h, ARGB c, 
         pen += g[4];
     }
     dx = fl & DT_CENTER ? x + (w - tw * sc) / 2 : fl & DT_RIGHT ? x + w - tw * sc : x;
+    text_rec(x, y + txtDy, w, h, c, s);          /* F1: the pixel font's text too (its y on screen: the side panel's shift) */
     dy = y + (h - f->cap * sc + 1) / 2 - (f->base - f->cap) * sc;          /* the capitals centred in the box */
     GdipCreateBitmapFromScan0(bw, bh, bw * 4, PixelFormat32bppARGB, (BYTE *)buf, &bm);
     if (bm) {
@@ -1075,7 +1081,7 @@ static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
     DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
     GdipCreateFromHDC(DC, &G); GdipSetSmoothingMode(G, lookPix ? SmoothingModeNone : SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
-    nhit = 0; ntip = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
+    nhit = 0; ntip = 0; ntext = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
     if (lookPix && lookTex) {          /* textures: stone on the side panel, a navy scanline title bar over it, faint scanlines on the top */
         int tb = snp(S(66));
         texfill(0, 0, mx, H, 2, C_STONEL, 0);
@@ -1880,7 +1886,14 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     tipShown = 0; tipCur = -1; }
                 else { swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w"); if (tf) { fprintf(tf, "OK cut 0" "\n"); fprintf(tf, "sidew %d main_need %d lookW %d scale %.2f" "\n", sideW, main_need(), lookW, SC); fclose(tf); } }
             }
-            capture(stShot); ui_check(L"screen"); return 0; } }
+            if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* F1: cards building, built, failed, waiting, for the contrast test */
+                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
+            capture(stShot);
+            if (GetEnvironmentVariableA("BBB_TEST_TEXTS", NULL, 0)) {          /* F1: every text's box and colour, for work\\rest\\contrast.py */
+                WCHAR p2[MAX_PATH]; FILE *tf; int k; swprintf(p2, MAX_PATH, L"%ls.texts.txt", stShot); tf = _wfopen(p2, L"w, ccs=UTF-8");
+                if (tf) { for (k = 0; k < ntext; k++) fwprintf(tf, L"%ld %ld %ld %ld %08X %ls" L"\n", texts[k].r.left, texts[k].r.top, texts[k].r.right, texts[k].r.bottom, texts[k].c, texts[k].s); fclose(tf); }
+            }
+            ui_check(L"screen"); return 0; } }
         if (GetEnvironmentVariableA("BBB_TEST_SEEDKEYS", NULL, 0)) {          /* a test: typing f, d, Enter in the seed box must not fire the shortcuts */
             int lf = lookFont, sd = showDetails, bz = busy, nc = ncell; WPARAM ks[3] = { 'F', 'D', VK_RETURN }, cs[3] = { 'f', 'd', 13 }; FILE *tf; WCHAR p2[MAX_PATH];
             seedEdit = 1; seedBuf[0] = 0;
