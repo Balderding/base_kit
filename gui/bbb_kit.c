@@ -717,6 +717,10 @@ static void chip(const char *label, int x, int y, int w, int h, int on, int kind
     if (lookPix) pbox(x, y, w, h, 1, on ? 1 : 0, !on && hov(kind, idx));
     else rr(x, y, w, h, S(6), on ? C_ACC : hov(kind, idx) ? C_CARDH : C_CARD, on ? 0 : C_LINE, 1);
     ltxt(b, x, y, w, h, fUI, on ? C_ONACC : C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 0, chipSpec); hit(x, y, w, h, kind, idx);
+    if (on) {          /* F2 (2026-11-22): "on" is a shape too, not only a colour: a small dark square in the chip's top right corner */
+        int d = lookPix ? 2 * PX : (S(4) > 2 ? S(4) : 2), in = lookPix ? 2 * PX : S(4);
+        fillrect(x + w - in - d, y + in, d, d, C_ONACC);
+    }
 }
 static void section(const WCHAR *label, int x, int y, int w, int h) {          /* the label over a block of the side panel */
     if (lookPix && lookTex) {          /* on a navy scanline bar with a teal grip */
