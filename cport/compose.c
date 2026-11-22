@@ -2014,6 +2014,7 @@ static void rim_dressing(Sc *sc, KVal *plan) {          /* rim_dressing(sc, plan
     }
 }
 
+int cp_story = 1;          /* settings "story_direction": debris lies out from the subject (clutter) */
 int cp_cart_on_track = 1;          /* settings.json "cart_on_track": a cart by a track stands on it */
 static int cart_on_track(Sc *sc) {          /* the cart on its track: on the rails, along them, clear of everything else */
     double L, u, x, y, a; int t, i;
@@ -2130,7 +2131,10 @@ static void clutter(Sc *sc, KVal *plan, int has_n, double n_each) {          /* 
                    times (grown only where it fits); its own numbers, so the layout's choices are the same as before */
                 h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu; h ^= h >> 16; u = (h & 0xffffff) / 16777216.0;
                 cp_grow = g0 * (u < 0.5 ? 1.0 : u < 0.85 ? 1.15 + 0.25 * (u - 0.5) / 0.35 : 1.45 + 0.35 * (u - 0.85) / 0.15);
-                if (py_choice_e(sc->mixr, fs->n, &c) != 0) cp_raise(SC_ERR); run_(sc, fs->v[c], f, NULL); ly_pop(mark);
+                if (py_choice_e(sc->mixr, fs->n, &c) != 0) cp_raise(SC_ERR);
+                /* one story direction (plan B2, 2026-11-22): with a subject on the base (the wreck, the ruin, the crater),
+                   debris lies along lines out from it, as if thrown or fallen from it; growth stays as it grows */
+                run_(sc, fs->v[c], f, k == 0 && sc->subj && !E(sc->subj) && cp_story ? ATO(sc->c[0], sc->c[1], 0.35) : NULL); ly_pop(mark);
             }
         }
         cp_grow = 1.0;
