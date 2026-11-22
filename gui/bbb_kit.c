@@ -79,7 +79,9 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
    cards; double-click puts it back. Saved as sidew in bbb_kit.ini. SIDE_W stays the name every row uses. */
 enum { SIDE_W0 = 420, SIDE_MIN = 320 };
 static int sideW = SIDE_W0;
-static int divDrag, divHover;          /* R1: the line is being dragged / under the mouse */
+enum { DET_H0 = 170, DET_MIN = 110 };
+static int detailsH = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; saved as detailsh */
+static int divDrag, divHover;          /* R1 / R2: which line is being dragged / is under the mouse: 1 the side panel's, 2 the Details pane's */
 #define SIDE_W sideW
 enum { HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
@@ -1147,7 +1149,7 @@ static void paint(HDC out, int W, int H) {
     }
     GdipResetWorldTransform(G); txtDy = hitDy = 0;
     if (sideMax > 0) { int th = (int)((double)H * H / (H + sideMax)), ty = (int)((double)sideOff / sideMax * (H - th)); fillrect(mx - S(7), 0, S(6), H, C_SIDE); rr(mx - S(6), ty + S(2), S(4), th - S(4), S(2), C_LINE, 0, 0); }          /* its scroll bar */
-    if (divHover || divDrag) fillrect(mx - S(1), 0, S(3), H, C_ACC);          /* R1: the line lit while it can be dragged */
+    if (divHover == 1 || divDrag == 1) fillrect(mx - S(1), 0, S(3), H, C_ACC);          /* R1: the line lit while it can be dragged */
 
 #else
     nkui_frame(); nk_side(H); nk_top(mx, mw); nkui_render(G); (void)y;          /* the side panel and the top row in Nuklear */
@@ -1195,7 +1197,7 @@ static void paint(HDC out, int W, int H) {
         rowsH = nrw && bigNow < 0 ? S(28) + nrw * S(14) + S(10) : 0;
         rowsN = nrw;
     }
-    SetRect(&gridR, mx + 1, HH, W, fy - (showDetails ? S(170) : 0) - rowsH);
+    SetRect(&gridR, mx + 1, HH, W, fy - (showDetails ? S(detailsH) : 0) - rowsH);
     if (bigNow >= 0) big_view(gridR.left, gridR.top, gridR.right - gridR.left, gridR.bottom - gridR.top, rowsN);
     else {
         int pad = S(18), gap = S(14), aw = gridR.right - gridR.left - 2 * pad - S(8), cols, cw, ch, nrows, total, vh = gridR.bottom - gridR.top; double ovr = oval_ratio();
@@ -1250,7 +1252,8 @@ static void paint(HDC out, int W, int H) {
         }
     }
     if (showDetails) {          /* what the kit itself says, for when something goes wrong */
-        int dy = gridR.bottom + rowsH, dh = S(170), lh = S(16), k = (dh - S(34)) / lh, j, from = nlog > k ? nlog - k : 0;
+        if (divHover == 2 || divDrag == 2) fillrect(mx, gridR.bottom + rowsH - S(1), W - mx, S(3), C_ACC);          /* R2: its line lit while it can be dragged */
+        int dy = gridR.bottom + rowsH, dh = S(detailsH), lh = S(16), k = (dh - S(34)) / lh, j, from = nlog > k ? nlog - k : 0;
         fillrect(mx + 1, dy, mw, dh, C_SIDE); if (lookPix && lookTex) texfill(mx + 1, dy, mw, dh, 2, C_STONEL, 0);
         fillrect(mx + 1, dy, mw, lookPix ? PX : 1, C_LINE);
         section(L"DETAILS: WHAT THE KIT SAYS", mx + S(22), dy + S(8), S(320), S(18));
@@ -1452,7 +1455,20 @@ static void act2(int kind, int idx) {
 }
 /* R1: the line between the side panel and the cards (a strip 4 px either side of it), and its width kept in bounds:
    at least SIDE_MIN, at most what leaves the cards one column (196 + pads) */
-static int on_divider(int x, int y) { int mx = S(sideW); (void)y; return !showHelp && x >= mx - S(4) && x <= mx + S(4); }
+static int det_top(void) { RECT rc; GetClientRect(hMain, &rc); return rc.bottom - S(FOOT_H) - S(detailsH); }          /* R2: the Details pane's top (its line) */
+static int on_divider(int x, int y) {          /* 1 the side panel's line, 2 the Details pane's, 0 none */
+    int mx = S(sideW);
+    if (showHelp) return 0;
+    if (x >= mx - S(4) && x <= mx + S(4)) return 1;
+    if (showDetails && x > mx + S(4)) { int t = det_top(); if (y >= t - S(4) && y <= t + S(4)) return 2; }
+    return 0;
+}
+static void det_set(int h) {          /* R2: at least DET_MIN, at most half of the card area */
+    RECT rc; int mxh; GetClientRect(hMain, &rc); mxh = (int)((rc.bottom / SC - FOOT_H - HEAD_H - STRIP_H) / 2);
+    if (h > mxh) h = mxh;
+    if (h < DET_MIN) h = DET_MIN;
+    detailsH = h;
+}
 static void side_set(int w) {
     RECT rc; int mxw; GetClientRect(hMain, &rc); mxw = (int)(rc.right / SC) - 260;
     if (w > mxw) w = mxw;
@@ -1517,7 +1533,7 @@ static void hover_at(int x, int y) {
         redraw();
     }
     { int dv = on_divider(x, y); if (dv != divHover) { divHover = dv; redraw(); } }
-    SetCursor(LoadCursor(NULL, divDrag || divHover ? IDC_SIZEWE : k != H_NONE ? IDC_HAND : IDC_ARROW));
+    { int d = divDrag ? divDrag : divHover; SetCursor(LoadCursor(NULL, d == 1 ? IDC_SIZEWE : d == 2 ? IDC_SIZENS : k != H_NONE ? IDC_HAND : IDC_ARROW)); }
 }
 static void make_fonts(void) {
     HFONT *fs[] = { &fTitle, &fLabel, &fUI, &fSmall, &fBig, &fBtn, &fMono }; int px[] = { 19, 11, 13, 12, 18, 15, 12 }, wt[] = { 700, 600, 400, 400, 600, 600, 400 }, i;
@@ -1534,8 +1550,8 @@ static void ini(int save) {
     if (save) CreateDirectoryW(p, NULL);
     wcscat(p, L"\\bbb_kit.ini");
     if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcscpy(p, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
-    if (save) { swprintf(v, 16, L"%d", sideW); WritePrivateProfileStringW(L"window", L"sidew", v, p); }          /* R1 */
-    else sideW = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p);
+    if (save) { swprintf(v, 16, L"%d", sideW); WritePrivateProfileStringW(L"window", L"sidew", v, p); swprintf(v, 16, L"%d", detailsH); WritePrivateProfileStringW(L"window", L"detailsh", v, p); }          /* R1, R2 */
+    else { sideW = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p); detailsH = (int)GetPrivateProfileIntW(L"window", L"detailsh", DET_H0, p); }
     if (save) {          /* the window's size and place, so it opens next time the way it was left */
         WINDOWPLACEMENT wp; static const WCHAR *k[] = { L"left", L"top", L"right", L"bottom" }; LONG *e[4];
         memset(&wp, 0, sizeof wp); wp.length = sizeof wp; GetWindowPlacement(hMain, &wp); e[0] = &wp.rcNormalPosition.left; e[1] = &wp.rcNormalPosition.top; e[2] = &wp.rcNormalPosition.right; e[3] = &wp.rcNormalPosition.bottom;
@@ -1596,13 +1612,16 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == 5) { if (shrinkI < 0) KillTimer(h, 5); }
         else anim++;
         redraw(); return 0;
-    case WM_MOUSEMOVE: if (divDrag) { side_set((int)(GET_X_LPARAM(l) / SC + 0.5)); SetCursor(LoadCursor(NULL, IDC_SIZEWE)); redraw(); return 0; }          /* R1: the line follows the mouse */
+    case WM_MOUSEMOVE: if (divDrag) {          /* R1 / R2: the line follows the mouse */
+            if (divDrag == 1) side_set((int)(GET_X_LPARAM(l) / SC + 0.5));
+            else { RECT rc; GetClientRect(h, &rc); det_set((int)((rc.bottom - S(FOOT_H) - GET_Y_LPARAM(l)) / SC + 0.5)); }
+            SetCursor(LoadCursor(NULL, divDrag == 1 ? IDC_SIZEWE : IDC_SIZENS)); redraw(); return 0; }          /* R1: the line follows the mouse */
         { TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t); hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if ((w & MK_LBUTTON) && hovK == H_OBJ && hovI != selObj) act(H_OBJ, hovI); return 0; }          /* the slider follows a drag */
     case WM_MOUSELEAVE: hovK = H_NONE; hovI = -1; redraw(); return 0;
     case WM_SETCURSOR: if (LOWORD(l) == HTCLIENT) return TRUE; break;
-    case WM_LBUTTONDBLCLK: if (on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l))) { side_set(SIDE_W0); SendMessageW(h, WM_SIZE, 0, 0); return 0; }          /* R1: back to the default */
+    case WM_LBUTTONDBLCLK: { int d = on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (d) { if (d == 1) side_set(SIDE_W0); else det_set(DET_H0); SendMessageW(h, WM_SIZE, 0, 0); return 0; } }          /* R1: back to the default */
         /* any other double-click is a click, as it was before the window took double-clicks */
-    case WM_LBUTTONDOWN: if (on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l))) { divDrag = 1; SetCapture(h); redraw(); return 0; }          /* R1: drag the line */
+    case WM_LBUTTONDOWN: { int d = on_divider(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (d) { divDrag = d; SetCapture(h); redraw(); return 0; } }          /* R1: drag the line */
         hover_at(GET_X_LPARAM(l), GET_Y_LPARAM(l)); if (hovK != H_NONE) act(hovK, hovI); return 0;
     case WM_LBUTTONUP: if (divDrag) { divDrag = 0; ReleaseCapture(); SendMessageW(h, WM_SIZE, 0, 0); return 0; }          /* R1: let go: the scale fits the new split */
         break;
@@ -1647,7 +1666,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 #ifdef BBB_NK
         if (NK) { nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme); }
 #endif
-        } side_set(sideW); } redraw(); return 0; }
+        } side_set(sideW); det_set(detailsH); } redraw(); return 0; }
     case WM_GETMINMAXINFO: { MINMAXINFO *mi = (MINMAXINFO *)l; RECT r = { 0, 0, 900, 560 };          /* as small as 900 x 560 px: the scale follows the window, the side panel scrolls */
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE); mi->ptMinTrackSize.x = r.right - r.left; mi->ptMinTrackSize.y = r.bottom - r.top; return 0; }
     case 0x02E0: { RECT *r = (RECT *)l; SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE); redraw(); return 0; }          /* WM_DPICHANGED: moved to a monitor with another scaling */
@@ -1737,19 +1756,27 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         { char e[32]; int tw2, th2; if (GetEnvironmentVariableA("BBB_TEST_CLIENT", e, sizeof e) && sscanf(e, "%dx%d", &tw2, &th2) == 2) {          /* a test: the window's inside exactly this big (a screen size), one picture + the UI check, then quit */
             RECT wr = { 0, 0, tw2, th2 }; AdjustWindowRect(&wr, st, FALSE); SetWindowPos(hMain, NULL, 0, 0, wr.right - wr.left, wr.bottom - wr.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
             { char e2[16]; if (GetEnvironmentVariableA("BBB_TEST_SIDEW", e2, sizeof e2)) { side_set(atoi(e2)); SendMessageW(hMain, WM_SIZE, 0, 0); } }          /* R1: the line here */
+            { char e2[16]; if (GetEnvironmentVariableA("BBB_TEST_DETAILSH", e2, sizeof e2)) { showDetails = 1; det_set(atoi(e2)); SendMessageW(hMain, WM_SIZE, 0, 0); } }          /* R2: the Details pane open, this tall */
             if (GetEnvironmentVariableA("BBB_TEST_DRAG", e, sizeof e)) {          /* R1: a drag sent to the window itself (no real mouse): press on the line, move, let go */
-                int x1, y1, x2, y2, before = sideW, want; FILE *tf; WCHAR p2[MAX_PATH];
+                int x1, y1, x2, y2, want, which; FILE *tf; WCHAR p2[MAX_PATH];
                 if (sscanf(e, "%d,%d,%d,%d", &x1, &y1, &x2, &y2) == 4) {
-                    if (x1 < 0) x1 = S(sideW);          /* -1: on the line, wherever the scale put it */
+                    if (x1 < 0) x1 = S(sideW);          /* x1 -1: on the side panel's line, wherever the scale put it */
+                    if (y1 < 0) { showDetails = 1; SendMessageW(hMain, WM_SIZE, 0, 0); y1 = det_top(); }          /* y1 -1: on the Details pane's line (R2) */
+                    which = on_divider(x1, y1);
+                    int *val = which == 2 ? &detailsH : &sideW, before = *val, keep, def;
                     SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(x1, y1)); SendMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(x1, y1));
-                    double sc0 = SC; SendMessageW(hMain, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(x2, y2)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(x2, y2));
-                    int after = sideW, saved = -1, back = -1, def;
-                    { int keep = sideW; side_set((int)(x2 / sc0 + 0.5)); want = sideW; side_set(SIDE_W0); def = sideW; sideW = keep; }
-                    if (GetEnvironmentVariableA("BBB_TEST_INI", NULL, 0)) { ini(1); sideW = SIDE_W0; ini(0); saved = sideW; sideW = after; }          /* written, then read back */
-                    if (GetEnvironmentVariableA("BBB_TEST_DBLCLK", NULL, 0)) { SendMessageW(hMain, WM_LBUTTONDBLCLK, MK_LBUTTON, MAKELPARAM(S(sideW), y1)); back = sideW; }
-                    int ok = after == want && after != before && (saved < 0 || saved == after) && (back < 0 || back == def);
+                    double sc0 = SC; RECT rc0; GetClientRect(hMain, &rc0);
+                    SendMessageW(hMain, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(x2, y2)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(x2, y2));
+                    int after = *val, saved = -1, back = -1;
+                    keep = *val;
+                    if (which == 2) { det_set((int)((rc0.bottom - FOOT_H * sc0 - y2) / sc0 + 0.5)); want = detailsH; det_set(DET_H0); def = detailsH; }
+                    else { side_set((int)(x2 / sc0 + 0.5)); want = sideW; side_set(SIDE_W0); def = sideW; }
+                    *val = keep;
+                    if (GetEnvironmentVariableA("BBB_TEST_INI", NULL, 0)) { ini(1); sideW = SIDE_W0; detailsH = DET_H0; ini(0); saved = *val; }          /* written, then read back */
+                    if (GetEnvironmentVariableA("BBB_TEST_DBLCLK", NULL, 0)) { int bx = which == 2 ? x1 : S(sideW), by = which == 2 ? det_top() : y1; SendMessageW(hMain, WM_LBUTTONDBLCLK, MK_LBUTTON, MAKELPARAM(bx, by)); back = *val; }
+                    int ok = which && after == want && after != before && (saved < 0 || saved == after) && (back < 0 || back == def);
                     swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
-                    if (tf) { fprintf(tf, "%s sidew %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
+                    if (tf) { fprintf(tf, "%s %s %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", which == 2 ? "detailsh" : which == 1 ? "sidew" : "no line at the press:", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
                 }
             }
             capture(stShot); ui_check(L"screen"); return 0; } }
