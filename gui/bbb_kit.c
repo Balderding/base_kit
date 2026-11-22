@@ -105,6 +105,7 @@ static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, 
 static const char *STRENGTHS[] = { "0.5", "0.75", "1", "1.5", "2" }; enum { NSTR = 5 };
 static int selStr = 2, selTheme, seedEdit, sizeMulti, setSave, sizeQ[32], nSizeQ; static unsigned sizeMask; static char seedBuf[16];
 static const char *style_name(void);
+static void sets_ini(WCHAR *p);          /* where the saved sets live (a test: beside its picture, never the real ini) */
 extern int kd_theme_names(const char *style, const char **out, int max);
 static const char *theme_name(void) { static const char *nm[64]; int n = kd_theme_names(style_name(), nm, 64); return selTheme >= 1 && selTheme <= n ? nm[selTheme - 1] : NULL; }
 static int theme_count(void) { const char *nm[64]; return kd_theme_names(style_name(), nm, 64); }
@@ -1091,7 +1092,7 @@ static void paint(HDC out, int W, int H) {
         y += bh + S(8);
     }
     {          /* saved sets: click one to load it; "Save to a set", then a set, keeps what is chosen now */
-        int x0 = S(16), wAll = S(SIDE_W - 32), g = S(4), cw = (wAll - 3 * g) / 4, k; WCHAR p[MAX_PATH]; swprintf(p, MAX_PATH, L"%ls\\out\\bbb_kit.ini", kit);
+        int x0 = S(16), wAll = S(SIDE_W - 32), g = S(4), cw = (wAll - 3 * g) / 4, k; WCHAR p[MAX_PATH]; sets_ini(p);
         section(setSave ? L"SAVED SETS  (NOW CLICK A SET TO SAVE INTO)" : L"SAVED SETS  (CLICK TO LOAD)", x0, y, wAll, S(18)); y += S(20);
         for (k = 0; k < 3; k++) { WCHAR sec[8]; char lb[16]; swprintf(sec, 8, L"set%d", k + 1); snprintf(lb, sizeof lb, GetPrivateProfileIntW(sec, L"saved", 0, p) ? "Set %d" : "Set %d -", k + 1); chip(lb, x0 + k * (cw + g), y, cw, sideTight ? S(22) : S(24), 0, H_SET, k); }
         chip(setSave ? "Saving..." : "Save to a set", x0 + 3 * (cw + g), y, wAll - 3 * (cw + g), sideTight ? S(22) : S(24), setSave, H_SET, 3); y += sideTight ? S(27) : S(30);
@@ -1331,23 +1332,40 @@ static void open_folder(void) {
     if (GetFileAttributesW(p) == INVALID_FILE_ATTRIBUTES) wcscpy(p, kit);
     ShellExecuteW(hMain, L"open", p, NULL, NULL, SW_SHOWNORMAL);
 }
-static void set_io(int k, int save) {          /* out\\bbb_kit.ini [setN]: style, sizes, how many, detail, miniature, game scale, object size, strength, theme, seed */
-    WCHAR p[MAX_PATH], sec[8], v[64]; int i; int *iv[] = { &selStyle, &selSize, &selCount, &selDetail, &selMini, &selScale, &selObj, &selStr, &sizeMulti };
-    static const WCHAR *ik[] = { L"style", L"size", L"howmany", L"detail", L"mini", L"game", L"objsize", L"strength", L"several" }; int lim[] = { NSTYLES, NSIZES, 21, 5, 13, 3, NOBJ, NSTR, 2 };
-    swprintf(p, MAX_PATH, L"%ls\\out", kit); CreateDirectoryW(p, NULL); wcscat(p, L"\\bbb_kit.ini"); swprintf(sec, 8, L"set%d", k + 1);
+static void sets_ini(WCHAR *p) {
+    if (selftest) { swprintf(p, MAX_PATH, L"%ls.sets.ini", stShot); return; }          /* review P2-5: a test never touches the real out\bbb_kit.ini */
+    swprintf(p, MAX_PATH, L"%ls\\out", kit); CreateDirectoryW(p, NULL); wcscat(p, L"\\bbb_kit.ini");
+}
+static void set_io(int k, int save) {          /* out\bbb_kit.ini [setN]: style, sizes, how many, detail, miniature, game scale, object size, strength, theme, seed */
+    /* review P3-1 (2026-11-22): style and sizes by NAME (a list position shifts when a size is added); a set saved
+       by position before (saved=1) still loads */
+    WCHAR p[MAX_PATH], sec[8], v[400]; int i; int *iv[] = { &selCount, &selDetail, &selMini, &selScale, &selObj, &selStr, &sizeMulti };
+    static const WCHAR *ik[] = { L"howmany", L"detail", L"mini", L"game", L"objsize", L"strength", L"several" }; int lim[] = { 21, 5, 13, 3, NOBJ, NSTR, 2 };
+    sets_ini(p); swprintf(sec, 8, L"set%d", k + 1);
     if (save) {
-        const char *tn = theme_name();
-        for (i = 0; i < 9; i++) { swprintf(v, 64, L"%d", *iv[i]); WritePrivateProfileStringW(sec, ik[i], v, p); }
-        swprintf(v, 64, L"%u", sizeMask); WritePrivateProfileStringW(sec, L"sizes", v, p);
+        const char *tn = theme_name(); WCHAR *q = v;
+        for (i = 0; i < 7; i++) { swprintf(v, 64, L"%d", *iv[i]); WritePrivateProfileStringW(sec, ik[i], v, p); }
+        swprintf(v, 64, L"%hs", STYLES[selStyle]); WritePrivateProfileStringW(sec, L"style", v, p);
+        swprintf(v, 64, L"%hs", SIZES[selSize]); WritePrivateProfileStringW(sec, L"size", v, p);
+        v[0] = 0; for (i = 0; i < NSIZES; i++) if (sizeMask >> i & 1u) q += swprintf(q, 400 - (size_t)(q - v), L"%ls%hs", q > v ? L"," : L"", SIZES[i]);
+        WritePrivateProfileStringW(sec, L"sizes", v, p);
         swprintf(v, 64, L"%hs", tn ? tn : ""); WritePrivateProfileStringW(sec, L"theme", v, p);
         swprintf(v, 64, L"%hs", seedBuf); WritePrivateProfileStringW(sec, L"seed", v, p);
-        WritePrivateProfileStringW(sec, L"saved", L"1", p);
+        WritePrivateProfileStringW(sec, L"saved", L"2", p);
         swprintf(sub, 300, L"Saved as set %d: %hs, %d base%ls. Click Set %d any time to choose all of it again.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s", k + 1);
         return;
     }
     if (!GetPrivateProfileIntW(sec, L"saved", 0, p)) { swprintf(sub, 300, L"Set %d is empty. Press \"Save to a set\", then Set %d, to keep what is chosen now.", k + 1, k + 1); return; }
-    for (i = 0; i < 9; i++) { int x = (int)GetPrivateProfileIntW(sec, ik[i], *iv[i], p); if (x >= (i == 2) && x < lim[i]) *iv[i] = x; }
-    GetPrivateProfileStringW(sec, L"sizes", L"0", v, 64, p); sizeMask = (unsigned)wcstoul(v, NULL, 10) & ((1u << NSIZES) - 1u);
+    {   int old = GetPrivateProfileIntW(sec, L"saved", 0, p) == 1; char a[400];
+        for (i = 0; i < 7; i++) { int x = (int)GetPrivateProfileIntW(sec, ik[i], *iv[i], p); if (x >= (i == 0) && x < lim[i]) *iv[i] = x; }
+        GetPrivateProfileStringW(sec, L"style", L"", v, 64, p); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL);
+        if (old) { int x = atoi(a); if (x >= 0 && x < NSTYLES) selStyle = x; } else for (i = 0; i < NSTYLES; i++) if (!strcmp(STYLES[i], a)) selStyle = i;
+        GetPrivateProfileStringW(sec, L"size", L"", v, 64, p); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL);
+        if (old) { int x = atoi(a); if (x >= 0 && x < NSIZES) selSize = x; } else for (i = 0; i < NSIZES; i++) if (!strcmp(SIZES[i], a)) selSize = i;
+        GetPrivateProfileStringW(sec, L"sizes", L"", v, 400, p); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 400, NULL, NULL);
+        if (old) sizeMask = (unsigned)strtoul(a, NULL, 10) & ((1u << NSIZES) - 1u);
+        else { char *t = strtok(a, ","); sizeMask = 0; for (; t; t = strtok(NULL, ",")) for (i = 0; i < NSIZES; i++) if (!strcmp(SIZES[i], t)) sizeMask |= 1u << i; }
+    }
     GetPrivateProfileStringW(sec, L"seed", L"", v, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
     GetPrivateProfileStringW(sec, L"theme", L"", v, 64, p); selTheme = 0;
     if (v[0]) { const char *nm[64]; char a[64]; int n = kd_theme_names(STYLES[selStyle], nm, 64); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL); for (i = 0; i < n; i++) if (!strcmp(nm[i], a)) selTheme = i + 1; }

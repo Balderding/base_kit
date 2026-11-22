@@ -78,7 +78,9 @@ int grain_apply(double **vp, int *nvp, int **fp, int *ntp, double amp, uint32_t 
         }
         if (!marks) { em_free(&e); break; }
         /* the new points */
-        { double *nvv = (double *)realloc(v, sizeof(double) * 3 * (size_t)(nv + e.n)); if (!nvv) { em_free(&e); return -1; } v = nvv; }
+        {   /* review P2-7: on every failure all four outputs are written back (f may already be a later round's) */
+            static int calls; const char *ff = getenv("BBB_GRAIN_FAIL"); double *nvv = ff && atoi(ff) == ++calls ? NULL : (double *)realloc(v, sizeof(double) * 3 * (size_t)(nv + e.n));          /* BBB_GRAIN_FAIL=k: a test, the k-th of these fails */
+            if (!nvv) { em_free(&e); *vp = v; *nvp = nv; *fp = f; *ntp = nt; return -1; } v = nvv; }
         for (size_t s = 0; s < e.cap; s++) if (e.k[s] != UINT64_MAX) {
             int a = (int)(e.k[s] >> 32), b = (int)(uint32_t)e.k[s];
             for (int c = 0; c < 3; c++) v[3 * nv + c] = 0.5 * (v[3 * a + c] + v[3 * b + c]);
@@ -87,7 +89,7 @@ int grain_apply(double **vp, int *nvp, int **fp, int *ntp, double amp, uint32_t 
         /* the new faces: a face with 1, 2 or 3 split edges becomes 2, 3 or 4 */
         {
             int *nf = (int *)malloc(sizeof(int) * 3 * (size_t)nt * 4), n2 = 0;
-            if (!nf) { em_free(&e); *vp = v; *nvp = nv; return -1; }
+            if (!nf) { em_free(&e); *vp = v; *nvp = nv; *fp = f; *ntp = nt; return -1; }
             for (int t = 0; t < nt; t++) {
                 int *q = f + 3 * t, m[3], cnt = 0;
                 for (int k = 0; k < 3; k++) { int *p = em_find(&e, ekey(q[k], q[(k + 1) % 3])); m[k] = p ? *p : -1; cnt += p != NULL; }

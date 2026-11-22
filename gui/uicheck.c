@@ -26,20 +26,24 @@ static void ui_check(const WCHAR *tag) {
         }
     }
     for (i = 0; i < nh; i++) {          /* click each safe one where it is drawn: it must change the state; then put it back */
-        int k = H[i].kind, cx = (H[i].r.left + H[i].r.right) / 2, cy = (H[i].r.top + H[i].r.bottom) / 2, keep[40], m = 0, *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3], &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvParts, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &showHelp };
-        int nv = (int)(sizeof V / sizeof V[0]), pk[MAXC], q;
+        int k = H[i].kind, cx = (H[i].r.left + H[i].r.right) / 2, cy = (H[i].r.top + H[i].r.bottom) / 2, keep[40], m = 0, *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3], &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvParts, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &showHelp,
+                                                                                                                       &selTheme, &selStr, &seedEdit, &sizeMulti, &setSave };          /* review P2-5: the plan B rows put back too */
+        int nv = (int)(sizeof V / sizeof V[0]), pk[MAXC], q; unsigned kmask = sizeMask; char kseed[16]; strcpy(kseed, seedBuf);
         if (k == H_SHOW || k == H_GO || k == H_QUICK || k == H_MORE || k == H_STOP || k == H_OPEN || k == H_NONE || k == H_MODELS) continue;
         if (cy < 0 || cy >= c.bottom || cx < 0 || cx >= c.right) continue;
         for (m = 0; m < nv; m++) keep[m] = *V[m]; for (q = 0; q < ncell; q++) pk[q] = cells[q].picked;
+        if (k == H_SET && H[i].idx < 3) {          /* a set: first save one that differs (strength), so loading it must change something */
+            int ks = selStr; setSave = 0; selStr = (selStr + 1) % NSTR; set_io(H[i].idx, 1); selStr = ks;
+        }
         ui_state(a, sizeof a);
         SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(cx, cy)); SendMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(cx, cy));
         ui_state(b, sizeof b); nclick++;
         if (!strcmp(a, b)) {          /* nothing changed: fine only for a choice already chosen, or count at its end */
-            int chosen = (k == H_THEME && H[i].idx == 0 && selTheme == 0) || k == H_SET || (k == H_STYLE && H[i].idx == selStyle) || (k == H_SIZE && H[i].idx == selSize) || (k == H_OVAL && H[i].idx + NROUND == selSize) || (k == H_DETAIL && H[i].idx == selDetail) || (k == H_MINI && H[i].idx == selMini) ||
+            int chosen = (k == H_THEME && H[i].idx == 0 && selTheme == 0) || (k == H_STR && H[i].idx == selStr) || (k == H_SEED && H[i].idx == 1 && !seedBuf[0] && !seedEdit) || (k == H_STYLE && H[i].idx == selStyle) || (k == H_SIZE && H[i].idx == selSize) || (k == H_OVAL && H[i].idx + NROUND == selSize) || (k == H_DETAIL && H[i].idx == selDetail) || (k == H_MINI && H[i].idx == selMini) ||
                          (k == H_SCALE && H[i].idx == selScale) || (k == H_OBJ && H[i].idx == selObj) || (k == H_VIEW && H[i].idx == lvView) || (k == H_COUNT && (H[i].idx == 0 || (H[i].idx < 0 && selCount == 1) || (H[i].idx > 0 && selCount == 20)));
             if (!chosen) { fprintf(f, "NO CHANGE %s %d (clicked at %d,%d)\n", KN[k], H[i].idx, cx, cy); nnochange++; }
         }
-        for (m = 0; m < nv; m++) *V[m] = keep[m]; for (q = 0; q < ncell; q++) cells[q].picked = pk[q];
+        for (m = 0; m < nv; m++) *V[m] = keep[m]; for (q = 0; q < ncell; q++) cells[q].picked = pk[q]; sizeMask = kmask; strcpy(seedBuf, kseed);
         speed_env(); capture(NULL);
     }
     fprintf(f, "clicked %d, no change %d, layout problems %d\n", nclick, nnochange, bad);
