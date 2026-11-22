@@ -49,6 +49,10 @@ int mdl_solid(const MdlMesh *VF, double mm, double cx, double cy, double yaw, ch
               double tilt, double tilt_dir, double cap, MdlSolid **out, GEOSGeometry **foot, double *top);
 /* sect(z): the outline above z, a NEW geometry (the caller frees it), or NULL for None. *err = MDL_ERR_RAISE when
    Python would raise (both unions failed). Python hands back the same object for a built level; here it is a copy. */
+/* resting (2026-11-21): mdl_settle_next(1) makes the next mdl_solid on this thread turn the posed model further so it
+   lies flat on the stable face (of its convex hull, the centre of mass over it) nearest to straight down */
+void mdl_settle_next(int on);
+void mdl_rest_clear(void);                                /* the stable faces worked out per mesh (mdl_cache_clear too) */
 GEOSGeometry *mdl_sect(MdlSolid *s, double z, int *err);
 void mdl_solid_free(MdlSolid *s);
 /* the posed arrays, for proofs: v (nv x 3) after the last shift, tri (nf x 3 x 3) */

@@ -2676,7 +2676,7 @@ static int real_k(const char *style, const char *name, double *kout) {
         if (r > 0 && dr > 0) {
             double want = pmax(r * 6.0 * o, 3.0);          /* 6 mm a metre at the classic scale: 18 at 3 (1:56); nothing prints under 3 mm */
             k = pmax(0.25, pmin(15.0, want / dr));          /* up to 15 times (was 6, 2026-11-21): a detail drawn small (a container, a cart) still reaches its real size */
-            if (dr * k < 0.035 * D0) k = 0.0;          /* a big base carries a big model: nothing under about a thirtieth of it (a 4 mm skull stays up to 100 mm) */
+            if (dr * k < 3.0) k = 0.0;          /* nothing under 3 mm: it does not print (by mm since 2026-11-21, was 3.5 % of the base: a 4 mm skull now stays on any size) */
         } else if (dr > 0) k = pmax(0.8, pmin(2.2, pow(D0 / 40.0, 0.6)));          /* ground (rocks, drifts): grows with the base */
         *kout = k; return 0;
     }

@@ -214,7 +214,13 @@ static int64_t num_of(const char *name) {          /* _num(n): int(str(n).rsplit
     if (!dig || *q) return 1;
     b[k] = 0; return _strtoi64(b, &e, 10);
 }
-static const KVal *themes_of(const char *style) { const KStyle *st = kd_style(style); return st ? st->themes : NULL; }
+static const KVal *themes_of(const char *style) {
+    const KStyle *st = kd_style(style); const char *want = getenv("KIT_THEME"); static KVal one; static KVal *pv[1]; int i;
+    if (!st) return NULL;
+    if (want && *want && st->themes)          /* --theme name (the window's theme picker, plan B step 6): only that theme, when the style has it */
+        for (i = 0; i < st->themes->n; i++) { const char *nm = kv_s(st->themes->v[i], "theme"); if (nm && !strcmp(nm, want)) { memset(&one, 0, sizeof one); one.t = KV_LIST; one.n = one.cap = 1; pv[0] = st->themes->v[i]; one.v = pv; return &one; } }
+    return st->themes;
+}
 
 int cp_theme_order(const char *style, const char *salt, int64_t *out, int *n) {          /* theme_order(style, salt) */
     const KVal *th = themes_of(style); int i; PyRandom r; char seed[512];
@@ -1870,8 +1876,8 @@ static int no_bare(Sc *sc, KVal *plan, int marks_only, int cracks) {          /*
                 if (has) {
                     GeoList *ps = g_polys(LIn(g, g_buf(LAG(fp), -0.3))), *keep = LL();
                     for (i = 0; i < ps->n; i++) if (area(ps->v[i]) > 0.05) gl_push(keep, ps->v[i]);
-                    R_(sc_tcut(s, keep, num_sub(top, num_f(0.35)), top, kind_str("crack")));
-                } else R_(sc_gcut(s, g_polys(g), num_f(0.4), kind_str("crack")));
+                    { extern double kit_strength; R_(sc_tcut(s, keep, num_sub(top, num_f(0.35 * kit_strength)), top, kind_str("crack"))); }
+                } else { extern double kit_strength; R_(sc_gcut(s, g_polys(g), num_f(0.4 * kit_strength), kind_str("crack"))); }
             }
             put++;
             { double r2 = ppow(lim * 1.2, 2); for (j = 0; j < n; j++) { double dx = P[2 * j] - x, dy = P[2 * j + 1] - y; free_[j] = free_[j] && (dx * dx + dy * dy > r2); } }
@@ -2117,7 +2123,16 @@ static void clutter(Sc *sc, KVal *plan, int has_n, double n_each) {          /* 
         if (!fs || !fs->n || !f) continue;
         cp_grow = ft_obj_scale() > 0 && sc->mm >= 39.9 ? pmax(1.0, pmin(2.2, pow(sc->mm / 40.0, 0.7))) : 1.0;          /* true size: rubble chunks, not grit */
         n = print_((!has_n ? am * sc->K * sc->K : n_each) * (cv ? KN(cv) : 1.0) * share() / (cp_grow * cp_grow));
-        for (i = 0; i < n; i++) { int64_t c; int mark = ly_mark(); if (py_choice_e(sc->mixr, fs->n, &c) != 0) cp_raise(SC_ERR); run_(sc, fs->v[c], f, NULL); ly_pop(mark); }
+        {   double g0 = cp_grow; uint32_t h = (uint32_t)(sc->mm * 10.0) * 2654435761u ^ (uint32_t)(k + 1) * 0x85ebca6bu ^ (uint32_t)n * 0xc2b2ae35u;
+            for (i = 0; i < n; i++) {
+                int64_t c; int mark = ly_mark(); double u;
+                /* mixed sizes (plan B step 4, 2026-11-21): about half as made, a third up to 1.4 times, the rest up to 1.8
+                   times (grown only where it fits); its own numbers, so the layout's choices are the same as before */
+                h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu; h ^= h >> 16; u = (h & 0xffffff) / 16777216.0;
+                cp_grow = g0 * (u < 0.5 ? 1.0 : u < 0.85 ? 1.15 + 0.25 * (u - 0.5) / 0.35 : 1.45 + 0.35 * (u - 0.85) / 0.15);
+                if (py_choice_e(sc->mixr, fs->n, &c) != 0) cp_raise(SC_ERR); run_(sc, fs->v[c], f, NULL); ly_pop(mark);
+            }
+        }
         cp_grow = 1.0;
     }
     {   const ScFnList *m = by_get(&by, "marks");

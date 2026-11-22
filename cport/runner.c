@@ -17,6 +17,7 @@
 #include "pyx.h"
 #include "meshglue.h"
 #include "features.h"
+#include "grain.h"
 
 /* ================================================================ small strings */
 typedef struct { char *s; size_t n, cap; } Sb;
@@ -181,7 +182,7 @@ static const char DEFAULT_SETTINGS[] =
     " \"join_on_parent\": true, \"engine\": \"mesh\", \"mesh_keep_running\": true, \"big_base_height_factor\": 1.5, \"scenes\": true,"
     " \"scenery_scale\": 1, \"object_size\": 3, \"model_room\": 1, \"drawing_2d\": true, \"models_download\": true, \"no_bare_ground\": true, \"style_details\": true,"
     " \"style_details_amount\": 0.5, \"objects_amount\": 1, \"cpu_threads\": true, \"video_card\": true, \"max_slenderness\": 3.0, \"miniature\": \"biped\","
-    " \"smooth_details\": false, \"organic_rocks\": false}";
+    " \"smooth_details\": false, \"organic_rocks\": true}";
 static JV CFG_DEF;
 static void load_cfg(void) {
     static int done; if (done) return; done = 1;
@@ -205,8 +206,11 @@ static int strict_check(void) { return STRICT_CLI >= 0 ? STRICT_CLI : cfg_bool("
 static int on_off(const char *v) { return !strcmp(v, "on") ? 1 : !strcmp(v, "off") ? 0 : -1; }
 static int SMOOTH_CLI = -1;          /* --smooth on|off: smooth details (cport\smooth3d.c), settings "smooth_details" */
 static int smooth_details(void) { return SMOOTH_CLI >= 0 ? SMOOTH_CLI : cfg_bool("smooth_details", 0); }
+static void theme_arg(const char *s, char *out, size_t cap) { size_t i; snprintf(out, cap, "%s", s); for (i = 0; out[i]; i++) if (out[i] == '+') out[i] = ' '; }          /* --theme fenced+plot: the window joins the words with + */
+static double STRENGTH_CLI = -1;          /* --strength x: style strength (settings "style_strength", 0.25 to 2.5, 1 standard) */
+static double strength(void) { double v = STRENGTH_CLI > 0 ? STRENGTH_CLI : cfg_num("style_strength", 1.0); return v >= 0.25 && v <= 2.5 ? v : 1.0; }
 static int ROCKS_CLI = -1;          /* --rocks on|off: organic rocks (cport\rocks3d.c), settings "organic_rocks" */
-static int organic_rocks(void) { return ROCKS_CLI >= 0 ? ROCKS_CLI : cfg_bool("organic_rocks", 0); }
+static int organic_rocks(void) { return ROCKS_CLI >= 0 ? ROCKS_CLI : cfg_bool("organic_rocks", 1); }          /* on by default since 2026-11-21 (plan B step 4) */
 /* shells to join into the base: supports on (with its join switch), or smooth details / organic rocks with supports off */
 static int join_shells(void) { return allow_supports() ? supports_join() : (smooth_details() || organic_rocks()); }
 
@@ -455,6 +459,7 @@ static int job_choices(Args *a, const char *style) {
     if (!strcmp(sup, "on") || !strcmp(sup, "off")) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
     { const char *sm = opt(a, "--smooth", ""); if (on_off(sm) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(sm) ? "1" : "0" }; }          /* smooth details: the same layout as the build */
     { const char *rk = opt(a, "--rocks", ""); if (on_off(rk) >= 0) es[ne++] = (EnvSet){ "KIT_ROCKS", on_off(rk) ? "1" : "0" }; }          /* organic rocks: the same */
+    static char thc[128]; theme_arg(opt(a, "--theme", ""), thc, sizeof thc); if (thc[0]) es[ne++] = (EnvSet){ "KIT_THEME", thc };          /* only this theme (the window's theme picker) */
     dbg("choices: out %s seed %s lay %s jobs %d\n", outdir, seed, bm, jobs);
     WCHAR *env = env_block(es, ne);
     dbg("env ok\n");
@@ -863,7 +868,7 @@ static const char *jtext(const JV *v, const char *d) { return !v ? d : v->t == 3
 /* ---- run_set.py ---- */
 static const char *ALL_STYLES[19] __attribute__((unused)) = { "badlands", "highland", "maahl", "corridor", "infestation", "urban", "mine", "swamp", "cynder", "targa", "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast" };
 static const char *VARIANTS[8] = { "", "r1", "r2", "r3", "r4", "r5", "r6", "r7" };
-static const double KNOWN_SIZES[15] = { 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 130, 160 };
+static const double KNOWN_SIZES[17] = { 20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 120, 130, 160 };
 static const double OVAL_SIZES[7][2] = { { 60, 35.5 }, { 75, 42 }, { 90, 52 }, { 105, 70 }, { 120, 92 }, { 150, 95 }, { 170, 109 } };
 typedef struct {
     char variant[16], *errors, *reason, secs[32], slowest[64], steps[16], theme[256], *plan_line, *plan, *dropped, restarts[16], note[64], diff[16], *made;
@@ -991,6 +996,12 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     if (nthreads > 1 || cfield) snprintf(B->mesher, sizeof B->mesher, "C, bbb_kit.exe, field in C, %d thread%s", nthreads ? nthreads : 1, nthreads > 1 ? "s" : "");
     else snprintf(B->mesher, sizeof B->mesher, "C, bbb_kit.exe");          /* one core: the Python field + the C mesher (the same mesh) */
     mesh_merge(&m);
+    if (cfg_bool("ground_grain", 1)) {          /* plan B step 2: fine grain on every flat top (grain.c), so no open ground is smooth */
+        uint32_t sd = 2166136261u; for (const char *c = name; *c; c++) sd = (sd ^ (unsigned char)*c) * 16777619u;
+        int t0 = m.nt, mv = grain_apply(&m.v, &m.nv, &m.f, &m.nt, cfg_num("ground_grain_mm", 0.12) * strength(), sd);
+        const char *gl = getenv("BBB_GRAIN_LOG");
+        if (gl && *gl) { FILE *lf = fopen(gl, "a"); if (lf) { fprintf(lf, "%s: faces %d -> %d, points moved %d\n", name, t0, m.nt, mv); fclose(lf); } }
+    }
     int tris_field = m.nt;          /* len(f): the surface's faces, before the solids */
     {   /* --supports on: m, extra = add_solids(...) (the shells were built by the layout helper: solids3d.c, the "BBS1" blob); trimesh.util.concatenate([m] + extra) */
         JV *sk3 = jget(&B->head, "skipped3d");
@@ -1367,7 +1378,17 @@ static int job_build(Args *a, const char *style) {
         if (g >= 0 && nn[g] < 1024) nums[g][nn[g]++] = atoi(ns);
     }
     free(pk);
-    if (!ng) { ev("error", "s", "text", "nothing was picked"); return 2; }
+    {   /* --count N [--seed word]: N new bases (numbers 1..N) without picking them first (plan B step 3, 2026-11-21) */
+        int cnt = atoi(opt(a, "--count", "0")); const char *sw = opt(a, "--seed", "");
+        if (!ng && cnt > 0) {
+            char w[16]; if (sw[0]) snprintf(w, sizeof w, "%.15s", sw);
+            else { uint64_t r = GetTickCount64() * 0x9e3779b97f4a7c15ULL ^ (uint64_t)GetCurrentProcessId() * 0xc2b2ae3d27d4eb4fULL; for (int i = 0; i < 5; i++) { w[i] = (char)('a' + (r >> 20) % 26); r = r * 6364136223846793005ULL + 1442695040888963407ULL; } w[5] = 0; }
+            seeds[0] = xstrdup(w); nums[0] = malloc(sizeof(int) * 1024); nn[0] = 0; ng = 1;
+            for (int i = 1; i <= cnt && i <= 1024; i++) nums[0][nn[0]++] = i;
+        }
+    }
+    { extern void kinds_init(void); extern char kd_themes_note[300]; kinds_init(); if (kd_themes_note[0]) ev("log", "s", "text", kd_themes_note); }          /* themes.json: say what was taken */
+    if (!ng) { ev("error", "s", "text", "nothing was picked (give --picks seed:n,... or --count N [--seed word])"); return 2; }
     char ts[32], dest[MAX_PATH * 3]; strftime_now(ts, sizeof ts, "%Y%m%d_%H%M%S"); snprintf(dest, sizeof dest, "%s\\picked_%s", out_root(), ts); make_dirs(dest);
     ev("folder", "s", "folder", dest);
     snprintf(LIVE_DIR, sizeof LIVE_DIR, "%s\\.live", out_root()); make_dirs(LIVE_DIR);          /* gui_job: KIT_LIVE for the window's live view */
@@ -1377,10 +1398,10 @@ static int job_build(Args *a, const char *style) {
         RunSet rs; memset(&rs, 0, sizeof rs); InitializeCriticalSection(&rs.lock); rs.style = style; rs.salt = seeds[g];
         double A, B; int ov; read_size(size, &A, &B, &ov); rs.SIZE = A; rs.oval = ov; rs.OVAL[0] = A; rs.OVAL[1] = B;
         if (rs.oval) { char x[32], y[32]; fmt_g(x, sizeof x, A); fmt_g(y, sizeof y, B); snprintf(rs.size_tag, sizeof rs.size_tag, "%sx%s", x, y); } else fmt_g(rs.size_tag, sizeof rs.size_tag, A);
-        int known = 0; for (int i = 0; i < 15; i++) if (KNOWN_SIZES[i] == A) known = 1;
+        int known = 0; for (int i = 0; i < 17; i++) if (KNOWN_SIZES[i] == A) known = 1;
         int okv = 0; for (int i = 0; i < 7; i++) if (OVAL_SIZES[i][0] == A && OVAL_SIZES[i][1] == B) okv = 1;
         if (rs.oval && !okv) rs_print("note: %s mm is not one of the common oval sizes (60x35.5, 75x42, 90x52, 105x70, 120x92, 150x95, 170x109); building it anyway", rs.size_tag);
-        if (!rs.oval && !known) rs_print("note: %s mm is not one of the common base sizes (25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 130, 160); building it anyway", rs.size_tag);
+        if (!rs.oval && !known) rs_print("note: %s mm is not one of the common base sizes (20, 25, 28, 28.5, 30, 32, 40, 50, 60, 65, 70, 80, 90, 100, 120, 130, 160); building it anyway", rs.size_tag);
         rs.SCALE = scale_s[0] ? strtod(scale_s, NULL) : cfg_num("scenery_scale", 1.0);
         if (rs.SCALE != 1.0 && figure_scale(A, rs.SCALE) == 1.0) { char s1[32], f1[32]; fmt_g(s1, sizeof s1, rs.SCALE); fmt_g(f1, sizeof f1, cfg_num("figure_scale_from_mm", 50)); rs_print("scale  : x%s asked, but a %s mm base is under %s mm: built in the classic look, with its detail", s1, rs.size_tag, f1); rs.SCALE = 1.0; }
         rs.LAYOUT = rs.SCALE == 1.0 ? A : py_round(fmax(30.0, A / rs.SCALE), 1);
@@ -1413,6 +1434,8 @@ static int job_build(Args *a, const char *style) {
         if (sup[0]) es[ne++] = (EnvSet){ "KIT_SUPPORTS", !strcmp(sup, "on") ? "1" : "0" };
         if (on_off(smooth) >= 0) es[ne++] = (EnvSet){ "KIT_SMOOTH", on_off(smooth) ? "1" : "0" };
         if (on_off(rocks) >= 0) es[ne++] = (EnvSet){ "KIT_ROCKS", on_off(rocks) ? "1" : "0" };
+        { const char *st = opt(a, "--strength", ""); static char sb[32]; if (st[0]) STRENGTH_CLI = strtod(st, NULL); snprintf(sb, sizeof sb, "%g", strength()); es[ne++] = (EnvSet){ "KIT_STRENGTH", sb }; }
+        { static char thb[128]; theme_arg(opt(a, "--theme", ""), thb, sizeof thb); if (thb[0]) es[ne++] = (EnvSet){ "KIT_THEME", thb }; }          /* only this theme (the window's theme picker) */
         rs.envw = env_block(es, ne);
         SUP_CLI = !strcmp(sup, "on") ? 1 : !strcmp(sup, "off") ? 0 : -1;          /* --supports: CFG allow_supports for the checks */
         JOIN_CLI = on_off(join); SMALL_CLI = on_off(smaller); STRICT_CLI = on_off(strict); SMOOTH_CLI = on_off(smooth); ROCKS_CLI = on_off(rocks);
@@ -1438,8 +1461,14 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
     OUTF = out; OUTC = ctx; set_kit(); load_cfg(); pyx_load();          /* the UCRT cos / sin (magnet spots, compare_bases rotations) */
     char **av = malloc(sizeof(char *) * (argc + 1)); for (int i = 0; i < argc; i++) av[i] = argv[i];
     Args a = { argc, av };
+    if (a.argc >= 1 && !strcmp(a.argv[0], "themes")) {          /* --job themes [--out file]: every built-in theme, to copy into themes.json */
+        extern int kd_themes_write(const char *path); char p[MAX_PATH * 3]; const char *o = opt(&a, "--out", "");
+        if (o[0]) snprintf(p, sizeof p, "%s", o); else { WCHAR w[MAX_PATH]; GetModuleFileNameW(NULL, w, MAX_PATH); WCHAR *s = wcsrchr(w, L'\\'); if (s) *s = 0; WideCharToMultiByte(CP_UTF8, 0, w, -1, p, (int)sizeof p - 24, NULL, NULL); strcat(p, "\\themes.builtin.json"); }
+        int r3 = kd_themes_write(p); if (r3 == 0) ev("done", "ss", "job", "themes", "file", p); else ev("error", "s", "text", "the themes file could not be written");
+        free(av); return r3 ? 2 : 0;
+    }
     if (a.argc >= 1 && !strcmp(a.argv[0], "models")) { int r2 = job_models(opt(&a, "--pack", "")); free(av); return r2; }          /* the window's Models preview */
-    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: gui_job.py choices|build <style> ..."); free(av); return 2; }
+    if (a.argc < 2 || (strcmp(a.argv[0], "choices") && strcmp(a.argv[0], "build"))) { ev("error", "s", "text", "usage: bbb_kit.exe --job choices|build <style> [--size N] [--picks seed:n,...] [--count N] [--seed word] [--scale x] [--strength 0.25..2.5] [--theme name] [--supports on|off]; --job themes [--out file]"); free(av); return 2; }
     char job[16], style[64]; snprintf(job, sizeof job, "%s", a.argv[0]); snprintf(style, sizeof style, "%s", a.argv[1]);
     int rc;
     if (!strcmp(job, "choices")) rc = job_choices(&a, style);

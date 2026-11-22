@@ -1123,6 +1123,23 @@ static int msolid(const char *rel, double mm, double cx, double cy, double yaw, 
     sol_custom_hraster(sol->v[sol->n - 1], mhr);
     return SO_OK;
 }
+/* the dirt bank (2026-11-21): a low slope of soil (rubble) round the foot of a model bedded into the ground, as soil heaps
+   up round a stone that sank in: two raised tiers, the foot grown by w at 0.25 mm (the lowest the kit raises: place.c
+   pl_up) and by w / 2 at 0.4-0.6 mm (the model covers the inside). Only round models 1.5 mm high or more (a bank
+   round a pebble-sized bone would be bigger than the bone). Rubble, not grit: grit touching a model is taken away. */
+static int bank(const GG *foot, double top, SoLayers *lay, GL *foots) {
+    double ar = area(foot), r = sqrt(ar / 3.14159), hb = MN(MX(0.12 * top, 0.4), 0.6), w = MN(MX(0.35 * r, 0.4), 1.2);
+    GG *outer, *inner;
+    if (top < 1.5) return 0;
+    { const char *lp = getenv("BBB_REST_LOG"); FILE *lf = lp && *lp ? fopen(lp, "a") : NULL;          /* BBB_REST_LOG: every bank (a test) */
+      if (lf) { fprintf(lf, "bank foot %.2f mm2, model %.2f mm high: %.2f mm high, %.2f mm wide\n", ar, top, hb, w); fclose(lf); } }
+    if (E_ || ar < 0.05) return 0;
+    if (!(outer = gk(shp_buffer_q(foot, w, 6))) || !(inner = gk(shp_buffer_q(foot, w * 0.5, 6)))) return SC_ERR;
+    push(lay, L_up(outer, 0.25, "rubble"));
+    push(lay, L_up(inner, hb, "rubble"));
+    gl_add(foots, outer);
+    return 0;
+}
 static _Thread_local const MRow *CUR;
 static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
     const MRow *R = CUR; double lim, mm, sink, tilt, tdir, top, ar, r, ang, yaw, mm2, tilt2, tdir2, t2; char pose, pose2; int mirror, mirror2, i;
@@ -1134,9 +1151,20 @@ static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
     if (pose != 's' || rnd() < 0.5) tilt = u(0, R->tilt); else tilt = 0.0;
     tdir = u(0, 6.28);
     { const char *lp = getenv("BBB_MODEL_LOG"); FILE *lf = lp && *lp ? fopen(lp, "a") : NULL; if (lf) { fprintf(lf, "%s\t%s\t%s\n", R->style, R->name, R->rel); fclose(lf); } }          /* BBB_MODEL_LOG: every model placed (a test) */
+    /* resting (2026-11-21, user: "a skull could sit on its chin or side or upside down"): loose things (bones, debris)
+       are mostly thrown down any way up and roll onto a face they can lie on, bedded 4-15 % of their height into the
+       ground; everything sitting on the ground (sunk under 8 %) settles flat on its nearest stable face instead of
+       balancing on a corner. Sunk deeper, it stands in the ground and may lean; flags and plants stay as made. */
+    int grows = !strcmp(R->kind, "flag") || !strcmp(R->kind, "shrub");
+    {
+        int loose = !grows && (!strcmp(R->kind, "bone") || !strcmp(R->cls, "debris")), thrown = 0;
+        if (loose && rnd() < 0.75) { thrown = 1; pose = 's'; tilt = acos(1 - 2 * rnd()); sink = MX(sink, u(0.04, 0.15)); }
+        mdl_settle_next(thrown || (!grows && sink < 0.08));
+    }
     if (msolid(R->rel, mm, cx, cy, a, pose, sink, mirror, tilt, tdir, lim, sol, &foot, &top) != SO_OK) return SC_ERR;
     if (ck(so_fine(sol, top, R->kind, &y)) < 0) return SC_ERR;
     yk(y); push(lay, y); gl_add(foots, foot);
+    if (!grows && sink >= 0.03 && bank(foot, top, lay, foots) < 0) return SC_ERR;          /* bedded in: soil heaped round it */
     for (i = 0; i < R->nwith; i++) {
         if (!mdl_has(ROOT, R->with_[i].rel)) continue;          /* with_ = [w for w in with_ if os.path.exists(...)] */
         if (rnd() < 0.6) {
@@ -1144,6 +1172,7 @@ static int m_body(double cx, double cy, double a, SoLayers *lay, GG **foot_) {
             ar = area(foot); r = sqrt(ar / 3.14) + u(0.8, 1.6);
             ang = u(0, 6.28); { P2 p = pol(cx, cy, r, ang);
             mm2 = u(R->mm0, R->mm1) * R->with_[i].k; yaw = u(0, 6.28); pose2 = "sbl"[rch(3)]; mirror2 = rnd() < 0.5; tilt2 = u(0, 0.3); tdir2 = u(0, 6.28);
+            mdl_settle_next(1);          /* the companions lie on the ground: settled (2026-11-21) */
             if (msolid(R->with_[i].rel, mm2, p.x, p.y, yaw, pose2, 0.0, mirror2, tilt2, tdir2, lim, s2, &f2, &t2) != SO_OK) return SC_ERR; }
             if (!intersects(f2, foot) && !E_) {
                 if (ck(so_fine(s2, t2, R->kind, &y2)) < 0) return SC_ERR;

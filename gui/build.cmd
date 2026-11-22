@@ -27,7 +27,7 @@ set KIT=%CP%\runner.c %CP%\draw2d.c %CP%\pipeline.c %CP%\stylefns.c %CP%\make.c 
  %CP%\bld_sd_rx_graveyard.c %CP%\bld_sd_rx_highland.c %CP%\bld_sd_rx_infestation.c %CP%\bld_sd_rx_maahl.c %CP%\bld_sd_rx_mine.c %CP%\bld_sd_rx_swamp.c ^
  %CP%\bld_sd_rx_targa.c %CP%\bld_sd_rx_temple.c %CP%\bld_sd_rx_trederra.c %CP%\bld_sd_rx_urban.c %CP%\bld_newstyles.c %CP%\bld_ns_ashveil.c ^
  %CP%\bld_ns_blight.c %CP%\bld_ns_ferrum.c %CP%\bld_ns_obelis.c %CP%\bld_ns_sundered.c %CP%\bld_ns_tables.c %CP%\bld_ns_thornwild.c %CP%\bld_ns_tiers.c ^
- %CP%\core.c %CP%\mesh.c %CP%\mt.c %CP%\field.c %CP%\livetiles.c %CP%\shot.c %CP%\geos_link.c %CP%\mfjoin.c %CP%\audit.c %CP%\smooth3d.c %CP%\rocks3d.c
+ %CP%\core.c %CP%\mesh.c %CP%\mt.c %CP%\field.c %CP%\livetiles.c %CP%\shot.c %CP%\geos_link.c %CP%\mfjoin.c %CP%\audit.c %CP%\smooth3d.c %CP%\rocks3d.c %CP%\grain.c
 rem BBB_NK=1: the window's Nuklear face (gui\nk\PLAN.md), still one exe: Nuklear is compiled in
 set NKF=
 if "%BBB_NK%"=="1" set NKF=-DBBB_NK -Ink nk\nk_ui.c -lshlwapi

@@ -77,7 +77,8 @@ int bbb_core_main(const char *cmd);          /* cport\core.c: bbb_kit.exe --core
 #define C_STONED 0xFF16181Eu
 enum { SIDE_W = 420, HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
-enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS };
+enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS,
+       H_THEME, H_SEED, H_STR, H_MULTI, H_SET };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -88,13 +89,31 @@ static WCHAR *logv[MAXLOG]; static int nlog;
 /* the scale follows the window (2026-11-20): the layout is drawn for DESIGN_W x DESIGN_H, and at any window size everything is
    scaled so that size fits (larger on a big or 4K screen, smaller on a small one), in 5 % steps from 0.6 to 3; under that the side
    panel scrolls (sideOff, sideMax) and the cards scroll as they always did */
-enum { DESIGN_W = 1650, DESIGN_H = 1030 };          /* DESIGN_H: the side panel's full height (measured with the UI check, compact mode) */
-static double fit_sc(int w, int h) { double s = fmin(w / (double)DESIGN_W, h / (double)DESIGN_H); s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
+enum { DESIGN_W = 1650, DESIGN_H = 1240 };          /* 1240 since 2026-11-21: the theme, strength, seed and saved-set rows (was 1030) */          /* DESIGN_H: the side panel's full height (measured with the UI check, compact mode) */
+/* 2026-11-22: the scale follows the SCREEN size, not the side panel's full height (the panel scrolls): FIT_W x FIT_H is what
+   a scale of 1 fills, so a maximized 1080p window is 1.0, 1440p about 1.35, 4K about 2; text stays a comfortable size */
+enum { FIT_W = 1650, FIT_H = 1000 };
+static double fit_sc(int w, int h) { double s = fmin(w / (double)FIT_W, h / (double)FIT_H); s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
 static int sideOff, sideMax, hitDy, txtDy, titleH;          /* the side panel's scroll (px), how far it can go, and the shift its click areas get */
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
 static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
 static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1", curObj[16] = "3"; static int curSup, curJoin = 1, selScale = 0, selObj = 5, curFig = 32;          /* selScale: the game scale (GAMEMM), selObj: the slider (OBJM) */
 static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, selJoin = 1, showDetails = 0;
+/* plan B step 6 (2026-11-21): the theme picker (selTheme 0 = any, k = the style's k-th theme), the design seed box
+   (seedBuf, typed while seedEdit), style strength, several sizes at once (sizeMask, built one size after another), and
+   three saved sets (out\bbb_kit.ini [set1]..[set3]) */
+static const char *STRENGTHS[] = { "0.5", "0.75", "1", "1.5", "2" }; enum { NSTR = 5 };
+static int selStr = 2, selTheme, seedEdit, sizeMulti, setSave, sizeQ[32], nSizeQ; static unsigned sizeMask; static char seedBuf[16];
+static const char *style_name(void);
+extern int kd_theme_names(const char *style, const char **out, int max);
+static const char *theme_name(void) { static const char *nm[64]; int n = kd_theme_names(style_name(), nm, 64); return selTheme >= 1 && selTheme <= n ? nm[selTheme - 1] : NULL; }
+static int theme_count(void) { const char *nm[64]; return kd_theme_names(style_name(), nm, 64); }
+static void theme_opt(WCHAR *extra, size_t cap) {          /* " --theme words+joined" (the job splits its line on spaces) */
+    const char *t = theme_name(); WCHAR b[160]; int i;
+    if (!t) return;
+    swprintf(b, 160, L" --theme %hs", t); for (i = 9; b[i]; i++) if (b[i] == L' ') b[i] = L'+';
+    wcsncat(extra, b, cap - wcslen(extra) - 1);
+}
 static int mfOn[4] = { 1, 1, 0, 0 };          /* the MANIFOLD switches: Smaller files, Strict check, Smooth details, Organic rocks */
 static const char *MFN[4] = { "Smaller files", "Strict check", "Smooth details", "Organic rocks" }, *MFA[4] = { "smaller", "strict", "smooth", "rocks" }; static int MF_N = 2;          /* 2.1.0: Smooth details and Organic rocks not shown yet (still being checked; --smooth / --rocks work) */          /* selCount: how many bases, 1 to 20 */
 static int busy, wanted, doneN, nOK, nBad, scrollY, scrollMax, anim, selftest, stStep; static WCHAR stShot[MAX_PATH];
@@ -124,9 +143,10 @@ static const char *STYLES[] = { "badlands", "highland", "maahl", "corridor", "in
                                 "trederra", "fortress", "beast", "frontier", "graveyard", "forest", "dungeon", "temple", "coast",
                                 "sundered", "ashveil", "ferrum", "thornwild", "obelis", "blight" };          /* the last six: the styles kept one per file (style_<name>.py) */
 #define NSTYLES ((int)(sizeof STYLES / sizeof STYLES[0]))
-static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50", "60", "65", "70", "80", "90", "100", "130", "160",          /* the common round bases; the kit itself takes any size from 20 to 200 */
+static const char *style_name(void) { return STYLES[selStyle]; }
+static const char *SIZES[] = { "20", "25", "28", "28.5", "30", "32", "40", "50", "60", "65", "70", "80", "90", "100", "120", "130", "160",          /* the common round bases; the kit itself takes any size from 20 to 200 */
                                 "60x35.5", "75x42", "90x52", "105x70", "120x92", "150x95", "170x109" };          /* then the common oval bases, long x short */
-enum { NROUND = 16, NSIZES = 23 };
+enum { NROUND = 17, NSIZES = 24 };
 static const char *DETAILL[] = { "Mix", "1", "2", "3", "4" }, *DETAILV[] = { "mix", "1", "2", "3", "4" };
 static const char *SCALES[] = { "32 mm", "28 mm", "15 mm" }; static const double GAMEMM[] = { 32, 28, 15 };          /* the game scale: how tall a man is */
 static const double OBJM[] = { 0.33, 0.45, 0.6, 0.75, 0.9, 1.0, 1.15, 1.3, 1.5 }; enum { NOBJ = 9, OBJ_TRUE = 5 };          /* the slider: times the true size (0.33 of 32 mm: the classic look) */
@@ -301,7 +321,7 @@ static void drop_pending(void) {
 }
 
 static void ask_choices(int fresh) {
-    WCHAR cmd[1200], extra[200] = L""; int i, cnt = selCount;
+    WCHAR cmd[1200], extra[400] = L""; int i, cnt = selCount;
     if (busy) return;
     if (fresh || !ncell) {
         for (i = 0; i < ncell; i++) free_cell(&cells[i]);
@@ -313,6 +333,7 @@ static void ask_choices(int fresh) {
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
+    theme_opt(extra, 400); if (seedBuf[0]) swprintf(extra + wcslen(extra), 24, L" --seed %hs", seedBuf);
     for (i = 2; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* smooth details / organic rocks change the layout: the choices are drawn the same way */
     swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
@@ -322,7 +343,7 @@ static void ask_choices(int fresh) {
     redraw();
 }
 static void build(void) {
-    static WCHAR cmd[2600], picks[1800]; WCHAR extra[200] = L""; int i, k = 0;
+    static WCHAR cmd[2600], picks[1800]; WCHAR extra[400] = L""; int i, k = 0;
     if (busy) return;
     picks[0] = 0;
     for (i = 0; i < ncell; i++) if (cells[i].picked && cells[i].state == ST_NONE) { swprintf(picks + wcslen(picks), 40, L"%ls%hs:%d", k++ ? L"," : L"", cells[i].seed, cells[i].n); }
@@ -330,6 +351,7 @@ static void build(void) {
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
+    theme_opt(extra, 400); swprintf(extra + wcslen(extra), 24, L" --strength %hs", STRENGTHS[selStr]);
     for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
     jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
@@ -426,6 +448,7 @@ static void on_ended(int mode, DWORD code) {
         }
         return;
     }
+    if (mode == 2 && nSizeQ > 0 && !runner_stop) { selSize = sizeQ[0]; memmove(sizeQ, sizeQ + 1, sizeof(int) * (size_t)--nSizeQ); autoBuild = 1; ask_choices(1); if (!busy) { autoBuild = 0; nSizeQ = 0; } return; }          /* several sizes: the next one */
     if (mode == 1 && autoBuild) { autoBuild = 0; if (ncell) { for (i = 0; i < ncell; i++) if (cells[i].state == ST_NONE) cells[i].picked = 1; build(); return; } }
     if (selftest) {
         if (mode == 1 && stStep == 0 && ncell >= 3) { stStep = 1; cells[0].picked = 1; build(); }                                   /* ONE pick: must build exactly one */
@@ -636,7 +659,7 @@ static void ltxt(const WCHAR *s, int x, int y, int w, int h, HFONT fo, ARGB c, U
     if (!sp && lookFont && role >= 0 && GetEnvironmentVariableA("BBB_FONT_MISS", NULL, 0)) {          /* a test: the texts that did not fit the pixel font */
         char e[MAX_PATH]; FILE *f; GetEnvironmentVariableA("BBB_FONT_MISS", e, MAX_PATH); f = fopen(e, "a"); if (f) { fprintf(f, "%d %d %ls\n", w, role, s); fclose(f); } }
 }
-static int chipSpec = -1;          /* chips of one block share one font size, chosen so that every label of the block fits */
+static int chipSpec = -1; static int chipsMask; static unsigned chipsBits;          /* chipsMask: chips() shows every chip whose bit is set (several sizes) */          /* chips of one block share one font size, chosen so that every label of the block fits */
 static void chip(const char *label, int x, int y, int w, int h, int on, int kind, int idx) {
     WCHAR b[200]; swprintf(b, 200, L"%hs", label);
     if (lookPix) pbox(x, y, w, h, 1, on ? 1 : 0, !on && hov(kind, idx));
@@ -657,7 +680,7 @@ static void chips(const WCHAR *label, const char **items, int n, int cols, int s
     if (label) { section(label, x0, *y, wAll, S(18)); *y += sideTight ? S(19) : S(20); }          /* no label: a second block of the same choice */
     chipSpec = 0;
     if (lookFont) for (r = ROLES[0]; *r && !chipSpec; r++) { for (i = 0; i < n; i++) { WCHAR b[64]; swprintf(b, 64, L"%hs", items[i]); if (!spec_fits(*r, b, cw)) break; } if (i == n) chipSpec = *r; }
-    for (i = 0; i < n; i++) chip(items[i], x0 + (i % cols) * (cw + gap), *y + (i / cols) * (ch + gap), cw, ch, i == sel, kind, i);
+    for (i = 0; i < n; i++) chip(items[i], x0 + (i % cols) * (cw + gap), *y + (i / cols) * (ch + gap), cw, ch, chipsMask ? (int)((chipsBits >> (sel + i)) & 1u) : i == sel, kind, i);
     chipSpec = -1; *y += ((n + cols - 1) / cols) * (ch + gap) + (sideTight ? S(4) : S(6));
 }
 /* style: 0 quiet, 1 the main button (teal), 2 gold outline, 3 off */
@@ -1026,7 +1049,24 @@ static void paint(HDC out, int W, int H) {
         txt(L"Save time and money.", S(16), S(40), S(SIDE_W - 32), S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE);
     }
     y = titleH > S(68) ? titleH : S(68); titleH = 0;
-    chips(L"STYLE", STYLES, NSTYLES, 3, selStyle, H_STYLE, &y); chips(L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 8, selSize, H_SIZE, &y); y -= S(4); chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, selSize - NROUND, H_OVAL, &y);
+    chips(L"STYLE", STYLES, NSTYLES, 3, selStyle, H_STYLE, &y);
+    {          /* the theme: any, or one of the style's own (step through them with < and >; the middle goes back to any) */
+        int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), bw = S(34), nt = theme_count(); const char *tn = theme_name(); WCHAR tb[120];
+        section(L"THEME  (ANY, OR PICK ONE)", x0, y, wAll, S(18)); y += S(20);
+        if (lookPix) { pbox(x0, y, bw, bh, 1, 0, hov(H_THEME, -1)); pbox(x0 + wAll - bw, y, bw, bh, 1, 0, hov(H_THEME, 1)); pbox(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, 1, tn ? 1 : 0, hov(H_THEME, 0)); }
+        else { rr(x0, y, bw, bh, S(6), hov(H_THEME, -1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + wAll - bw, y, bw, bh, S(6), hov(H_THEME, 1) ? C_CARDH : C_CARD, C_LINE, 1); rr(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, S(6), tn ? C_ACC : C_CARD, C_LINE, 1); }
+        ltxt(L"<", x0, y, bw, bh, fBtn, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0, y, bw, bh, H_THEME, -1);
+        ltxt(L">", x0 + wAll - bw, y, bw, bh, fBtn, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + wAll - bw, y, bw, bh, H_THEME, 1);
+        if (tn) swprintf(tb, 120, L"%hs  (%d of %d)", tn, selTheme, nt); else swprintf(tb, 120, L"Any of its %d themes", nt);
+        txt(tb, x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, fUI, tn ? C_ONACC : C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS); hit(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, H_THEME, 0);
+        y += bh + S(8);
+    }
+    chipsMask = sizeMulti; chipsBits = sizeMulti ? sizeMask : 0;
+    chips(sizeMulti ? L"BASE SIZES, MM  (CLICK EACH ONE YOU WANT)" : L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 9, sizeMulti ? 0 : selSize, H_SIZE, &y); y -= S(4);
+    {   int y0 = y, x0 = S(16), wAll = S(SIDE_W - 32), gap = sideTight ? S(3) : S(4), ch = sideTight ? S(20) : S(24), cw = (wAll - 3 * gap) / 4;
+        chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, sizeMulti ? NROUND : selSize - NROUND, H_OVAL, &y);
+        chipsMask = 0;
+        chip("Several", x0 + 3 * (cw + gap), y0 + ch + gap, cw, ch, sizeMulti, H_MULTI, 0); }          /* several sizes at once: in the oval row's free place */
     chips(L"DETAIL  (1 SIMPLE ... 4 MOST)", DETAILL, 5, 5, selDetail, H_DETAIL, &y); chips(L"THE MINIATURE IT IS FOR", MINIS, 13, 3, selMini, H_MINI, &y);
     chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
     {          /* how many: a number from 1 to 20. Type it, or use the minus and plus */
@@ -1038,6 +1078,23 @@ static void paint(HDC out, int W, int H) {
         ltxt(L"+", x0 + wAll - bw, y, bw, bh, fBtn, selCount < 20 ? C_TEXT : C_OFF, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + wAll - bw, y, bw, bh, H_COUNT, 1);
         swprintf(nb, 8, L"%d", selCount); ltxt(nb, x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, fBig, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2, -1); hit(x0 + bw + S(4), y, wAll - 2 * bw - S(8), bh, H_COUNT, 0);
         y += bh + S(8);
+    }
+    chips(L"STYLE STRENGTH  (2 = BOLDER FOR PAINT)", STRENGTHS, NSTR, 5, selStr, H_STR, &y);
+    {          /* the design seed: empty = new designs each time; type a word to get the same designs again */
+        int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), cw = S(70); WCHAR sb[64];
+        section(L"DESIGN SEED  (EMPTY = NEW EACH TIME)", x0, y, wAll, S(18)); y += S(20);
+        if (lookPix) { pbox(x0, y, wAll - cw - S(4), bh, 1, seedEdit ? 4 : 0, hov(H_SEED, 0)); pbox(x0 + wAll - cw, y, cw, bh, 1, 0, hov(H_SEED, 1)); }
+        else { rr(x0, y, wAll - cw - S(4), bh, S(6), C_BG, seedEdit ? C_ACCH : C_LINE, seedEdit ? S(2) : 1); rr(x0 + wAll - cw, y, cw, bh, S(6), hov(H_SEED, 1) ? C_CARDH : C_CARD, C_LINE, 1); }
+        if (seedEdit) swprintf(sb, 64, L"%hs_", seedBuf); else if (seedBuf[0]) swprintf(sb, 64, L"%hs", seedBuf); else wcscpy(sb, L"new each time (click to type one)");
+        txt(sb, x0 + S(8), y, wAll - cw - S(20), bh, seedBuf[0] || seedEdit ? fMono : fSmall, seedBuf[0] || seedEdit ? C_TEXT : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE); hit(x0, y, wAll - cw - S(4), bh, H_SEED, 0);
+        ltxt(L"Clear", x0 + wAll - cw, y, cw, bh, fUI, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 0, -1); hit(x0 + wAll - cw, y, cw, bh, H_SEED, 1);
+        y += bh + S(8);
+    }
+    {          /* saved sets: click one to load it; "Save to a set", then a set, keeps what is chosen now */
+        int x0 = S(16), wAll = S(SIDE_W - 32), g = S(4), cw = (wAll - 3 * g) / 4, k; WCHAR p[MAX_PATH]; swprintf(p, MAX_PATH, L"%ls\\out\\bbb_kit.ini", kit);
+        section(setSave ? L"SAVED SETS  (NOW CLICK A SET TO SAVE INTO)" : L"SAVED SETS  (CLICK TO LOAD)", x0, y, wAll, S(18)); y += S(20);
+        for (k = 0; k < 3; k++) { WCHAR sec[8]; char lb[16]; swprintf(sec, 8, L"set%d", k + 1); snprintf(lb, sizeof lb, GetPrivateProfileIntW(sec, L"saved", 0, p) ? "Set %d" : "Set %d -", k + 1); chip(lb, x0 + k * (cw + g), y, cw, sideTight ? S(22) : S(24), 0, H_SET, k); }
+        chip(setSave ? "Saving..." : "Save to a set", x0 + 3 * (cw + g), y, wAll - 3 * (cw + g), sideTight ? S(22) : S(24), setSave, H_SET, 3); y += sideTight ? S(27) : S(30);
     }
     chip("Allow overhangs (needs supports)", S(16), y, S(SIDE_W - 32), S(24), selSup, H_SUP, 0); y += S(30);
     if (selSup) { chip("Join into one solid (Manifold)", S(16), y, S(SIDE_W - 32), S(24), selJoin, H_JOIN, 0); y += S(30); }          /* only with overhangs allowed */
@@ -1054,7 +1111,9 @@ static void paint(HDC out, int W, int H) {
     }
     swprintf(b, 200, ncell ? L"Show %d new choices" : L"Show %d choices", selCount);
     button(b, S(16), y, S(SIDE_W - 32), S(40), busy ? 3 : (!np ? 1 : 0), H_SHOW); y += S(46);
-    swprintf(b, 200, selCount == 1 ? L"Or build 1 straight away" : L"Or build %d straight away", selCount);
+    { int ns = 0, q; for (q = 0; q < NSIZES; q++) ns += (sizeMask >> q) & 1u;
+      if (sizeMulti && ns > 1) swprintf(b, 200, L"Or build %d of each of %d sizes straight away", selCount, ns);
+      else swprintf(b, 200, selCount == 1 ? L"Or build 1 straight away" : L"Or build %d straight away", selCount); }
     button(b, S(16), y, S(SIDE_W - 32), S(30), busy ? 3 : 0, H_QUICK);
     {          /* the panel must fit: if the full size runs past the bottom, draw it tight; back to full size when it fits again */
         int need = y + S(30) + S(8);
@@ -1272,6 +1331,28 @@ static void open_folder(void) {
     if (GetFileAttributesW(p) == INVALID_FILE_ATTRIBUTES) wcscpy(p, kit);
     ShellExecuteW(hMain, L"open", p, NULL, NULL, SW_SHOWNORMAL);
 }
+static void set_io(int k, int save) {          /* out\\bbb_kit.ini [setN]: style, sizes, how many, detail, miniature, game scale, object size, strength, theme, seed */
+    WCHAR p[MAX_PATH], sec[8], v[64]; int i; int *iv[] = { &selStyle, &selSize, &selCount, &selDetail, &selMini, &selScale, &selObj, &selStr, &sizeMulti };
+    static const WCHAR *ik[] = { L"style", L"size", L"howmany", L"detail", L"mini", L"game", L"objsize", L"strength", L"several" }; int lim[] = { NSTYLES, NSIZES, 21, 5, 13, 3, NOBJ, NSTR, 2 };
+    swprintf(p, MAX_PATH, L"%ls\\out", kit); CreateDirectoryW(p, NULL); wcscat(p, L"\\bbb_kit.ini"); swprintf(sec, 8, L"set%d", k + 1);
+    if (save) {
+        const char *tn = theme_name();
+        for (i = 0; i < 9; i++) { swprintf(v, 64, L"%d", *iv[i]); WritePrivateProfileStringW(sec, ik[i], v, p); }
+        swprintf(v, 64, L"%u", sizeMask); WritePrivateProfileStringW(sec, L"sizes", v, p);
+        swprintf(v, 64, L"%hs", tn ? tn : ""); WritePrivateProfileStringW(sec, L"theme", v, p);
+        swprintf(v, 64, L"%hs", seedBuf); WritePrivateProfileStringW(sec, L"seed", v, p);
+        WritePrivateProfileStringW(sec, L"saved", L"1", p);
+        swprintf(sub, 300, L"Saved as set %d: %hs, %d base%ls. Click Set %d any time to choose all of it again.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s", k + 1);
+        return;
+    }
+    if (!GetPrivateProfileIntW(sec, L"saved", 0, p)) { swprintf(sub, 300, L"Set %d is empty. Press \"Save to a set\", then Set %d, to keep what is chosen now.", k + 1, k + 1); return; }
+    for (i = 0; i < 9; i++) { int x = (int)GetPrivateProfileIntW(sec, ik[i], *iv[i], p); if (x >= (i == 2) && x < lim[i]) *iv[i] = x; }
+    GetPrivateProfileStringW(sec, L"sizes", L"0", v, 64, p); sizeMask = (unsigned)wcstoul(v, NULL, 10) & ((1u << NSIZES) - 1u);
+    GetPrivateProfileStringW(sec, L"seed", L"", v, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
+    GetPrivateProfileStringW(sec, L"theme", L"", v, 64, p); selTheme = 0;
+    if (v[0]) { const char *nm[64]; char a[64]; int n = kd_theme_names(STYLES[selStyle], nm, 64); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL); for (i = 0; i < n; i++) if (!strcmp(nm[i], a)) selTheme = i + 1; }
+    swprintf(sub, 300, L"Set %d loaded: %hs, %d base%ls.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s");
+}
 static void act2(int kind, int idx);
 static void act(int kind, int idx) {          /* every click and key: do it, then start or stop the animation timer */
     act2(kind, idx); anim_tick();
@@ -1279,15 +1360,23 @@ static void act(int kind, int idx) {          /* every click and key: do it, the
 static void act2(int kind, int idx) {
     int i;
     switch (kind) {
-    case H_STYLE: selStyle = idx; break;
-    case H_SIZE: selSize = idx; break;
-    case H_OVAL: selSize = NROUND + idx; break;
+    case H_STYLE: if (selStyle != idx) selTheme = 0; selStyle = idx; break;
+    case H_SIZE: if (sizeMulti) { sizeMask ^= 1u << idx; if (sizeMask & (1u << idx)) selSize = idx; } else selSize = idx; break;
+    case H_OVAL: if (sizeMulti) { sizeMask ^= 1u << (NROUND + idx); if (sizeMask & (1u << (NROUND + idx))) selSize = NROUND + idx; } else selSize = NROUND + idx; break;
+    case H_MULTI: sizeMulti = !sizeMulti; if (sizeMulti && !sizeMask) sizeMask = 1u << selSize; break;
+    case H_THEME: { int nt = theme_count(); if (idx == 0) selTheme = 0; else if (nt) selTheme = (selTheme + idx + nt + 1) % (nt + 1); break; }
+    case H_STR: selStr = idx; break;
+    case H_SEED: if (idx == 1) { seedBuf[0] = 0; seedEdit = 0; } else seedEdit = !seedEdit; break;
+    case H_SET: if (idx == 3) setSave = !setSave; else { set_io(idx, setSave); setSave = 0; } break;
     case H_DETAIL: selDetail = idx; break;
     case H_MINI: selMini = idx; break;
     case H_SCALE: selScale = idx; break;
     case H_OBJ: selObj = idx; break;
     case H_COUNT: selCount += idx; if (selCount < 1) selCount = 1; if (selCount > 20) selCount = 20; break;
-    case H_QUICK: if (!busy) { autoBuild = 1; ask_choices(1); if (!busy) autoBuild = 0; } return;
+    case H_QUICK: if (!busy) {
+        nSizeQ = 0;
+        if (sizeMulti && sizeMask) { int q, first = -1; for (q = 0; q < NSIZES; q++) if ((sizeMask >> q) & 1u) { if (first < 0) first = q; else if (nSizeQ < 32) sizeQ[nSizeQ++] = q; } if (first >= 0) selSize = first; }
+        autoBuild = 1; ask_choices(1); if (!busy) { autoBuild = 0; nSizeQ = 0; } } return;
     case H_SUP: selSup = !selSup; break;
     case H_JOIN: selJoin = !selJoin; break;
     case H_MF: if (idx >= 0 && idx < MF_N) mfOn[idx] = !mfOn[idx]; break;
@@ -1297,7 +1386,7 @@ static void act2(int kind, int idx) {
     case H_SHOW: ask_choices(1); return;
     case H_MORE: ask_choices(0); return;
     case H_GO: build(); return;
-    case H_STOP: autoBuild = 0; if (busy) { runner_stop = 1; if (hJob) TerminateJobObject(hJob, 1); logw(L"Stopped."); wcscpy(sub, L"Stopped."); } break;
+    case H_STOP: autoBuild = 0; nSizeQ = 0; if (busy) { runner_stop = 1; if (hJob) TerminateJobObject(hJob, 1); logw(L"Stopped."); wcscpy(sub, L"Stopped."); } break;
     case H_ALL: if (!busy) for (i = 0; i < ncell; i++) if (cells[i].state == ST_NONE) cells[i].picked = 1; break;
     case H_CLEAR: if (!busy) for (i = 0; i < ncell; i++) cells[i].picked = 0; break;
     case H_OPEN: open_folder(); return;
@@ -1358,6 +1447,11 @@ static void hover_at(int x, int y) {
                                           L"Organic rocks: rocks and stones grown as smooth lumpy shapes." };
             if (id >= 0 && id < 4) wcscpy(sub, mt[id]);
         }
+        if (k == H_MULTI) wcscpy(sub, L"Several sizes at once: click each size you want (round or oval). \"Build straight away\" then builds that many bases for every size, one size after another.");
+        if (k == H_THEME) wcscpy(sub, L"Theme: Any lets the kit choose among the style's themes. Step with < and > to make every base one theme; click the middle for Any again. A themes.json beside bbb_kit.exe adds your own.");
+        if (k == H_STR) wcscpy(sub, L"Style strength: 1 is the standard look. Higher gives deeper cracks, bolder rock shapes and chips and a coarser ground grain, which catch washes and drybrushing better; lower is softer.");
+        if (k == H_SEED) wcscpy(sub, id == 1 ? L"Clear the seed: new designs each time." : L"Design seed: type a word (letters and digits) to get the same designs again, on any PC. Empty: new designs each time. Enter or Esc when done.");
+        if (k == H_SET) wcscpy(sub, id == 3 ? L"Save to a set: press this, then Set 1, 2 or 3, to keep the style, sizes, number, detail, miniature, scale, object size, strength, theme and seed chosen now." : L"Click to choose everything kept in this set again (\"-\" = nothing saved in it yet).");
         if (k == H_JOIN) wcscpy(sub, L"Join into one solid: the objects that may overhang are joined into the base as one clean solid (Manifold), and a piece that would hang in the air is left out. Off: each object is its own shell sunk into the base, for the slicer to join.");
         if (k == H_COL) wcscpy(sub, L"Colour view: the finished 3D base coloured as its 2D drawing (the same colours), to check each part is where it should be. Click again for the plain grey picture.");
         if (k == H_CARD && !busy && cells[id].state != ST_PENDING) {          /* say what the card under the mouse is */
@@ -1394,9 +1488,25 @@ static void ini(int save) {
         savedR.right = (int)GetPrivateProfileIntW(L"window", L"right", 0, p); savedR.bottom = (int)GetPrivateProfileIntW(L"window", L"bottom", 0, p);
         savedMax = (int)GetPrivateProfileIntW(L"window", L"maximized", 0, p);
     }
+    if (save) {          /* the extras of plan B step 6 and the size by its name (the list grew: 120 mm, 2026-11-21) */
+        swprintf(v, 16, L"%hs", SIZES[selSize]); WritePrivateProfileStringW(L"window", L"basesizemm", v, p);
+        swprintf(v, 16, L"%d", selStr); WritePrivateProfileStringW(L"window", L"strength", v, p);
+        swprintf(v, 16, L"%d", sizeMulti); WritePrivateProfileStringW(L"window", L"several", v, p);
+        swprintf(v, 16, L"%u", sizeMask); WritePrivateProfileStringW(L"window", L"sizes", v, p);
+        { WCHAR sd[16]; swprintf(sd, 16, L"%hs", seedBuf); WritePrivateProfileStringW(L"window", L"seed", sd, p); }
+    }
     for (i = 0; i < 25; i++) {
         if (save) { swprintf(v, 16, L"%d", *vals[i]); WritePrivateProfileStringW(L"window", keys[i], v, p); }
         else { int x = (int)GetPrivateProfileIntW(L"window", keys[i], *vals[i], p); if (x >= (i == 4) && x < lim[i]) *vals[i] = x; }
+    }
+    if (!save) {          /* the size by its name when saved so (the list grew), and the extras of plan B step 6 */
+        WCHAR t[64]; int x;
+        GetPrivateProfileStringW(L"window", L"basesizemm", L"", t, 64, p);
+        if (t[0]) for (i = 0; i < NSIZES; i++) { WCHAR sz[16]; swprintf(sz, 16, L"%hs", SIZES[i]); if (!wcscmp(sz, t)) selSize = i; }
+        x = (int)GetPrivateProfileIntW(L"window", L"strength", selStr, p); if (x >= 0 && x < NSTR) selStr = x;
+        sizeMulti = GetPrivateProfileIntW(L"window", L"several", 0, p) ? 1 : 0;
+        GetPrivateProfileStringW(L"window", L"sizes", L"0", t, 64, p); sizeMask = (unsigned)wcstoul(t, NULL, 10) & ((1u << NSIZES) - 1u);
+        GetPrivateProfileStringW(L"window", L"seed", L"", t, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, t, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
     }
 }
 static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -1450,6 +1560,13 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == 'F' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 2);
         return 0;
     case WM_CHAR:          /* digits set "how many": 1 then 5 within a moment is 15 */
+        if (seedEdit) {          /* the design seed box: letters and digits, Backspace, Enter or Esc to finish */
+            size_t n = strlen(seedBuf);
+            if (w == 8) { if (n) seedBuf[n - 1] = 0; }
+            else if (w == 13 || w == 27) seedEdit = 0;
+            else if (((w >= 'a' && w <= 'z') || (w >= 'A' && w <= 'Z') || (w >= '0' && w <= '9')) && n < 12) { seedBuf[n] = (char)(w >= 'A' && w <= 'Z' ? w + 32 : w); seedBuf[n + 1] = 0; }
+            redraw(); return 0;
+        }
         if (showHelp) return 0;
         if (w >= '0' && w <= '9') {
             int d = (int)w - '0', two = selCount * 10 + d;
@@ -1539,6 +1656,9 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         Sleep(500); meters_tick();          /* the meters need two readings to show anything */
         ncell = 26; wcscpy(head, L"Resize test: 26 sample cards"); PostMessageW(hMain, WM_CHAR, '1', 0); PostMessageW(hMain, WM_CHAR, '5', 0);
         { MSG m2; while (PeekMessageW(&m2, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m2); DispatchMessageW(&m2); } }
+        { char e[32]; int tw2, th2; if (GetEnvironmentVariableA("BBB_TEST_CLIENT", e, sizeof e) && sscanf(e, "%dx%d", &tw2, &th2) == 2) {          /* a test: the window's inside exactly this big (a screen size), one picture + the UI check, then quit */
+            RECT wr = { 0, 0, tw2, th2 }; AdjustWindowRect(&wr, st, FALSE); SetWindowPos(hMain, NULL, 0, 0, wr.right - wr.left, wr.bottom - wr.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            capture(stShot); ui_check(L"screen"); return 0; } }
         if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* only to look at the drawing: a few cards building, built, failed, waiting, and a half-full progress bar, in the first picture */
             cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5;
             capture(stShot); busy = 0; for (i = 1; i < 8; i++) if (i != 5) cells[i].state = ST_NONE;

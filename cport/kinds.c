@@ -514,6 +514,79 @@ static KStyle *add_style(const char *name) {
     return &KD.styles[KD.nstyles++];
 }
 const KStyle *kd_style(const char *name) { int i; if (!name) return NULL; for (i = 0; i < KD.nstyles; i++) if (strcmp(KD.styles[i].name, name) == 0) return &KD.styles[i]; return NULL; }
+
+/* ---------------- themes.json beside the exe (plan B step 5, 2026-11-21): new looks without a rebuild ----------------
+   { "graveyard": [ { "theme": "my plot", "subject": ..., "path": ..., "props": ..., ... }, ... ], ... }
+   A theme with the name of a built-in one of that style takes its place; any other is added. The keys are those of the
+   built-in themes (bbb_kit.exe --job themes writes them all to themes.builtin.json to copy from). */
+char kd_themes_note[300];          /* what happened with the file ("" = no file) */
+static void kd_exe_dir(char *out, size_t cap) {
+    out[0] = 0;
+#ifdef _WIN32
+    { extern unsigned long __stdcall GetModuleFileNameA(void *, char *, unsigned long); char p[1024]; unsigned long n = GetModuleFileNameA(NULL, p, sizeof p); char *s;
+      if (n && n < sizeof p) { p[n] = 0; s = strrchr(p, '\\'); if (s) *s = 0; snprintf(out, cap, "%s", p); } }
+#endif
+}
+static char *kd_read_text(const char *path) {
+    FILE *f = fopen(path, "rb"); long n; char *b;
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+    if (n < 0 || n > (16 << 20)) { fclose(f); return NULL; }
+    b = (char *)malloc((size_t)n + 1); if (b && fread(b, 1, (size_t)n, f) != (size_t)n) { free(b); b = NULL; }
+    fclose(f); if (b) b[n] = 0;
+    return b;
+}
+static void kd_user_themes(void) {
+    char dir[1024], path[1100], err[200] = ""; char *txt; KVal *U; int i, j, k, added = 0, replaced = 0, unknown = 0;
+    kd_themes_note[0] = 0;
+    { const char *e = getenv("BBB_THEMES"); if (e && *e) snprintf(path, sizeof path, "%s", e); else { kd_exe_dir(dir, sizeof dir); if (!dir[0]) return; snprintf(path, sizeof path, "%s\\themes.json", dir); } }
+    if (!(txt = kd_read_text(path))) return;
+    U = kv_parse_json_e(txt, err, sizeof err); free(txt);
+    if (!U || U->t != KV_DICT) { snprintf(kd_themes_note, sizeof kd_themes_note, "themes.json not used: %s", U ? "it must be { \"style\": [ themes ] }" : err); if (U) kv_free(U); return; }
+    for (i = 0; i < U->n; i++) {
+        KStyle *st = NULL; KVal *l = U->v[i];
+        for (j = 0; j < KD.nstyles; j++) if (!strcmp(KD.styles[j].name, U->k[i])) st = &KD.styles[j];
+        if (!st || l->t != KV_LIST) { unknown++; continue; }
+        if (!st->themes) st->themes = kv_list();
+        for (j = 0; j < l->n; j++) {
+            KVal *t = l->v[j]; const char *nm = t->t == KV_DICT ? kv_s(t, "theme") : NULL; int at = -1;
+            if (!nm) { unknown++; continue; }
+            for (k = 0; k < st->themes->n; k++) { const char *o = kv_s(st->themes->v[k], "theme"); if (o && !strcmp(o, nm)) at = k; }
+            l->v[j] = NULL;          /* taken over (U is kept: nothing frees it) */
+            if (at >= 0) { st->themes->v[at] = t; replaced++; } else { kv_push(st->themes, t); added++; }
+        }
+    }
+    snprintf(kd_themes_note, sizeof kd_themes_note, "themes.json: %d theme%s added, %d replaced%s", added, added == 1 ? "" : "s", replaced, unknown ? " (some entries skipped: an unknown style or a theme without \"theme\")" : "");
+}
+/* every style's themes as JSON (bbb_kit.exe --job themes) */
+static void kd_jw(FILE *f, const KVal *x, int ind) {
+    int i;
+    if (!x) { fputs("null", f); return; }
+    switch (x->t) {
+    case KV_NONE: fputs("null", f); break;
+    case KV_BOOL: fputs(x->i ? "true" : "false", f); break;
+    case KV_INT: fprintf(f, "%lld", (long long)x->i); break;
+    case KV_FLOAT: fprintf(f, "%.17g", x->f); break;
+    case KV_STR: { const unsigned char *s = (const unsigned char *)x->s; fputc('"', f); for (; *s; s++) { if (*s == '"' || *s == '\\') { fputc('\\', f); fputc(*s, f); } else if (*s < 0x20) fprintf(f, "\\u%04x", *s); else fputc(*s, f); } fputc('"', f); break; }
+    case KV_LIST: fputc('[', f); for (i = 0; i < x->n; i++) { fprintf(f, "%s\n%*s", i ? "," : "", ind + 2, ""); kd_jw(f, x->v[i], ind + 2); } if (x->n) fprintf(f, "\n%*s", ind, ""); fputc(']', f); break;
+    case KV_DICT: fputc('{', f); for (i = 0; i < x->n; i++) { KVal k; memset(&k, 0, sizeof k); k.t = KV_STR; k.s = x->k[i]; fputs(i ? ", " : "", f); kd_jw(f, &k, 0); fputs(": ", f); kd_jw(f, x->v[i], ind); } fputc('}', f); break;
+    }
+}
+int kd_theme_names(const char *style, const char **out, int max) {          /* the window's theme picker: the style's theme names */
+    const KStyle *st; int i, n = 0;
+    kinds_init(); st = kd_style(style);
+    for (i = 0; st && st->themes && i < st->themes->n && n < max; i++) { const char *nm = kv_s(st->themes->v[i], "theme"); if (nm) out[n++] = nm; }
+    return n;
+}
+int kd_themes_write(const char *path) {
+    FILE *f = fopen(path, "wb"); int i;
+    if (!f) return -1;
+    kinds_init();
+    fputs("{", f);
+    for (i = 0; i < KD.nstyles; i++) { KVal k; memset(&k, 0, sizeof k); k.t = KV_STR; k.s = (char *)KD.styles[i].name; fprintf(f, "%s\n  ", i ? "," : ""); kd_jw(f, &k, 0); fputs(": ", f); kd_jw(f, KD.styles[i].themes, 2); }
+    fputs("\n}\n", f); fclose(f);
+    return 0;
+}
 static void subj_setdefault(const char *name, const char *says) {
     int i;
     for (i = 0; i < KD.nsubjects; i++) if (strcmp(KD.subjects[i], name) == 0) break;
@@ -650,6 +723,7 @@ void kinds_init(void) {
         if (kv_get(m, "ENCLOSED")->i) sm_set_add(&KD.enclosed, st->name);
         if (kv_get(m, "CLIFFS")->i) sm_set_add(&KD.cliffs, st->name);
     }
+    kd_user_themes();
     KD.scenes_loaded = 1;
     kinds_point_parts();
 }

@@ -7,6 +7,7 @@
 #include "rocks3d.h"
 
 int ork_on = 0;
+double kit_strength = 1.0;          /* style strength (settings "style_strength", --strength; pipeline.c sets it): 1 = the standard look */
 
 /* ---------------- the kinds ---------------- */
 static const char *const ORK_KINDS0[] = { "rock", "pebble", "pebbles", "rubble", "sandstone", "slate", "stone", "stones", "boulder", "cobble",
@@ -171,12 +172,45 @@ static int ork_one(const int *idx, int n, const SmShellXf *xf, double Hdeck, con
             if (!any) { Z[q] = -1e30; continue; }
             {   /* the lumps: none at the foot, so it stays sitting on the ground */
                 double x = x0 + k * g, y = y0 + j * g, nn = ork_noise(x * fr, y * fr, seed) + 0.45 * ork_noise(x * fr * 2.3 + 17.3, y * fr * 2.3 - 5.1, seed ^ 0x9e3779b9u);
-                h += 0.13 * V * nn * sqrt(base);
+                h += 0.13 * kit_strength * V * nn * sqrt(base);
                 if (h < -0.5 * V) h = -0.5 * V;
             }
             Z[q] = h; if (h > hmax) hmax = h;
         }
         for (size_t q = 0; q < (size_t)nx * (size_t)ny; q++) if (Z[q] > -1e29) Z[q] = zg + Z[q] * (hmax > 0 ? V / hmax : 1.0);          /* no higher than the pieces were */
+        {   /* plan B step 4 (2026-11-21): each rock one of four shapes, with chips and wear. 0 rounded, 1 chipped (broken
+               flat faces), 2 layered (soft ledges, like sandstone), 3 split (a crack across it). All of them get a few
+               chips off their sides and fine pitting; nothing goes below its foot, so it still sits on the ground. */
+            uint32_t sh = seed * 2246822519u ^ 0x27d4eb2fu; int shape;
+            double rw = fmax(fb[2] - fb[0], fb[3] - fb[1]), zf = zg + 0.18 * V;
+            sh ^= sh >> 15; sh *= 0x85ebca6bu; sh ^= sh >> 13; shape = (int)(sh % 4u);
+#define ORND() (sh = sh * 1664525u + 1013904223u, (double)(sh >> 8) / 16777216.0)
+            int nch = shape == 1 ? 3 + (int)(ORND() * 3) : 1 + (int)(ORND() * 2);
+            double ca[6], cr[6], ch[6], ck[6], la = ORND() * 6.2832, per = V / (3.0 + floor(ORND() * 3)), sa = ORND() * 3.1416, wc = fmax(0.12 / M, 0.04 * rw);
+            for (int c = 0; c < nch; c++) { ca[c] = ORND() * 6.2832; cr[c] = (0.12 + 0.28 * ORND()) * rw; ch[c] = 1.0 - (0.45 - 0.35 * ORND()) * fmin(1.6, kit_strength); ck[c] = (1.0 + 1.5 * ORND()) * kit_strength; }
+            (void)la;
+            for (int j = 0; j < ny; j++) for (int k = 0; k < nx; k++) {
+                size_t q = (size_t)j * nx + k; double x = x0 + k * g - cx, y = y0 + j * g - cy, z = Z[q], t;
+                if (z < -1e29 || z <= zf) continue;
+                for (int c = 0; c < nch; c++) {          /* a chip: the surface past a line cut down to a tilted plane */
+                    double al = x * cos(ca[c]) + y * sin(ca[c]), pz = zg + V * ch[c] - V * ck[c] * (al - cr[c]) / (0.5 * rw);
+                    if (pz < z) z = pz;
+                }
+                if (shape == 2) {          /* layers: flat ledges with short steps between */
+                    double u = (z - zg) / per, fl = floor(u), fr2 = u - fl, s2 = fr2 < 0.7 ? 0 : (fr2 - 0.7) / 0.3;
+                    { double lw = fmin(0.9, 0.6 * kit_strength); z = zg + per * (fl + s2 * s2 * (3 - 2 * s2)) * lw + (z - zg) * (1 - lw); }
+                }
+                if (shape == 3) {          /* split: a crack through the middle */
+                    double d = fabs(-x * sin(sa) + y * cos(sa)) + 0.3 * wc * ork_noise(x * fr * 3, y * fr * 3, seed ^ 0x51ed27u);
+                    if (d < wc) { double e = 1 - d / wc; z -= fmin(0.7, 0.35 * kit_strength) * V * e * e; }
+                }
+                t = ork_noise(x * fr * 5.1 - 3.3, y * fr * 5.1 + 8.8, seed ^ 0xa5a5a5u);          /* wear: fine pits */
+                if (t > 0.35) z -= 0.05 * kit_strength * V * (t - 0.35) / 0.65;
+                if (z < zf) z = zf;
+                Z[q] = z;
+            }
+#undef ORND
+        }
     }
     {
         ManifoldManifold *m = sm_grid_cut(Z, nx, ny, x0, y0, g, (z0min < Hdeck ? z0min : Hdeck) - 0.3, foot, M, bx, by, xf, rim, err, errcap);          /* down below the deck: a rock on a ledge has no air under it */

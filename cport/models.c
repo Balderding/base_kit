@@ -1037,7 +1037,8 @@ static int blob_load(const char *rel, MdlMesh *out);
 /* sd_mesh._load: the cache and y up -> z up, v = stack([x, -z, y]) */
 typedef struct { char *rel; MdlMesh m; } CacheEnt;
 static CacheEnt *cache; static int ncache, capcache;
-void mdl_cache_clear(void) { for (int i = 0; i < ncache; i++) { free(cache[i].rel); mdl_free(&cache[i].m); } free(cache); cache = NULL; ncache = capcache = 0; }
+void mdl_rest_clear(void);
+void mdl_cache_clear(void) { mdl_rest_clear(); for (int i = 0; i < ncache; i++) { free(cache[i].rel); mdl_free(&cache[i].m); } free(cache); cache = NULL; ncache = capcache = 0; }
 const MdlMesh *mdl_load(const char *root, const char *rel, int *err) {
     for (int i = 0; i < ncache; i++) if (!strcmp(cache[i].rel, rel)) { if (err) *err = MDL_OK; return &cache[i].m; }
     char path[1024];
@@ -1217,8 +1218,202 @@ int mdl_hraster(const MdlSolid *s, double x0, double y0, double g, int nx, int n
 static double col_max(const double *v, int n, int c) { double m = v[c]; for (int i = 1; i < n; i++) if (v[i * 3 + c] > m) m = v[i * 3 + c]; return m; }
 static double col_min(const double *v, int n, int c) { double m = v[c]; for (int i = 1; i < n; i++) if (v[i * 3 + c] < m) m = v[i * 3 + c]; return m; }
 
+/* ---- resting (2026-11-21, not in the Python kit): a model put down settles on a face of its convex hull, the way a
+   dropped thing rolls until it lies still, instead of balancing on a corner. Per mesh, once: the convex hull of its
+   points, the centre of mass (the solid's own, or the surface's when the mesh is not closed), and the outward normals
+   of the hull's faces the centre of mass stands over (the faces it can lie on). Kept until mdl_rest_clear. ---- */
+typedef struct { const MdlMesh *m; double *nrm; int nn; } RestEnt;
+static RestEnt *rest_c; static int nrest, caprest; static volatile long rest_lk;
+static void rlock(void) { while (__sync_lock_test_and_set(&rest_lk, 1)) ; }
+static void runlock(void) { __sync_lock_release(&rest_lk); }
+typedef struct { int a, b, c; double n[3], d; int live; } HFace;
+static void v_sub(const double *a, const double *b, double *o) { o[0] = a[0] - b[0]; o[1] = a[1] - b[1]; o[2] = a[2] - b[2]; }
+static void v_cross(const double *a, const double *b, double *o) { o[0] = a[1] * b[2] - a[2] * b[1]; o[1] = a[2] * b[0] - a[0] * b[2]; o[2] = a[0] * b[1] - a[1] * b[0]; }
+static double v_dot(const double *a, const double *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+static int hface(HFace *f, const double *P, int a, int b, int c) {    /* the plane of a, b, c (counter-clockwise from outside) */
+    double e1[3], e2[3], n[3]; v_sub(P + b * 3, P + a * 3, e1); v_sub(P + c * 3, P + a * 3, e2); v_cross(e1, e2, n);
+    double l = sqrt(v_dot(n, n)); if (l < 1e-15) return 0;
+    f->a = a; f->b = b; f->c = c; f->n[0] = n[0] / l; f->n[1] = n[1] / l; f->n[2] = n[2] / l; f->d = v_dot(f->n, P + a * 3); f->live = 1;
+    return 1;
+}
+/* the convex hull of P (n points), incremental: *F its faces (outward), returns how many (0 = flat or too few points) */
+static int hull3(const double *P, int n, double scale, HFace **F) {
+    double eps = 1e-9 * scale, best; int i, j, k, nf = 0, cap = 64, i0 = 0, i1 = -1, i2 = -1, i3 = -1;
+    *F = NULL; if (n < 4) return 0;
+    for (i = 1; i < n; i++) if (P[i * 3] < P[i0 * 3]) i0 = i;
+    best = 0; for (i = 0; i < n; i++) { double d[3]; v_sub(P + i * 3, P + i0 * 3, d); double q = v_dot(d, d); if (q > best) { best = q; i1 = i; } }
+    if (i1 < 0) return 0;
+    best = 0; for (i = 0; i < n; i++) { double e1[3], e2[3], c[3]; v_sub(P + i1 * 3, P + i0 * 3, e1); v_sub(P + i * 3, P + i0 * 3, e2); v_cross(e1, e2, c); double q = v_dot(c, c); if (q > best) { best = q; i2 = i; } }
+    if (i2 < 0) return 0;
+    HFace t; if (!hface(&t, P, i0, i1, i2)) return 0;
+    best = 0; for (i = 0; i < n; i++) { double q = fabs(v_dot(t.n, P + i * 3) - t.d); if (q > best) { best = q; i3 = i; } }
+    if (i3 < 0 || best < 1e-6 * scale) return 0;
+    HFace *f = malloc((size_t)cap * sizeof *f); if (!f) return 0;
+    if (v_dot(t.n, P + i3 * 3) - t.d > 0) { int s = i1; i1 = i2; i2 = s; }   /* i3 behind the first face */
+    int T[4][3] = { { i0, i1, i2 }, { i0, i3, i1 }, { i1, i3, i2 }, { i2, i3, i0 } };
+    for (k = 0; k < 4; k++) if (hface(&f[nf], P, T[k][0], T[k][1], T[k][2])) nf++;
+    int ecap = 4096, *ea = malloc(sizeof(int) * 2 * (size_t)ecap);
+    if (!ea) { free(f); return 0; }
+    for (i = 0; i < n; i++) {
+        if (i == i0 || i == i1 || i == i2 || i == i3) continue;
+        const double *p = P + i * 3; int ne = 0, any = 0;
+        for (j = 0; j < nf; j++) if (f[j].live && v_dot(f[j].n, p) - f[j].d > eps) {
+            any = 1; f[j].live = 2;                                        /* 2 = seen from p: it goes */
+            int e[3][2] = { { f[j].a, f[j].b }, { f[j].b, f[j].c }, { f[j].c, f[j].a } };
+            for (k = 0; k < 3; k++) {
+                int r, found = -1;
+                for (r = 0; r < ne; r++) if (ea[r * 2] == e[k][1] && ea[r * 2 + 1] == e[k][0]) { found = r; break; }
+                if (found >= 0) { ea[found * 2] = ea[(ne - 1) * 2]; ea[found * 2 + 1] = ea[(ne - 1) * 2 + 1]; ne--; }   /* between two seen faces: inside */
+                else {
+                    if (ne == ecap) { int *q = realloc(ea, sizeof(int) * 2 * (size_t)(ecap * 2)); if (!q) { free(ea); free(f); return 0; } ea = q; ecap *= 2; }
+                    ea[ne * 2] = e[k][0]; ea[ne * 2 + 1] = e[k][1]; ne++;
+                }
+            }
+        }
+        if (!any) continue;
+        int w = 0; for (j = 0; j < nf; j++) if (f[j].live == 1) f[w++] = f[j]; nf = w;
+        for (k = 0; k < ne; k++) {                                         /* the horizon joined to p */
+            if (nf == cap) { HFace *q = realloc(f, (size_t)(cap * 2) * sizeof *f); if (!q) { free(ea); free(f); return 0; } f = q; cap *= 2; }
+            if (hface(&f[nf], P, ea[k * 2], ea[k * 2 + 1], i)) nf++;
+        }
+    }
+    free(ea);
+    *F = f; return nf;
+}
+/* the normals of the faces M can lie on (unit, outward, in the mesh's own z-up frame); 0 when it has none */
+static int rest_normals(const MdlMesh *M, double **out) {
+    int n = M->nv, nt = M->nf, i, j, k; *out = NULL;
+    if (n < 4 || nt < 1) return 0;
+    const double *V = M->v;
+    double lo[3] = { V[0], V[1], V[2] }, hi[3] = { V[0], V[1], V[2] };
+    for (i = 1; i < n; i++) for (k = 0; k < 3; k++) { if (V[i * 3 + k] < lo[k]) lo[k] = V[i * 3 + k]; if (V[i * 3 + k] > hi[k]) hi[k] = V[i * 3 + k]; }
+    double scale = fmax(fmax(hi[0] - lo[0], hi[1] - lo[1]), hi[2] - lo[2]); if (scale <= 0) return 0;
+    /* the points the hull can have: every point when few, else the lowest point along 1200 directions and the 6 axes */
+    int np_ = 0; double *P;
+    if (n <= 1500) { P = malloc((size_t)n * 3 * sizeof(double)); if (!P) return 0; memcpy(P, V, (size_t)n * 3 * sizeof(double)); np_ = n; }
+    else {
+        const int K = 1200; const double ga = 3.141592653589793 * (3.0 - sqrt(5.0));
+        char *mark = calloc((size_t)n, 1); int *pick = malloc(sizeof(int) * (size_t)(K + 6));
+        if (!mark || !pick) { free(mark); free(pick); return 0; }
+        for (j = 0; j < K + 6; j++) {
+            double d[3];
+            if (j < K) { double z = 1 - 2 * (j + 0.5) / K, r = sqrt(1 - z * z); d[0] = cos(ga * j) * r; d[1] = sin(ga * j) * r; d[2] = z; }
+            else { d[0] = d[1] = d[2] = 0; d[(j - K) / 2] = (j - K) % 2 ? 1 : -1; }
+            int bi = 0; double bv = v_dot(d, V);
+            for (i = 1; i < n; i++) { double q = v_dot(d, V + i * 3); if (q < bv) { bv = q; bi = i; } }
+            if (!mark[bi]) { mark[bi] = 1; pick[np_++] = bi; }
+        }
+        free(mark);
+        P = malloc((size_t)np_ * 3 * sizeof(double)); if (!P) { free(pick); return 0; }
+        for (i = 0; i < np_; i++) memcpy(P + i * 3, V + pick[i] * 3, 3 * sizeof(double));
+        free(pick);
+    }
+    /* the centre of mass: the solid's (signed tetrahedra) when its volume makes sense, else the surface's */
+    double com[3] = { 0, 0, 0 }, vol = 0, sc[3] = { 0, 0, 0 }, ar = 0;
+    for (i = 0; i < nt; i++) {
+        int64_t ia = M->f[i * 3], ib = M->f[i * 3 + 1], ic = M->f[i * 3 + 2];
+        if (ia < 0) ia += n;
+        if (ib < 0) ib += n;
+        if (ic < 0) ic += n;
+        if (ia < 0 || ib < 0 || ic < 0 || ia >= n || ib >= n || ic >= n) continue;
+        const double *a = V + ia * 3, *b = V + ib * 3, *c = V + ic * 3;
+        double bc[3], e1[3], e2[3], cr[3]; v_cross(b, c, bc); double t6 = v_dot(a, bc) / 6.0;
+        v_sub(b, a, e1); v_sub(c, a, e2); v_cross(e1, e2, cr); double s2 = sqrt(v_dot(cr, cr)) / 2;
+        vol += t6; ar += s2;
+        for (k = 0; k < 3; k++) { com[k] += t6 * (a[k] + b[k] + c[k]) / 4; sc[k] += s2 * (a[k] + b[k] + c[k]) / 3; }
+    }
+    double bvol = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
+    int solid_ok = vol > 0 && vol > 0.02 * bvol;
+    for (k = 0; k < 3 && solid_ok; k++) { com[k] /= vol; if (com[k] < lo[k] || com[k] > hi[k]) solid_ok = 0; }
+    if (!solid_ok) { if (ar <= 0) { free(P); return 0; } for (k = 0; k < 3; k++) com[k] = sc[k] / ar; }
+    HFace *F; int nf = hull3(P, np_, scale, &F);
+    if (nf < 4) { free(P); free(F); return 0; }
+    /* the faces, joined where they lie in one plane (within about 1.5 degrees): stable when the centre of mass stands
+       over the joined face (over one of its triangles) at least 2 % of the model's size in from the face's outer edges
+       (the triangles' edges no other triangle of the face shares) */
+    char *used = calloc((size_t)nf, 1); double *N = malloc((size_t)nf * 3 * sizeof(double)); int *grp = malloc(sizeof(int) * (size_t)nf), nn = 0;
+    if (!used || !N || !grp) { free(used); free(N); free(grp); free(F); free(P); return 0; }
+    /* the margin: 2 % of the model's size, at most 15 % of its thinnest side (a trowel or a bone lies on narrow faces) */
+    double margin = fmin(0.02 * scale, 0.15 * fmin(fmin(hi[0] - lo[0], hi[1] - lo[1]), hi[2] - lo[2])), bestd = -1e300, bestn[3] = { 0, 0, -1 };
+    for (i = 0; i < nf; i++) {
+        if (used[i]) continue;
+        double acc[3] = { 0, 0, 0 }; int over = 0, ng = 0, g, h, e2_;
+        for (j = i; j < nf; j++) {
+            if (used[j] || v_dot(F[i].n, F[j].n) < 0.99966 || fabs(F[j].d - F[i].d) > 0.004 * scale) continue;
+            used[j] = 1; grp[ng++] = j;
+            const double *a = P + F[j].a * 3, *b = P + F[j].b * 3, *c = P + F[j].c * 3;
+            double e1[3], e2[3], cr[3]; v_sub(b, a, e1); v_sub(c, a, e2); v_cross(e1, e2, cr);
+            for (k = 0; k < 3; k++) acc[k] += cr[k];
+            const double *Q[3] = { a, b, c }; int in = 1;                  /* the centre of mass over this triangle? */
+            for (k = 0; k < 3 && in; k++) {
+                double ed[3], tc[3], en[3]; v_sub(Q[(k + 1) % 3], Q[k], ed); v_sub(com, Q[k], tc); v_cross(F[j].n, ed, en);
+                double l = sqrt(v_dot(en, en)); if (l < 1e-15 || v_dot(en, tc) / l < -1e-9 * scale) in = 0;
+            }
+            if (in) over = 1;
+        }
+        double l = sqrt(v_dot(acc, acc));
+        if (!over || l < 1e-15) continue;
+        double nrm[3] = { acc[0] / l, acc[1] / l, acc[2] / l }, dmin = 1e300;
+        for (g = 0; g < ng; g++) for (e2_ = 0; e2_ < 3; e2_++) {           /* the outer edges: how near is the centre of mass? */
+            const HFace *t = &F[grp[g]]; int A = e2_ == 0 ? t->a : e2_ == 1 ? t->b : t->c, B = e2_ == 0 ? t->b : e2_ == 1 ? t->c : t->a, shared = 0;
+            for (h = 0; h < ng && !shared; h++) { const HFace *o = &F[grp[h]]; if (h != g && ((o->a == B && o->b == A) || (o->b == B && o->c == A) || (o->c == B && o->a == A))) shared = 1; }
+            if (shared) continue;
+            double ed[3], tc[3], en[3]; v_sub(P + B * 3, P + A * 3, ed); v_sub(com, P + A * 3, tc); v_cross(nrm, ed, en);
+            double el = sqrt(v_dot(en, en)); if (el < 1e-15) continue;
+            double dd = v_dot(en, tc) / el; if (dd < dmin) dmin = dd;
+        }
+        if (dmin > bestd) { bestd = dmin; memcpy(bestn, nrm, sizeof bestn); }
+        if (dmin >= margin) { for (k = 0; k < 3; k++) N[nn * 3 + k] = nrm[k]; nn++; }
+    }
+    if (!nn && bestd > 0) { memcpy(N, bestn, sizeof bestn); nn = 1; }   /* none with the margin: the steadiest face */
+    free(used); free(grp); free(F); free(P);
+    { const char *lp = getenv("BBB_REST_LOG"); FILE *lf = lp && *lp ? fopen(lp, "a") : NULL;          /* BBB_REST_LOG: the hull of each mesh (a test) */
+      if (lf) { fprintf(lf, "hull of %d points (%d used): %d triangles, centre of mass %s (%.3f %.3f %.3f) in box (%.3f %.3f %.3f)-(%.3f %.3f %.3f), %d faces to lie on\n",
+                        n, np_, nf, solid_ok ? "solid" : "surface", com[0], com[1], com[2], lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], nn); fclose(lf); } }
+    if (!nn) { free(N); return 0; }
+    *out = N; return nn;
+}
+/* the stable faces of M, worked out once */
+static int rest_of(const MdlMesh *M, const double **N) {
+    int i, nn; double *nrm;
+    rlock();
+    for (i = 0; i < nrest; i++) if (rest_c[i].m == M) { *N = rest_c[i].nrm; nn = rest_c[i].nn; runlock(); return nn; }
+    runlock();
+    nn = rest_normals(M, &nrm);
+    rlock();
+    if (nrest == caprest) { int c = caprest ? caprest * 2 : 64; RestEnt *p = realloc(rest_c, (size_t)c * sizeof *p); if (!p) { runlock(); *N = nrm; return 0; } rest_c = p; caprest = c; }
+    rest_c[nrest].m = M; rest_c[nrest].nrm = nrm; rest_c[nrest].nn = nn; nrest++;
+    runlock();
+    *N = nrm; return nn;
+}
+void mdl_rest_clear(void) { rlock(); for (int i = 0; i < nrest; i++) free(rest_c[i].nrm); free(rest_c); rest_c = NULL; nrest = caprest = 0; runlock(); }
+/* R (the posing, applied after the mirror) turned further so the stable face nearest to straight down lies flat */
+static void settle(const MdlMesh *M, int mirror, double R[9]) {
+    const double *N = NULL; int nn = rest_of(M, &N), i, best = -1; double bd = -2, w[3] = { 0, 0, -1 };
+    for (i = 0; i < nn; i++) {
+        double m[3] = { mirror ? -N[i * 3] : N[i * 3], N[i * 3 + 1], N[i * 3 + 2] };
+        double z = R[6] * m[0] + R[7] * m[1] + R[8] * m[2];                /* (R m).z: straight down is -1 */
+        if (-z > bd) { bd = -z; best = i; w[0] = R[0] * m[0] + R[1] * m[1] + R[2] * m[2]; w[1] = R[3] * m[0] + R[4] * m[1] + R[5] * m[2]; w[2] = z; }
+    }
+    { const char *lp = getenv("BBB_REST_LOG"); FILE *lf = lp && *lp ? fopen(lp, "a") : NULL;          /* BBB_REST_LOG: every settle (a test) */
+      if (lf) { fprintf(lf, "points %d faces-it-can-lie-on %d turned %.0f deg\n", M->nv, nn, best < 0 ? 0.0 : acos(fmin(1, bd)) * 57.29578); fclose(lf); } }
+    if (best < 0 || bd > 1 - 1e-12) return;                           /* none, or flat already */
+    /* Q turns w onto (0, 0, -1) about the axis w x down (Rodrigues); R = Q R */
+    double ax[3] = { -w[1], w[0], 0 }, s = sqrt(ax[0] * ax[0] + ax[1] * ax[1]), c = -w[2], Q[9];
+    if (s < 1e-12) { double q[9] = { 1, 0, 0, 0, -1, 0, 0, 0, -1 }; memcpy(Q, q, sizeof q); }   /* face straight up: over on its back */
+    else {
+        double x = ax[0] / s, y = ax[1] / s, t = 1 - c;
+        double q[9] = { c + x * x * t, x * y * t, y * s, x * y * t, c + y * y * t, -x * s, -y * s, x * s, c };
+        memcpy(Q, q, sizeof q);
+    }
+    mdl_mat3(Q, R, R);
+}
+static _Thread_local int SETTLE;
+void mdl_settle_next(int on) { SETTLE = on; }
+
 int mdl_solid(const MdlMesh *VF, double mm, double cx, double cy, double yaw, char pose, double sink, int mirror,
               double tilt, double tilt_dir, double cap, MdlSolid **out, GEOSGeometry **foot, double *top) {
+    int settle_ = SETTLE; SETTLE = 0;
     *out = NULL; *foot = NULL;
     int n = VF->nv, nt = VF->nf;
     if (n == 0 || nt == 0) return MDL_ERR_RAISE;                      /* .max() of an empty array */
@@ -1235,6 +1430,7 @@ int mdl_solid(const MdlMesh *VF, double mm, double cx, double cy, double yaw, ch
     mdl_rz(-tilt_dir, A); mdl_mat3(R, A, R);
     if (!mdl_pose(pose, A)) { free(s); free(v); free(w); return MDL_ERR_RAISE; }   /* KeyError */
     mdl_mat3(R, A, R);
+    if (settle_) settle(VF, mirror, R);                               /* resting on a face (2026-11-21) */
     mdl_vRT(v, n, R, w);                                              /* v @ R.T * mm */
     for (int i = 0; i < n * 3; i++) v[i] = w[i] * mm;
     free(w);
