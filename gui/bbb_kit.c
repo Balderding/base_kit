@@ -81,6 +81,7 @@ enum { SIDE_W0 = 420, SIDE_MIN = 320, SIDE_FOOT = 92 };          /* SIDE_FOOT: R
 static int sideW = SIDE_W0, sideWant = SIDE_W0;          /* sideWant: what the user set (kept, saved); sideW: that, kept in bounds for this window */
 enum { DET_H0 = 170, DET_MIN = 110 };
 static int detailsH = DET_H0, detWant = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; detWant saved as detailsh */
+static int cardFocus = -1, gridCols = 1, gridRowH = 1, gridVH = 1, gridPad = 0;          /* U3: the card the arrows are on (-1 none), and the grid as last drawn */
 static int moreOpen;          /* U2: the side panel's "More settings" fold is open (saved as more in bbb_kit.ini; tests: open unless BBB_TEST_MORE=0) */
 static int divDrag, divHover;          /* R1 / R2: which line is being dragged / is under the mouse: 1 the side panel's, 2 the Details pane's */
 #define SIDE_W sideW
@@ -1257,6 +1258,8 @@ static void paint(HDC out, int W, int H) {
         cw = (aw - (cols - 1) * gap) / cols;
         if (cw > (ovr > 1.01 ? S(440) : S(280))) cw = ovr > 1.01 ? S(440) : S(280);
         ch = ovr > 1.01 ? (int)((cw - 2 * S(10)) / ovr * 1.08) + 2 * S(10) + S(40) : cw + S(40); nrows = (ncell + cols - 1) / cols; total = nrows * (ch + gap) + 2 * pad - gap; scrollMax = total > vh ? total - vh : 0;
+        gridCols = cols; gridRowH = ch + gap; gridVH = vh; gridPad = pad;          /* U3: for the arrow keys */
+        if (cardFocus >= ncell) cardFocus = ncell - 1;
         if (scrollY > scrollMax) scrollY = scrollMax;
         if (scrollY < 0) scrollY = 0;
         GdipSetClipRectI(G, gridR.left, gridR.top, gridR.right - gridR.left, vh, CombineModeReplace); GdipFlush(G, FlushIntentionSync); IntersectClipRect(DC, gridR.left, gridR.top, gridR.right, gridR.bottom);
@@ -1274,6 +1277,11 @@ static void paint(HDC out, int W, int H) {
         for (i = 0; i < ncell; i++) {
             int cx = gridR.left + pad + (i % cols) * (cw + gap), cy = gridR.top + pad + (i / cols) * (ch + gap) - scrollY;
             if (cy + ch > gridR.top && cy < gridR.bottom) card(i, cx, cy, cw, ch);
+            if (i == cardFocus && cy + ch > gridR.top && cy < gridR.bottom) {          /* U3: the keys' focus ring, gold, outside the card */
+                int t = lookPix ? PX : (S(2) > 1 ? S(2) : 1), o = S(5);
+                fillrect(cx - o, cy - o, cw + 2 * o, t, C_GOLD); fillrect(cx - o, cy + ch + o - t, cw + 2 * o, t, C_GOLD);
+                fillrect(cx - o, cy - o, t, ch + 2 * o, C_GOLD); fillrect(cx + cw + o - t, cy - o, t, ch + 2 * o, C_GOLD);
+            }
         }
         if (scrollMax) { double th = (double)vh * vh / total, ty = gridR.top + (double)scrollY / scrollMax * (vh - th);
             if (!lookPix) rr(gridR.right - S(9), ty + S(3), S(5), th - S(6), S(3), 0xFF4A5060u, 0, 0);
@@ -1395,6 +1403,8 @@ static void help(int W, int H) {
     y = para(L"KEYS", L"Enter:  the teal button.      Esc:  stop, or close this page.\n"
                               L"Ctrl+A:  pick all.      D:  details.      ? or F1:  this page.\n"
                               L"0 to 9:  how many bases (1 then 5 is 15).      + and -:  one more, one fewer.\n"
+                              L"Arrows, Home, End:  move over the designs.      Space:  pick the one the arrows are on.\n"
+                              L"Page Up / Down:  the style.      [ and ]:  the base size.      M:  more settings, or fewer.\n"
                               L"Mouse wheel:  scroll the designs. Drag the window's edge to make it any size; it opens the same way next time.", x2, y, cwid);
     y = para(L"THE LOOK", L"L:  pixel or smooth look.     T:  textures (pixel look only).     F:  pixel or plain font for the short words.\n"
                               L"The switches at the top right do the same; the kit remembers them.\n"
@@ -1738,6 +1748,21 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == 'A' && GetKeyState(VK_CONTROL) < 0) act(H_ALL, 0);
         else if (w == 'D') act(H_DETAILS, 0);
         else if (w == 'M' && GetKeyState(VK_CONTROL) >= 0) act(H_FOLD, 0);          /* U2: More settings */
+        else if ((w == VK_LEFT || w == VK_RIGHT || w == VK_UP || w == VK_DOWN || w == VK_HOME || w == VK_END) && ncell) {          /* U3: the arrows move over the cards */
+            int f = cardFocus < 0 ? 0 : cardFocus, c = gridCols > 0 ? gridCols : 1;
+            if (cardFocus >= 0) { if (w == VK_LEFT) f--; else if (w == VK_RIGHT) f++; else if (w == VK_UP) f -= c; else if (w == VK_DOWN) f += c; }
+            if (w == VK_HOME) f = 0; else if (w == VK_END) f = ncell - 1;
+            if (f < 0) f = 0;
+            if (f >= ncell) f = ncell - 1;
+            cardFocus = f;
+            {   int top = gridPad + (f / c) * gridRowH, bot = top + gridRowH;          /* keep it in view */
+                if (top < scrollY) scrollY = top - gridPad;
+                else if (bot > scrollY + gridVH) scrollY = bot - gridVH;
+                if (scrollY < 0) scrollY = 0; }
+            redraw();
+        }
+        else if (w == VK_SPACE && cardFocus >= 0 && cardFocus < ncell) act(H_CARD, cardFocus);          /* U3: Space = a click on the card the arrows are on */
+        else if (w == VK_PRIOR || w == VK_NEXT) { int s2 = selStyle + (w == VK_NEXT ? 1 : -1); if (s2 < 0) s2 = NSTYLES - 1; if (s2 >= NSTYLES) s2 = 0; act(H_STYLE, s2); }          /* U3: Page Up / Down: the style */
         else if (w == 'L' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 0);          /* the look: L pixel / smooth, T textures, F pixel font */
         else if (w == 'T' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 1);
         else if (w == 'F' && GetKeyState(VK_CONTROL) >= 0) act(H_LOOK, 2);
@@ -1757,6 +1782,8 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
             lastDigit = GetTickCount(); SetTimer(h, 2, 1600, NULL); redraw();
         } else if (w == '+' || w == '=') act(H_COUNT, 1);
         else if (w == '-') act(H_COUNT, -1);
+        else if ((w == '[' || w == ']') && !sizeMulti) { int z = selSize + (w == ']' ? 1 : -1); if (z < 0) z = NSIZES - 1; if (z >= NSIZES) z = 0;          /* U3: [ and ] step through the sizes */
+            if (z < NROUND) act(H_SIZE, z); else if (z < NROUND + NOVAL) act(H_OVAL, z - NROUND); else act(H_SQ, z - NROUND - NOVAL); }
         return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); nPaint++; GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
@@ -1885,6 +1912,19 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     swprintf(p2, MAX_PATH, L"%ls.drag.txt", stShot); tf = _wfopen(p2, L"w");
                     if (tf) { fprintf(tf, "%s %s %d -> %d (want %d) scale %.2f -> %.2f saved+read %d dblclk %d (default %d)" "\n", ok ? "OK" : "FAIL", which == 2 ? "detailsh" : which == 1 ? "sidew" : "no line at the press:", before, after, want, sc0, SC, saved, back, def); fclose(tf); }
                 }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_KEYS", NULL, 0)) {          /* U3 / U2: Right Right Down, Space, Page Down, ], M, sent to the window; what they did */
+                FILE *tf; WCHAR p2[MAX_PATH]; int st0 = selStyle, sz0 = selSize, mo0 = moreOpen, pk0, f1, sc0 = scrollY; capture(NULL);
+                SendMessageW(hMain, WM_KEYDOWN, VK_RIGHT, 0); SendMessageW(hMain, WM_KEYDOWN, VK_RIGHT, 0); SendMessageW(hMain, WM_KEYDOWN, VK_RIGHT, 0); SendMessageW(hMain, WM_KEYDOWN, VK_DOWN, 0);
+                f1 = cardFocus; pk0 = f1 >= 0 ? cells[f1].picked : -1;
+                SendMessageW(hMain, WM_KEYDOWN, VK_SPACE, 0);
+                SendMessageW(hMain, WM_KEYDOWN, VK_NEXT, 0); SendMessageW(hMain, WM_CHAR, ']', 0); SendMessageW(hMain, WM_KEYDOWN, 'M', 0);
+                SendMessageW(hMain, WM_KEYDOWN, VK_END, 0); capture(NULL);
+                { int okf = f1 == 2 + gridCols, okp = f1 >= 0 && cells[f1].picked != pk0, oks = selStyle == (st0 + 1) % NSTYLES, okz = selSize == (sz0 + 1) % NSIZES, okm = moreOpen != mo0, oke = cardFocus == ncell - 1 && scrollY > sc0;
+                  swprintf(p2, MAX_PATH, L"%ls.keys.txt", stShot); tf = _wfopen(p2, L"w");
+                  if (tf) { fprintf(tf, "%s focus after R R R D = %d (want %d) | space picked %d | pgdn style %d->%d | ] size %d->%d | M fold %d->%d | End focus %d scroll %d->%d" "\n",
+                                    okf && okp && oks && okz && okm && oke ? "OK" : "FAIL", f1, 2 + gridCols, okp, st0, selStyle, sz0, selSize, mo0, moreOpen, cardFocus, sc0, scrollY); fclose(tf); } }
+                capture(stShot);
             }
             if (GetEnvironmentVariableA("BBB_TEST_FOOT", NULL, 0)) {          /* R4: Show and Build straight away drawn fully inside the window */
                 FILE *tf; WCHAR p2[MAX_PATH]; RECT cr; int k, show = 0, quick = 0; GetClientRect(hMain, &cr); capture(NULL);
