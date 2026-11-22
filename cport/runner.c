@@ -155,22 +155,6 @@ static char *read_file(const char *path, size_t *len) {
     fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
     char *b = malloc(n + 1); size_t got = fread(b, 1, n, f); fclose(f); b[got] = 0; if (len) *len = got; return b;
 }
-/* The kit's own data, by name ("settings.json", "scale\\real.json", ...): a file of that name beside the exe wins (an
-   override); else the copy built into the exe (an RCDATA resource of that name, upper case, '\\' and '.' as '_', e.g.
-   SETTINGS_JSON); else NULL. *len = its size. The caller frees it. */
-char *runner_data(const char *name, size_t *len) {
-    char p[MAX_PATH * 3]; snprintf(p, sizeof p, "%s\\%s", KIT, name);
-    char *t = read_file(p, len); if (t) return t;
-    char rn[128]; int j = 0;
-    for (const char *c = name; *c && j < 120; c++) rn[j++] = (*c == '\\' || *c == '/' || *c == '.') ? '_' : (char)toupper((unsigned char)*c);
-    rn[j] = 0;
-    HMODULE h = NULL; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)(void *)runner_data, &h);
-    HRSRC r = FindResourceA(h, rn, MAKEINTRESOURCEA(10));          /* RT_RCDATA */
-    if (!r) return NULL;
-    HGLOBAL g = LoadResource(h, r); DWORD n = SizeofResource(h, r); const void *d = g ? LockResource(g) : NULL;
-    if (!d) return NULL;
-    t = malloc(n + 1); memcpy(t, d, n); t[n] = 0; if (len) *len = n; return t;
-}
 /* settings: kit_settings._DEFAULTS + the kit's settings.json of 2026-11-19, built in; a settings.json beside the exe
    overrides key by key (kit_settings.load: cfg.update(json.load(f))) */
 static const char DEFAULT_SETTINGS[] =

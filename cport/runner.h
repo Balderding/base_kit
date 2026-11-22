@@ -22,7 +22,6 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx);
 /* the kit's own data by name ("settings.json", "scale\\real.json", ...): a file of that name beside the exe wins, else
    the RCDATA resource built into the exe (name upper case, '\\' '/' '.' as '_': SETTINGS_JSON), else NULL. malloc'd,
    0-terminated; *len its size. Settings: built-in defaults (runner.c DEFAULT_SETTINGS) + a settings.json beside the exe. */
-char *runner_data(const char *name, size_t *len);
 /* json.dumps(s) of a UTF-8 string into buf (ensure_ascii, as Python's json): length, or -1 if it does not fit */
 int runner_json_str(const char *s, char *buf, int cap);
 /* repr(x) of a float, as Python prints it (shortest round trip): length */
