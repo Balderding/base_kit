@@ -81,7 +81,7 @@ enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE
        H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
-typedef struct { char seed[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
+typedef struct { char seed[16], size[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
 typedef struct { RECT r; int kind, idx; } Hit;
 static Cell cells[MAXC]; static int ncell;
 static Hit hits[400]; static int nhit, hovK, hovI = -1;
@@ -96,7 +96,7 @@ enum { FIT_W = 1650, FIT_H = 1000 };
 static double fit_sc(int w, int h) { double s = fmin(w / (double)FIT_W, h / (double)FIT_H); s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
 static int sideOff, sideMax, hitDy, txtDy, titleH;          /* the side panel's scroll (px), how far it can go, and the shift its click areas get */
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
-static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200];
+static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200], batchFolder[64];          /* batchFolder: several sizes, the batch's picked_ folder name */
 static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1", curObj[16] = "3"; static int curSup, curJoin = 1, selScale = 0, selObj = 5, curFig = 32;          /* selScale: the game scale (GAMEMM), selObj: the slider (OBJM) */
 static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, selJoin = 1, showDetails = 0;
 /* plan B step 6 (2026-11-21): the theme picker (selTheme 0 = any, k = the style's k-th theme), the design seed box
@@ -326,8 +326,7 @@ static void ask_choices(int fresh) {
     WCHAR cmd[1200], extra[400] = L""; int i, cnt = selCount;
     if (busy) return;
     if (fresh || !ncell) {
-        for (i = 0; i < ncell; i++) free_cell(&cells[i]);
-        ncell = 0; scrollY = 0; outFolder[0] = 0;
+        if (fresh != 2) { for (i = 0; i < ncell; i++) free_cell(&cells[i]); ncell = 0; scrollY = 0; outFolder[0] = 0; }          /* 2: several sizes, the next size: the cards so far stay (review P2-6) */
         strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; { double o = GAMEMM[selScale] / 32.0 * 3.0 * OBJM[selObj]; snprintf(curObj, sizeof curObj, "%.3g", o > 1.0 ? o : 1.0); curFig = (int)GAMEMM[selScale]; }
     }
     if (ncell + cnt > MAXC) cnt = MAXC - ncell;
@@ -339,7 +338,7 @@ static void ask_choices(int fresh) {
     for (i = 2; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* smooth details / organic rocks change the layout: the choices are drawn the same way */
     swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
-        for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); cells[ncell++].state = ST_PENDING; }
+        for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); strcpy(cells[ncell].size, curSize); cells[ncell++].state = ST_PENDING; }
         wanted = cnt; doneN = 0; swprintf(head, 200, L"Drawing %d %hs bases to choose from", cnt, curStyle); swprintf(sub, 300, L"%hs mm. They appear as they are ready; this takes about half a minute.", curSize);
     }
     redraw();
@@ -355,6 +354,7 @@ static void build(void) {
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
     theme_opt(extra, 400); swprintf(extra + wcslen(extra), 48, L" --strength %hs --printer %hs", STRENGTHS[selStr], selPrinter ? "resin" : "fdm");
     for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
+    if (batchFolder[0]) swprintf(extra + wcslen(extra), 80, L" --folder %ls", batchFolder);          /* several sizes: one folder for the batch (review P2-6 / N5) */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
     jobT0 = now_unix(); bigPick = -1; shrinkI = -1;          /* the live view: notes older than this build are not looked at */
     for (i = 0; i < ncell; i++) { live_free(cells[i].lv); cells[i].lv = NULL; }
@@ -388,7 +388,7 @@ static void on_line(int mode, const WCHAR *t) {
     if (!wcscmp(ev, L"choice")) {
         for (i = 0; i < ncell && cells[i].state != ST_PENDING; i++) ;
         if (i == ncell) { if (ncell >= MAXC) return; ncell++; }
-        c = &cells[i]; memset(c, 0, sizeof *c); c->state = ST_NONE; c->n = (int)jnum(t, L"n"); c->tier = (int)jnum(t, L"tier");
+        c = &cells[i]; memset(c, 0, sizeof *c); strcpy(c->size, curSize); c->state = ST_NONE; c->n = (int)jnum(t, L"n"); c->tier = (int)jnum(t, L"tier");
         { WCHAR ws[32]; jstr(t, L"seed", ws, 32); narrow(ws, c->seed, 16); }
         jstr(t, L"theme", c->theme, 64);
         if (jstr(t, L"img", path, MAX_PATH)) GdipLoadImageFromFile(path, &c->img);
@@ -450,7 +450,19 @@ static void on_ended(int mode, DWORD code) {
         }
         return;
     }
-    if (mode == 2 && nSizeQ > 0 && !runner_stop) { selSize = sizeQ[0]; memmove(sizeQ, sizeQ + 1, sizeof(int) * (size_t)--nSizeQ); autoBuild = 1; ask_choices(1); if (!busy) { autoBuild = 0; nSizeQ = 0; } return; }          /* several sizes: the next one */
+    if (mode == 2 && nSizeQ > 0 && !runner_stop) {          /* several sizes: the next one, its cards added to these, into the same folder */
+        if (!batchFolder[0] && outFolder[0]) { const WCHAR *bs = wcsrchr(outFolder, L'\\'); wcsncpy(batchFolder, bs ? bs + 1 : outFolder, 63); batchFolder[63] = 0; }
+        selSize = sizeQ[0]; memmove(sizeQ, sizeQ + 1, sizeof(int) * (size_t)--nSizeQ); autoBuild = 1; ask_choices(2); if (!busy) { autoBuild = 0; nSizeQ = 0; batchFolder[0] = 0; } return; }
+    if (mode == 2) batchFolder[0] = 0;          /* the batch is over */          /* several sizes: the next one */
+    if (selftest == 5 && mode == 2) {          /* BBB_TEST_MULTI: several sizes built straight away; what came out */
+        FILE *f; WCHAR q[MAX_PATH], pat[MAX_PATH]; int nstl = 0, nok = 0; WIN32_FIND_DATAW fd; HANDLE fh;
+        for (i = 0; i < ncell; i++) nok += cells[i].state == ST_OK || cells[i].state == ST_VARIANT;
+        swprintf(pat, MAX_PATH, L"%ls\\*.stl", outFolder); fh = FindFirstFileW(pat, &fd);
+        if (fh != INVALID_HANDLE_VALUE) { do nstl++; while (FindNextFileW(fh, &fd)); FindClose(fh); }
+        swprintf(q, MAX_PATH, L"%ls.multi.txt", stShot); f = _wfopen(q, L"w");
+        if (f) { fprintf(f, "cards %d built %d stls_in_folder %d folder %ls\n", ncell, nok, nstl, outFolder); for (i = 0; i < ncell; i++) fprintf(f, "card %d size %s state %d\n", i, cells[i].size, cells[i].state); fclose(f); }
+        PostQuitMessage(0); return;
+    }
     if (mode == 1 && autoBuild) { autoBuild = 0; if (ncell) { for (i = 0; i < ncell; i++) if (cells[i].state == ST_NONE) cells[i].picked = 1; build(); return; } }
     if (selftest) {
         if (mode == 1 && stStep == 0 && ncell >= 3) { stStep = 1; cells[0].picked = 1; build(); }                                   /* ONE pick: must build exactly one */
@@ -834,7 +846,8 @@ static void card(int i, int x, int y, int w, int h) {
         pt[0].X = (REAL)(cx - r * 0.45); pt[0].Y = (REAL)cy; pt[1].X = (REAL)(cx - r * 0.1); pt[1].Y = (REAL)(cy + r * 0.38); pt[2].X = (REAL)(cx + r * 0.5); pt[2].Y = (REAL)(cy - r * 0.35);
         GdipDrawLines(G, pn, pt, 3); GdipDeletePen(pn);
     }
-    txt(c->theme, x + pad, capY, iw, S(18), fUI, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+    if (sizeMulti && c->size[0]) { WCHAR cap[100]; swprintf(cap, 100, L"%hs mm  %ls", c->size, c->theme); txt(cap, x + pad, capY, iw, S(18), fUI, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); }          /* several sizes: each card says its size */
+    else txt(c->theme, x + pad, capY, iw, S(18), fUI, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     switch (c->state) {
     case ST_BUILDING: {          /* what is being done, in words (every view) */
         WCHAR st[120]; if (c->lv && c->lv->have) live_text(c->lv, st, 120); else wcscpy(st, L"building ...");
@@ -1064,7 +1077,7 @@ static void paint(HDC out, int W, int H) {
         y += bh + S(8);
     }
     chipsMask = sizeMulti; chipsBits = sizeMulti ? sizeMask : 0;
-    chips(sizeMulti ? L"BASE SIZES, MM  (CLICK EACH ONE YOU WANT)" : L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 9, sizeMulti ? 0 : selSize, H_SIZE, &y); y -= S(4);
+    chips(sizeMulti ? L"BASE SIZES, MM  (EACH ONE, FOR BUILD STRAIGHT AWAY)" : L"BASE SIZE, MM  (ROUND, THEN OVAL)", SIZES, NROUND, 9, sizeMulti ? 0 : selSize, H_SIZE, &y); y -= S(4);
     {   int y0 = y, x0 = S(16), wAll = S(SIDE_W - 32), gap = sideTight ? S(3) : S(4), ch = sideTight ? S(20) : S(24), cw = (wAll - 3 * gap) / 4;
         chips(NULL, SIZES + NROUND, NSIZES - NROUND, 4, sizeMulti ? NROUND : selSize - NROUND, H_OVAL, &y);
         chipsMask = 0;
@@ -1395,7 +1408,7 @@ static void act2(int kind, int idx) {
     case H_OBJ: selObj = idx; break;
     case H_COUNT: selCount += idx; if (selCount < 1) selCount = 1; if (selCount > 20) selCount = 20; break;
     case H_QUICK: if (!busy) {
-        nSizeQ = 0;
+        nSizeQ = 0; batchFolder[0] = 0;
         if (sizeMulti && sizeMask) { int q, first = -1; for (q = 0; q < NSIZES; q++) if ((sizeMask >> q) & 1u) { if (first < 0) first = q; else if (nSizeQ < 32) sizeQ[nSizeQ++] = q; } if (first >= 0) selSize = first; }
         autoBuild = 1; ask_choices(1); if (!busy) { autoBuild = 0; nSizeQ = 0; } } return;
     case H_SUP: selSup = !selSup; break;
@@ -1718,7 +1731,12 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_SCALE", e, sizeof e)) selScale = atoi(e) % 3; }          /* a test may ask for another game scale: 0 = 32 mm, 1 = 28 mm, 2 = 15 mm */
     if (selftest) { char e[16]; int i; if (GetEnvironmentVariableA("BBB_TEST_SIZE", e, sizeof e)) for (i = 0; i < NSIZES; i++) if (!strcmp(e, SIZES[i])) stSize = i; }          /* and another base size, as written on its chip: 60, 90x52 ... */
     if (selftest == 3) { selStyle = 14; selSize = 8; selDetail = 4; selMini = 0; selCount = 8; selSup = 0; ask_choices(1); }
-    if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = GetEnvironmentVariableA("BBB_TEST_OVERHANGS", NULL, 0) ? 1 : 0; ask_choices(1); }          /* a test of overhangs + join: BBB_TEST_OVERHANGS set */
+    if (selftest == 1 && GetEnvironmentVariableA("BBB_TEST_MULTI", NULL, 0)) {          /* a test: sizes 25, 40, 60, two of each, build straight away (review P2-6) */
+        char e[64], *t; int q; selftest = 5; selStyle = 6; selDetail = 4; selMini = 0; selCount = 2; sizeMulti = 1; sizeMask = 0; GetEnvironmentVariableA("BBB_TEST_MULTI", e, sizeof e);
+        for (t = strtok(e, ","); t; t = strtok(NULL, ",")) for (q = 0; q < NSIZES; q++) if (!strcmp(SIZES[q], t)) sizeMask |= 1u << q;
+        act(H_QUICK, 0);
+    }
+    else if (selftest == 1) { selStyle = 6; selSize = stSize; selDetail = 4; selMini = 0; selCount = autoBuild ? 2 : 8; selSup = GetEnvironmentVariableA("BBB_TEST_OVERHANGS", NULL, 0) ? 1 : 0; ask_choices(1); }          /* a test of overhangs + join: BBB_TEST_OVERHANGS set */
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     GdiplusShutdown(gtok); return 0;
 }

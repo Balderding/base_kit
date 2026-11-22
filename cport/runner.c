@@ -1517,7 +1517,14 @@ static int job_build(Args *a, const char *style) {
     }
     { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) ev("log", "s", "text", kd_themes_note); }          /* themes.json: say what was taken */
     if (!ng) { ev("error", "s", "text", "nothing was picked (give --picks seed:n,... or --count N [--seed word])"); return 2; }
-    char ts[32], dest[MAX_PATH * 3]; strftime_now(ts, sizeof ts, "%Y%m%d_%H%M%S"); snprintf(dest, sizeof dest, "%s\\picked_%s", out_root(), ts); make_dirs(dest);
+    char ts[32], dest[MAX_PATH * 3]; strftime_now(ts, sizeof ts, "%Y%m%d_%H%M%S");
+    {   /* review P2-6 / N5 (2026-11-22): --folder picked_x puts this build in a batch's folder under out (several sizes:
+           one folder); else a new picked_<time>, with a number added when that folder is already there (two jobs in one second) */
+        const char *fo = opt(a, "--folder", ""); int okn = fo[0] && !strpbrk(fo, "\\/:.");
+        if (okn) snprintf(dest, sizeof dest, "%s\\%s", out_root(), fo);
+        else { snprintf(dest, sizeof dest, "%s\\picked_%s", out_root(), ts); if (GetFileAttributesA(dest) != INVALID_FILE_ATTRIBUTES) { char s2[40]; snprintf(s2, sizeof s2, "_%lu", (unsigned long)(GetTickCount() % 100000u)); strncat(dest, s2, sizeof dest - strlen(dest) - 1); } }
+    }
+    make_dirs(dest);
     ev("folder", "s", "folder", dest);
     snprintf(LIVE_DIR, sizeof LIVE_DIR, "%s\\.live", out_root()); make_dirs(LIVE_DIR);          /* gui_job: KIT_LIVE for the window's live view */
     int okc = 0, bad = 0;
