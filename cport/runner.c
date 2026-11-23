@@ -697,6 +697,23 @@ static void edge_counts(const Mesh *m, int *odd, int *pinched, int *watertight) 
     }
     *watertight = wt && wind; free(e);
 }
+/* PLAN-next step 1 (BBB_MESH_DIAG=<file>): the odd and pinched edges after a stage; at the end, where each bad edge is */
+static void diag_stage(const Mesh *m, const char *base, const char *stage) {
+    const char *p = getenv("BBB_MESH_DIAG"); int odd, pin, wt; FILE *f; if (!p || !*p) return;
+    edge_counts(m, &odd, &pin, &wt); if (!(f = fopen(p, "a"))) return;
+    fprintf(f, "%s stage %-8s odd %d pinched %d watertight %d faces %d" "\n", base, stage, odd, pin, wt, m->nt);
+    if (!strcmp(stage, "final") && (odd || pin)) {
+        Ed *e = mesh_edges(m); size_t ne = 3 * (size_t)m->nt; int k = 0;
+        for (size_t i = 0; i < ne && k < 40;) {
+            size_t j = i; while (j < ne && e[j].key == e[i].key) j++;
+            if (j - i != 2) { int64_t lo = e[i].key / m->nv, hi = e[i].key % m->nv; const double *a = m->v + 3 * lo, *b = m->v + 3 * hi;
+                fprintf(f, "%s   bad edge in %d faces: (%.5f %.5f %.4f) - (%.5f %.5f %.4f)" "\n", base, (int)(j - i), a[0], a[1], a[2], b[0], b[1], b[2]); k++; }
+            i = j;
+        }
+        free(e);
+    }
+    fclose(f);
+}
 /* Trimesh.split(only_watertight=False): faces joined across edges shared by exactly two faces; comp[f] = part number,
    parts numbered by their first face. Returns the number of parts; vol[k] = each part's volume (signed, mm^3) */
 static int mesh_split(const Mesh *m, int *comp, double **vol) {
@@ -1064,8 +1081,8 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     }
     /* the height field and the mesh: bbb_kit.exe --core-build (cmesh.build_c) */
     char thr[16]; snprintf(thr, sizeof thr, "%d", nthreads);
-    EnvSet es[2] = { { "KIT_MESH_THREADS", thr }, { "KIT_LIVE_FILE", lp[0] ? lp : NULL } };
-    Sb out = { 0 }, err = { 0 }; int rc = run_core("--core-build", bl[0], ln[0], es, 2, &out, &err);
+    EnvSet es[3] = { { "KIT_MESH_THREADS", thr }, { "KIT_LIVE_FILE", lp[0] ? lp : NULL }, { "KIT_DIAG_NAME", name } };          /* KIT_DIAG_NAME: step 1's log names the base */
+    Sb out = { 0 }, err = { 0 }; int rc = run_core("--core-build", bl[0], ln[0], es, 3, &out, &err);
     if (rc != 0 || out.n < 12 || memcmp(out.s, "BBR1", 4)) {          /* cmesh.build_c gave None: Python would build this one in Python (not in C) */
         snprintf(e, sizeof e, "crash: the C field builder failed (%.200s)", err.s ? err.s : ""); B->error = xstrdup(e);
         free(out.s); free(err.s); free_blobs(bl, ln, nb); if (have_sc) d2_scene_free(&sc); B->secs = py_rint((GetTickCount64() - t) / 1000.0); return;
@@ -1086,7 +1103,8 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         for (int g = 0; g < sc.ngc; g++) fprintf(kf, " gc %s np=%d\n", sc.gc[g].kind ? sc.gc[g].kind : "?", sc.gc[g].np);
         for (int g = 0; g < sc.nop; g++) fprintf(kf, " op %s type=%d z0=%g b=%g np=%d\n", sc.op[g].kind ? sc.op[g].kind : "?", sc.op[g].optype, sc.op[g].z0, sc.op[g].b, sc.op[g].np);
         for (int g = 0; g < sc.ntc; g++) fprintf(kf, " tc %s np=%d\n", sc.tc[g].kind ? sc.tc[g].kind : "?", sc.tc[g].np); fclose(kf); } }
-    mesh_merge(&m);
+    diag_stage(&m, name, "mesh");
+    mesh_merge(&m); diag_stage(&m, name, "merge");
     ULONGLONG tg0 = GetTickCount64();
     if (cfg_bool("ground_grain", 1)) {          /* plan B step 2: fine grain on every flat top (grain.c), so no open ground is smooth */
         uint32_t sd = 2166136261u; for (const char *c = name; *c; c++) sd = (sd ^ (unsigned char)*c) * 16777619u;
@@ -1098,7 +1116,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         const char *gl = getenv("BBB_GRAIN_LOG");
         if (gl && *gl) { FILE *lf = fopen(gl, "a"); if (lf) { fprintf(lf, "%s: faces %d -> %d, points moved %d\n", name, t0, m.nt, mv); fclose(lf); } }
     }
-    B->t_grain = (GetTickCount64() - tg0) / 1000.0;
+    B->t_grain = (GetTickCount64() - tg0) / 1000.0; diag_stage(&m, name, "grain");
     int tris_field = m.nt;          /* len(f): the surface's faces, before the solids */
     {   /* --supports on: m, extra = add_solids(...) (the shells were built by the layout helper: solids3d.c, the "BBS1" blob); trimesh.util.concatenate([m] + extra) */
         JV *sk3 = jget(&B->head, "skipped3d");
@@ -1116,6 +1134,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
             }
         }
     }
+    diag_stage(&m, name, "shells");
     ULONGLONG tj0 = GetTickCount64();
     if (join_shells()) {          /* supports join / smooth details: the base and the shells one solid (Manifold); pieces left in the air dropped */
         MfJoin jr; char je[200];
@@ -1126,12 +1145,13 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
             if (t2[0]) { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, t2); }
         } else { if (B->skipped.n) sb_add(&B->skipped, "\n", 1); sb_puts(&B->skipped, je); mg_log_caught("join", "RuntimeError", je, "cport/mfjoin.c"); }
     }
-    ULONGLONG ts0 = GetTickCount64(); B->t_join = (ts0 - tj0) / 1000.0;
+    ULONGLONG ts0 = GetTickCount64(); B->t_join = (ts0 - tj0) / 1000.0; diag_stage(&m, name, "join");
     if (smaller_files() && (!allow_supports() || supports_join())) {          /* smaller files: flat areas in fewer triangles (Manifold), the shape moves no more than 0.005 mm */
         char se[200]; if (mf_simplify(&m.v, &m.nv, &m.f, &m.nt, cfg_num("smaller_files_mm", 0.005), se, sizeof se) != 0) mg_log_caught("smaller files", "RuntimeError", se, "cport/mfjoin.c");
     }
-    ULONGLONG tc0 = GetTickCount64(); B->t_simp = (tc0 - ts0) / 1000.0;
+    ULONGLONG tc0 = GetTickCount64(); B->t_simp = (tc0 - ts0) / 1000.0; diag_stage(&m, name, "smaller");
     { int dr = mesh_f32_clean(&m); if (dr && getenv("BBB_F32_LOG")) { FILE *lf = fopen(getenv("BBB_F32_LOG"), "a"); if (lf) { fprintf(lf, "%s: %d faces dropped at float32\n", B->path, dr); fclose(lf); } } }          /* the mesh as the STL will hold it */
+    diag_stage(&m, name, "final");
     int odd, pin; edge_counts(&m, &odd, &pin, &B->watertight); B->tris = tris_field;
     B->pinched = pin;          /* review P2-4: edges in more than two faces are said in the note, not hidden */
     double mn[3], mx[3]; mesh_bounds(&m, mn, mx); B->top_mm = py_round(mx[2] - jget(&B->head, "H")->d, 1);

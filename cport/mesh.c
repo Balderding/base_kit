@@ -572,6 +572,7 @@ static void m_free(M *m, GEOSGeometry **cells, int nc) {
 }
 
 /* ------------------------------------------------------------------------------------------------ mesh_from_field */
+static int dg_swaps;          /* PLAN-next step 1: top faces swapped back (one build a process: the --core-build child) */
 int mesh_from_field(const MeshIn *in, MeshOut *out) {
     M mm; M *m = &mm; memset(m, 0, sizeof mm); m->in = in; T_(NULL);
     om_init(&m->hc, 3); om_init(&m->kmap, 2); om_init(&m->forced, 2); om_init(&m->edges, 4); om_init(&m->V, 3);
@@ -630,15 +631,17 @@ int mesh_from_field(const MeshIn *in, MeshOut *out) {
     /* 2. heights at every corner, then the corners where four walls would meet */
     T_("face rules"); settle(m); T_("settle");
     OMap pins; om_init(&pins, 2); pinches(m, &pins);
+    int dg_first = pins.n, dg_tries = 0; const char *dg_exit = pins.n ? "6 tries" : "none";          /* PLAN-next step 1: how the corner loop ended */
     for (int tr = 0; tr < 6; tr++) {
-        if (!pins.n) break;
+        if (!pins.n) { if (tr) dg_exit = "bad corners taken out, none left"; break; }
+        dg_tries = tr + 1;
         RingsV saved = rv_copy(&m->rings); int savedk = m->nkeep; OMap sf = m->forced; DV sfz = m->fz;
         sf.keys = malloc(sizeof(int64_t) * 2 * (sf.cap ? sf.cap : 1)); memcpy(sf.keys, m->forced.keys, sizeof(int64_t) * 2 * sf.n);
         sf.slot = m->forced.slot ? malloc(sizeof(int32_t) * (m->forced.smask + 1)) : NULL; if (sf.slot) memcpy(sf.slot, m->forced.slot, sizeof(int32_t) * (m->forced.smask + 1));
         sfz.a = malloc(sizeof(double) * (sfz.cap ? sfz.cap : 1)); memcpy(sfz.a, m->fz.a, sizeof(double) * sfz.n);
         OMap bad; om_init(&bad, 2);
         int res = cut_corners(m, &pins, &bad);
-        if (res == 0) { settle(m); rv_free(&saved); om_free(&sf); free(sfz.a); om_free(&bad); break; }
+        if (res == 0) { settle(m); rv_free(&saved); om_free(&sf); free(sfz.a); om_free(&bad); dg_exit = "done"; break; }
         rv_free(&m->rings); m->rings = saved;
         for (int i = savedk; i < m->nkeep; i++) G.GEOSGeom_destroy_r(gctx, m->keep[i].f);
         m->nkeep = savedk; om_free(&m->forced); free(m->fz.a); m->forced = sf; m->fz = sfz;
@@ -646,7 +649,23 @@ int mesh_from_field(const MeshIn *in, MeshOut *out) {
             OMap np; om_init(&np, 2);
             if (bad.n) for (int i = 0; i < pins.n; i++) if (om_find(&bad, om_key(&pins, i)) < 0) om_put(&np, om_key(&pins, i), NULL);
             om_free(&pins); pins = np; om_free(&bad); settle(m);
-        } else { om_free(&bad); settle(m); break; }
+        } else { om_free(&bad); settle(m); dg_exit = "exception (a ring under 4 coords / a key)"; break; }
+    }
+    {   const char *dp = getenv("BBB_MESH_DIAG");          /* PLAN-next step 1: the corners left as they are, measured again */
+        if (dp && *dp) {
+            OMap left; om_init(&left, 2); pinches(m, &left); int e4 = 0, nshort = 0; FILE *df = fopen(dp, "a"); const char *nm = getenv("KIT_DIAG_NAME");
+            for (int e = 0; e < m->edges.n; e++) if (m->ez[e].n > 4) e4++;
+            if (df) {
+                fprintf(df, "%s mesh: pins first %d, loop %s after %d tries, pins left %d", nm ? nm : "?", dg_first, dg_exit, dg_tries, left.n);
+                for (int i = 0; i < left.n && i < 40; i++) { const int64_t *k = om_key(&left, i); fprintf(df, " [%.6f %.6f]", (double)k[0] * KG, (double)k[1] * KG); }
+                fprintf(df, "; 2D edges in more than two faces %d; short edges (< 1e-4 mm):", e4);
+                for (int fi = 0; fi < m->nkeep; fi++) { Rings *rs = &m->rings.a[fi]; for (int q = 0; q < rs->n; q++) { Ring *cs = &rs->r[q]; for (int j = 0; j + 1 < cs->n; j++) {
+                    double dx = cs->xy[2 * j + 2] - cs->xy[2 * j], dy = cs->xy[2 * j + 3] - cs->xy[2 * j + 1], L = sqrt(dx * dx + dy * dy);
+                    if (L > 0 && L < 1e-4) { if (nshort < 40) fprintf(df, " [%.6f %.6f %.2g]", cs->xy[2 * j], cs->xy[2 * j + 1], L); nshort++; } } } }
+                fprintf(df, " (%d)" "\n", nshort); fclose(df);
+            }
+            om_free(&left);
+        }
     }
     om_free(&pins); T_("pins");
     /* the top: every face's triangles */
@@ -660,7 +679,7 @@ int mesh_from_field(const MeshIn *in, MeshOut *out) {
             if (TJ.tl) free(TJ.tl[fi].a);
             GEOSGeometry *poly = mk_poly(&rs->r[0], rs->r + 1, rs->n - 1, &perr); int own = 1;
             if (!poly) { snprintf(out->err, sizeof out->err, "ValueError: a face ring under 4 coords"); return 0; }
-            if (!G.GEOSisValid_r(gctx, poly)) { G.GEOSGeom_destroy_r(gctx, poly); poly = m->keep[fi].f; own = 0; }
+            if (!G.GEOSisValid_r(gctx, poly)) { G.GEOSGeom_destroy_r(gctx, poly); poly = m->keep[fi].f; own = 0; dg_swaps++; }          /* step 1: counted */
             if (area_of(poly) > 0 && !tri2d(poly, &tl)) { snprintf(out->err, sizeof out->err, "GEOSException: triangulation of a face with holes"); return 0; }
             if (own) G.GEOSGeom_destroy_r(gctx, poly);
         }
@@ -674,6 +693,7 @@ int mesh_from_field(const MeshIn *in, MeshOut *out) {
     }
     if (TJ.tl) { free(TJ.tl); free(TJ.state); }
     T_("top tris");
+    { const char *dp = getenv("BBB_MESH_DIAG"); if (dp && *dp) { FILE *df = fopen(dp, "a"); const char *nm = getenv("KIT_DIAG_NAME"); if (df) { fprintf(df, "%s mesh: top faces swapped for the original (not valid) %d" "\n", nm ? nm : "?", dg_swaps); fclose(df); } } }
     if (m->err) { snprintf(out->err, sizeof out->err, "%s", m->msg); return 0; }
     /* 3. walls between neighbours of different height */
     const MeshIn *I = in; double R0 = I->R0, H = I->H;
