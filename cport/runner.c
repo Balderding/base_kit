@@ -204,6 +204,9 @@ static int join_shells(void) { return allow_supports() ? supports_join() : (smoo
 void runner_cfg_init(void) { set_kit(); load_cfg(); }
 double runner_cfg_num(const char *k, double d) { runner_cfg_init(); return cfg_num(k, d); }
 int runner_cfg_bool(const char *k, int d) { runner_cfg_init(); return cfg_bool(k, d); }
+int runner_in_window;          /* set by the window (bbb_kit.c run()) */
+static DWORD runner_child_class;          /* BELOW_NORMAL_PRIORITY_CLASS for every helper process while a job runs below normal */
+static void runner_low_thread(HANDLE t) { if (runner_child_class && t) SetThreadPriority(t, THREAD_PRIORITY_BELOW_NORMAL); }          /* a job thread in the window's process */
 const char *runner_cfg_str(const char *k, const char *d) { runner_cfg_init(); return cfg_str(k, d); }
 int runner_cfg_has(const char *k) { runner_cfg_init(); return cfg_get(k) != NULL; }
 const char *runner_cfg_text(const char *k) {          /* str(CFG[k]) for a str or a number (the JSON number's own text) */
@@ -345,7 +348,7 @@ static int bridge_start(Bridge *b, const char *mode, const char *style, const WC
     HANDLE nul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);          /* the helpers' stderr goes nowhere (choices.py: DEVNULL) */
     STARTUPINFOW si; memset(&si, 0, sizeof si); si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES; si.hStdInput = in_r; si.hStdOutput = out_w; si.hStdError = nul;
     PROCESS_INFORMATION pi;
-    BOOL ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED, (LPVOID)env, kit, &si, &pi);
+    BOOL ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | runner_child_class, (LPVOID)env, kit, &si, &pi);
     CloseHandle(in_r); CloseHandle(out_w); CloseHandle(nul);
     ReleaseSRWLockExclusive(&SPAWN);
     if (!ok) { CloseHandle(b->in_w); CloseHandle(b->out_r); return 0; }
@@ -459,7 +462,7 @@ static int job_choices(Args *a, const char *style) {
     ChoiceWork *ws = calloc(nw, sizeof *ws); HANDLE *th = calloc(nw, sizeof(HANDLE));
     for (int k = 0; k < nw; k++) {
         ws[k] = (ChoiceWork){ style, seed, outdir, px, pl, npl, k, step, env, &made };
-        th[k] = CreateThread(NULL, 0, choice_worker, &ws[k], 0, NULL);
+        th[k] = CreateThread(NULL, 0, choice_worker, &ws[k], 0, NULL); runner_low_thread(th[k]);
     }
     for (int k = 0; k < nw; k++) { WaitForSingleObject(th[k], INFINITE); CloseHandle(th[k]); }
     ev("done", "si", "job", "choices", "count", (int)made);
@@ -520,7 +523,7 @@ static int run_core(const char *arg, const unsigned char *in, size_t n, const En
     CreatePipe(&ir, &iw, &sa, 0); CreatePipe(&or_, &ow, &sa, 0); CreatePipe(&er, &ew, &sa, 0);
     SetHandleInformation(iw, HANDLE_FLAG_INHERIT, 0); SetHandleInformation(or_, HANDLE_FLAG_INHERIT, 0); SetHandleInformation(er, HANDLE_FLAG_INHERIT, 0);
     STARTUPINFOW si; memset(&si, 0, sizeof si); si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES; si.hStdInput = ir; si.hStdOutput = ow; si.hStdError = ew;
-    PROCESS_INFORMATION pi; BOOL ok = CreateProcessW(exe, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED, env, NULL, &si, &pi);
+    PROCESS_INFORMATION pi; BOOL ok = CreateProcessW(exe, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | runner_child_class, env, NULL, &si, &pi);
     CloseHandle(ir); CloseHandle(ow); CloseHandle(ew); free(env);
     ReleaseSRWLockExclusive(&SPAWN);
     if (!ok) { CloseHandle(iw); CloseHandle(or_); CloseHandle(er); sb_puts(errs, "bbb_kit.exe could not be started"); return -1; }
@@ -1381,7 +1384,7 @@ static void run_style(RunSet *rs) {
     rs_print("%s: %d bases, %s mm, %d at a time, limits %s s/step, %.0f s/base, %s min/batch", rs->style, rs->nnums, rs->size_tag, rs->workers,
              jtext(cfg_get("step_limit_secs"), "12"), base_limit(rs), jtext(cfg_get("batch_limit_mins"), "45"));
     int nw = rs->workers < rs->nnums ? rs->workers : rs->nnums; HANDLE *th = calloc(nw + 1, sizeof(HANDLE)); RsWork w = { rs };
-    for (int i = 0; i < nw; i++) th[i] = CreateThread(NULL, 1 << 22, rs_worker, &w, 0, NULL);
+    for (int i = 0; i < nw; i++) { th[i] = CreateThread(NULL, 1 << 22, rs_worker, &w, 0, NULL); runner_low_thread(th[i]); }
     for (int i = 0; i < nw; i++) { WaitForSingleObject(th[i], INFINITE); CloseHandle(th[i]); }
     free(th);
     BaseRes *done = calloc(rs->nnums + 1, sizeof(BaseRes)); int nd = 0; for (int i = 0; i < rs->nnums; i++) if (rs->res[i].ntries || rs->res[i].base[0]) done[nd++] = rs->res[i];
@@ -1673,7 +1676,11 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
     int rc;
     /* speed plan step 5 (2026-11-22, the user games while bases build): the job and every helper it starts (they inherit
        it) run below normal, so a game in front keeps the CPU; idle cores still go to the kit. settings below_normal_priority */
-    if (runner_cfg_bool("below_normal_priority", 1)) SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+    if (runner_cfg_bool("below_normal_priority", 1)) {
+        runner_child_class = BELOW_NORMAL_PRIORITY_CLASS;
+        if (runner_in_window) SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);          /* the window keeps normal priority: it must stay quick */
+        else SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+    } else runner_child_class = 0;
     if (!strcmp(job, "choices")) rc = job_choices(&a, style);
     else rc = job_build(&a, style);
     free(av);

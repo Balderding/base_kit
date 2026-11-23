@@ -155,7 +155,11 @@ static void meters_tick(void) { float pc[LIVE_MAXCORE]; ncpu = live_cpu(pc, LIVE
 /* idle CPU (2026-11-22, GUICy's baseline: 31.5 % of a core idle, a full redraw twice a second for the meters):
    the window redraws for the meters only when what they show changed, and not at all while it is behind another
    window (a game in front) or minimized and nothing is building. in_front: the window or one of its own is active */
-static int idleSecs, nPaint;          /* --idletest: how long, and how many full redraws happened */
+static int idleSecs, nPaint; static DWORD lastPaintMs;          /* lastPaintMs: how long the last full paint took (the timers' throttle) */
+/* a timer's full redraw at most once every 4 paint-times: a paint draws the whole window, so with a 160 ms paint the 60 ms
+   animation timer kept the window thread drawing all the time and clicks waited (the user, 2026-11-23); a quick paint
+   (20 ms) still animates every 80 ms */
+static int throttle_ok(int id) { static DWORD lastAt[8]; DWORD now = GetTickCount(); if (now - lastAt[id & 7] < lastPaintMs * 4) return 0; lastAt[id & 7] = now; return 1; }          /* --idletest: how long, and how many full redraws happened */
 static int in_front(void) { if (selftest == 6) return GetEnvironmentVariableA("BBB_TEST_FRONT", NULL, 0) > 0; HWND f = GetForegroundWindow(); return f && (f == hMain || GetAncestor(f, GA_ROOTOWNER) == hMain) && !IsIconic(hMain); }
 static long long meters_shown(void) {          /* what the strip shows now, as one number: busy, our threads, our cores, the video card's percent */
     long long g = gpuV < 0 ? -1 : (long long)(gpuV * 100 + 0.5);
@@ -230,7 +234,7 @@ static int run(const WCHAR *cmd, int mode) {          /* cmd: gui_job.py's argum
     swprintf(b, 2800, L"> job %ls", cmd); logw(b);
     WideCharToMultiByte(CP_UTF8, 0, cmd, -1, r->buf, sizeof r->buf, NULL, NULL);
     for (q = strtok(r->buf, " "); q && r->argc < 63; q = strtok(NULL, " ")) r->argv[r->argc++] = q;
-    r->mode = mode; runner_stop = 0; runner_job = hJob;
+    r->mode = mode; runner_stop = 0; runner_job = hJob; runner_in_window = 1;          /* the job lowers only its own threads and helpers, never the window */
     th = CreateThread(NULL, 1 << 24, job_thread, r, 0, NULL);
     if (!th) { swprintf(head, 200, L"The job could not be started"); swprintf(sub, 300, L"Windows error %lu.", GetLastError()); logw(sub); free(r); return 0; }
     CloseHandle(th);
@@ -450,11 +454,11 @@ static void capture(const WCHAR *path);
    cards are on show, to move their marching ants */
 static void anim_tick(void) {
     if (busy) return;
-    if (lookPix && lookTex && npicked()) SetTimer(hMain, 1, 120, NULL); else KillTimer(hMain, 1);
+    if (lookPix && lookTex && npicked()) { SetTimer(hMain, 1, 120, NULL); if (selftest) alog("diag: timer 1 on (pixel %d textures %d picked %d)", lookPix, lookTex, npicked()); } else KillTimer(hMain, 1);
 }
 static void on_ended(int mode, DWORD code) {
     int i;
-    alog("job ended: mode %d, code %lu", mode, (unsigned long)code);
+    alog("job ended: mode %d, code %lu; the window's priority: class 0x%lx, thread %d", mode, (unsigned long)code, GetPriorityClass(GetCurrentProcess()), GetThreadPriority(GetCurrentThread()));
     busy = 0; KillTimer(hMain, 1); KillTimer(hMain, 4); anim_tick();
     if (mode == 1) {
         drop_pending();
@@ -1200,8 +1204,8 @@ static void paint(HDC out, int W, int H) {
     }          /* U2: the fold */
     {          /* the panel must fit: if the full size runs past the bottom, draw it tight; back to full size when it fits again */
         int need = y + S(4) + S(SIDE_FOOT);          /* R4: the rows, then the footer with Show / build straight away under them */
-        if (!sideTight) { sideNeed = need; if (need > H) { sideTight = 1; InvalidateRect(hMain, NULL, FALSE); } }
-        else if (sideNeed <= H) { sideTight = 0; InvalidateRect(hMain, NULL, FALSE); }
+        if (!sideTight) { sideNeed = need; if (need > H) { sideTight = 1; InvalidateRect(hMain, NULL, FALSE); if (selftest) alog("diag: side panel -> tight (need %d, H %d, more %d)", need, H, moreOpen); } }
+        else if (sideNeed <= H) { sideTight = 0; InvalidateRect(hMain, NULL, FALSE); if (selftest) alog("diag: side panel -> full (sideNeed %d, need %d, H %d, more %d)", sideNeed, need, H, moreOpen); }
         sideMax = sideTight && need > H ? need - H + S(8) : 0; if (sideOff > sideMax) sideOff = sideMax;          /* still too tall when tight: it scrolls */
     }
     GdipResetWorldTransform(G); txtDy = hitDy = 0; hitClip = 0;
@@ -1759,6 +1763,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {          /* a
     else if (m == WM_QUERYENDSESSION) alog("closing: Windows is shutting down or logging off");
     else if (m == WM_SIZE) alog("window size %dx%d%s", LOWORD(l), HIWORD(l), w == SIZE_MINIMIZED ? " (minimized)" : w == SIZE_MAXIMIZED ? " (maximized)" : "");
     else if (m == WM_ACTIVATEAPP) alog("window %s", w ? "in front" : "behind another program");
+    else if (m == WM_TIMER) InterlockedIncrement(&alTimers[w <= 10 ? w : 11]);
     r = proc_in(h, m, w, l);
     dt = GetTickCount() - t0;
     if (m == WM_PAINT) al_paint(dt);
@@ -1793,11 +1798,13 @@ static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == 3) {          /* the meters: a redraw only when what they show changed, and only in front (or building) */
             static long long last = -2; long long now;
             if (!busy && !in_front() && (!selftest || selftest == 6)) return 0;
+            if (!throttle_ok(3)) return 0;
             meters_tick(); now = meters_shown();
             if (now == last) return 0;
             last = now;
         }
         else if (w == 1 && !busy && !in_front() && (!selftest || selftest == 6)) return 0;          /* the picked cards' animated outline: not behind another window */
+        else if (w == 1 && !throttle_ok(1)) return 0;          /* the user, 2026-11-23 "it keeps locking up": see throttle_ok */
         else if (w == 4) {          /* the animation timer redraws while building */
             live_poll();
             if (selftest && GetEnvironmentVariableA("BBB_LIVE_SHOTS", NULL, 0)) {          /* a test: pictures of the three views while laying out, then while the height field is cut */
@@ -1880,7 +1887,7 @@ static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l) {
             if (z < NROUND) act(H_SIZE, z); else if (z < NROUND + NOVAL) act(H_OVAL, z - NROUND); else act(H_SQ, z - NROUND - NOVAL); }
         return 0;
     case WM_ERASEBKGND: return 1;
-    case WM_PAINT: { PAINTSTRUCT ps; RECT r; HDC dc = BeginPaint(h, &ps); nPaint++; GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); return 0; }
+    case WM_PAINT: { PAINTSTRUCT ps; RECT r; DWORD t0 = GetTickCount(); HDC dc = BeginPaint(h, &ps); nPaint++; GetClientRect(h, &r); if (r.right > 0 && r.bottom > 0) paint(dc, r.right, r.bottom); EndPaint(h, &ps); lastPaintMs = GetTickCount() - t0; return 0; }
     case WM_SIZE: { RECT rc; GetClientRect(h, &rc); if (rc.right > 0 && rc.bottom > 0) { double s2 = fit_sc(rc.right, rc.bottom); if (fabs(s2 - SC) > 1e-6) { SC = s2; make_fonts();          /* the scale follows the window */
 #ifdef BBB_NK
         if (NK) { nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme); }
@@ -1950,8 +1957,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         int tw = selftest ? (int)(DESIGN_W * SC) : (int)((wa.right - wa.left) * 0.85), th = selftest ? (int)(DESIGN_H * SC) : (int)((wa.bottom - wa.top) * 0.85);
         SC = fit_sc(tw, th); cw = (int)(tw / SC + 0.5); chh = (int)(th / SC + 0.5);
     }
-    if (!selftest) ini(0);
-    if (selftest) { char e[8]; moreOpen = !(GetEnvironmentVariableA("BBB_TEST_MORE", e, sizeof e) && e[0] == '0'); }          /* U2: tests see every setting unless BBB_TEST_MORE=0 */
+    if (!selftest || GetEnvironmentVariableA("BBB_TEST_USERINI", NULL, 0)) ini(0);          /* a test may read a copy of the user's settings (out\bbb_kit.ini beside the test exe) */
+    if (selftest && !GetEnvironmentVariableA("BBB_TEST_USERINI", NULL, 0)) { char e[8]; moreOpen = !(GetEnvironmentVariableA("BBB_TEST_MORE", e, sizeof e) && e[0] == '0'); }          /* U2: tests see every setting unless BBB_TEST_MORE=0 */
     swprintf(liveDir, MAX_PATH, L"%ls\\out\\.live", kit); swprintf(liveTimes, MAX_PATH, L"%ls\\out\\live_times.txt", kit);          /* the live view's notes and time history */
     speed_env();          /* the speed switches, for every job started from here on */
     make_fonts();
@@ -2052,6 +2059,11 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     if (hits[k].kind == H_QUICK) quick = in ? 1 : -1; }
                 swprintf(p2, MAX_PATH, L"%ls.foot.txt", stShot); tf = _wfopen(p2, L"w");
                 if (tf) { fprintf(tf, "%s show %d quick %d side_max %d window %ldx%ld" "\n", show == 1 && quick == 1 ? "OK" : "FAIL", show, quick, sideMax, cr.right, cr.bottom); fclose(tf); }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_METERMS", NULL, 0)) {          /* how long the meters take (they run on the window thread twice a second) */
+                int k; LARGE_INTEGER q0, q1, q2, q3, fq; QueryPerformanceFrequency(&fq);
+                for (k = 0; k < 12; k++) { float pc[LIVE_MAXCORE], cs; Sleep(500); QueryPerformanceCounter(&q0); live_cpu(pc, LIVE_MAXCORE); QueryPerformanceCounter(&q1); live_job(hJob, cpuV, LIVE_MAXCORE, &cs); QueryPerformanceCounter(&q2); gpuV = live_gpu(); QueryPerformanceCounter(&q3);
+                    alog("test: meters: cpu %.1f ms, our threads %.1f ms, video card %.1f ms (%.2f)", (q1.QuadPart - q0.QuadPart) * 1000.0 / fq.QuadPart, (q2.QuadPart - q1.QuadPart) * 1000.0 / fq.QuadPart, (q3.QuadPart - q2.QuadPart) * 1000.0 / fq.QuadPart, gpuV); }
             }
             if (GetEnvironmentVariableA("BBB_TEST_PAINTMS", NULL, 0)) {          /* how long one paint takes, fold closed and open */
                 int k, f; LARGE_INTEGER q0, q1, fq; QueryPerformanceFrequency(&fq);

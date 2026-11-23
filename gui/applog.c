@@ -107,7 +107,10 @@ static LONG WINAPI al_crash(EXCEPTION_POINTERS *ep) {
 /* the paints: how many and how long, summed up every 10 s (in al_watch) */
 static volatile LONG alPaints, alPaintMs, alPaintMax;
 static void al_paint(DWORD ms) { InterlockedIncrement(&alPaints); InterlockedExchangeAdd(&alPaintMs, (LONG)ms); if ((LONG)ms > alPaintMax) alPaintMax = (LONG)ms; }
+static volatile LONG alTimers[12], alInval;          /* WM_TIMER by id (0..10, 11 = other), and redraw requests, for the beat */
 static void al_beat(int every30) {          /* every 10 s: the paints if any; every 30 s: the process's resources */
+    {   int i; char b[200] = ""; LONG any = 0; for (i = 0; i < 12; i++) { LONG c = InterlockedExchange(&alTimers[i], 0); if (c) { any += c; snprintf(b + strlen(b), sizeof b - strlen(b), " %d:%ld", i, c); } }
+        if (any) alog("timers in the last 10 s (id:count):%s", b); }
     LONG n = InterlockedExchange(&alPaints, 0), ms = InterlockedExchange(&alPaintMs, 0), mx = InterlockedExchange(&alPaintMax, 0);
     if (n) alog("paints in the last 10 s: %ld, %ld ms on average, the longest %ld ms", n, ms / n, mx);
     if (every30) { PROCESS_MEMORY_COUNTERS_EX pm; DWORD hc = 0; memset(&pm, 0, sizeof pm); pm.cb = sizeof pm; GetProcessHandleCount(GetCurrentProcess(), &hc);

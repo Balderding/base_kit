@@ -42,4 +42,5 @@ const char *runner_kit(void);
    runner_stop starts no new base */
 extern void *runner_job;
 extern volatile long runner_stop;
+extern int runner_in_window;          /* the window runs jobs in its own process: only the job's threads and helpers go below normal */
 #endif
