@@ -702,7 +702,7 @@ static void diag_stage(const Mesh *m, const char *base, const char *stage) {
     const char *p = getenv("BBB_MESH_DIAG"); int odd, pin, wt; FILE *f; if (!p || !*p) return;
     edge_counts(m, &odd, &pin, &wt); if (!(f = fopen(p, "a"))) return;
     fprintf(f, "%s stage %-8s odd %d pinched %d watertight %d faces %d" "\n", base, stage, odd, pin, wt, m->nt);
-    if (!strcmp(stage, "final") && (odd || pin)) {
+    if ((!strcmp(stage, "final") && (odd || pin)) || (!strcmp(stage, "mesh") && odd)) {          /* 3b: where the mesher left open edges, too */
         Ed *e = mesh_edges(m); size_t ne = 3 * (size_t)m->nt; int k = 0;
         for (size_t i = 0; i < ne && k < 40;) {
             size_t j = i; while (j < ne && e[j].key == e[i].key) j++;
