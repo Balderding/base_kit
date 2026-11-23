@@ -55,6 +55,7 @@ enum { GEOS_POINT, GEOS_LINESTRING, GEOS_LINEARRING, GEOS_POLYGON, GEOS_MULTIPOI
   X(GEOSSTRtree *, GEOSSTRtree_create_r, (GEOSContextHandle_t, size_t)) \
   X(void, GEOSSTRtree_insert_r, (GEOSContextHandle_t, GEOSSTRtree *, const GEOSGeometry *, void *)) \
   X(void, GEOSSTRtree_query_r, (GEOSContextHandle_t, GEOSSTRtree *, const GEOSGeometry *, GEOSQueryCallback, void *)) \
+  X(char, GEOSSTRtree_build_r, (GEOSContextHandle_t, GEOSSTRtree *)) \
   X(const void *, GEOSSTRtree_nearest_generic_r, (GEOSContextHandle_t, GEOSSTRtree *, const void *, const GEOSGeometry *, GEOSDistanceCallback, void *)) \
   X(void, GEOSSTRtree_destroy_r, (GEOSContextHandle_t, GEOSSTRtree *)) \
   X(GEOSGeometry *, GEOSGeom_createLineString_r, (GEOSContextHandle_t, GEOSCoordSequence *)) \
@@ -146,7 +147,11 @@ typedef struct { GEOS_FNS(GEOS_PTR) } GeosApi;
 #undef GEOS_PTR
 
 extern GeosApi G;
-extern GEOSContextHandle_t gctx;
-extern char geos_err[512];          /* the last GEOS error message (shapely would raise GEOSException with it) */
-int geos_load(void);                /* 1 = ready; 0 = not found (message on stderr) */
+extern _Thread_local GEOSContextHandle_t gctx_tl;          /* one GEOS context per thread (PLAN-threads step 1) */
+GEOSContextHandle_t geos_ctx(void);          /* this thread's context, made on its first use (same error handler) */
+GEOSContextHandle_t geos_new_ctx(void);          /* a new context with the kit's error handler (mt.c's workers; GEOS_finish_r it) */
+#define gctx (gctx_tl ? gctx_tl : geos_ctx())
+extern _Thread_local char geos_err[512];          /* the last GEOS error message (shapely would raise GEOSException with it) */
+int geos_load(void);                /* 1 = ready; 0 = not found (message on stderr); also gives the calling thread its own context */
+void geos_thread_end(void);         /* a thread that called geos_load: its context is finished */
 #endif

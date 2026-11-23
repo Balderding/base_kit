@@ -4,12 +4,12 @@
 #include "mt.h"
 
 typedef struct { volatile LONG next; int n; MtFn fn; void *user; } Pool;
-static void quiet(const char *m, void *u) { (void)m; (void)u; }
 
 static DWORD WINAPI worker(LPVOID p) {
-    Pool *P = p; GEOSContextHandle_t c = G.GEOS_init_r(); G.GEOSContext_setErrorMessageHandler_r(c, quiet, NULL);
+    Pool *P = p; GEOSContextHandle_t c = geos_new_ctx(), prev = gctx_tl;          /* a context with the kit's error handler */
+    gctx_tl = c;          /* PLAN-threads step 1: the shp_* calls inside fn use this context too; on the caller's own thread (mt_run inline) its context comes back after */
     for (;;) { LONG i = InterlockedIncrement(&P->next) - 1; if (i >= P->n) break; P->fn((int)i, c, P->user); }
-    G.GEOS_finish_r(c); return 0;
+    gctx_tl = prev; G.GEOS_finish_r(c); return 0;
 }
 
 int mt_threads(void) {

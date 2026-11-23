@@ -15,6 +15,7 @@
 int shp_init(void) {
     static int ready = 0;
     if (!ready) ready = geos_load() && pyx_load();
+    else if (!gctx_tl) return geos_load();          /* PLAN-threads step 1: another thread gets its own GEOS context */
     return ready;
 }
 void shp_free(GEOSGeometry *g) { if (g) G.GEOSGeom_destroy_r(gctx, g); }
