@@ -1666,7 +1666,7 @@ static void hover_at(int x, int y) {
             if (id >= 0 && id < 4) wcscpy(sub, mt[id]);
         }
         if (k == H_MULTI) wcscpy(sub, L"Several sizes at once: click each size you want (round or oval). \"Build straight away\" then builds that many bases for every size, one size after another.");
-        if (k == H_PLATE) wcscpy(sub, L"Print plate: besides each base's STL, one 3MF file (plate.3mf) with all the built bases laid out on the printer's bed, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). Open it in the slicer: one object per base. More than fit: plate_2.3mf and on.");
+        if (k == H_PLATE) wcscpy(sub, L"Print plate: besides each base's STL, one 3MF file (plate.3mf) with all the built bases laid out on the printer's bed, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). Open it in the slicer: one object per base. More than fit: plate_2.3mf and on. The files are big: about 12 MB for four 40 mm bases, 40-60 MB a plate of 160 mm bases.");
         if (k == H_THEME) wcscpy(sub, L"Theme: Any lets the kit choose among the style's themes. Step with < and > to make every base one theme; click the middle for Any again. A themes.json beside bbb_kit.exe adds your own.");
         if (k == H_PRINTER) wcscpy(sub, L"Printer: FDM (filament) gets a coarser ground grain, deep enough to print in layers, and keeps no detail under 3 mm. Resin gets the finer grain and keeps details down to 2 mm.");
         if (k == H_STR) wcscpy(sub, L"Style strength: 1 is the standard look. Higher gives deeper cracks, bolder rock shapes and chips and a coarser ground grain, which catch washes and drybrushing better; lower is softer.");
