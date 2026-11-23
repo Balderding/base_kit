@@ -35,6 +35,7 @@
 #include <string.h>
 #include <wchar.h>
 #include <math.h>
+#include <stdarg.h>
 #include "live.h"
 #include "runner.h"          /* cport\runner.c: the job runner (gui_job.py in C) */
 #include "pipeline.h"        /* cport\pipeline.c: bbb_kit.exe --core-layout */
@@ -184,7 +185,9 @@ static void redraw(void) { InvalidateRect(hMain, NULL, FALSE); }
 static int npicked(void) { int i, k = 0; for (i = 0; i < ncell; i++) k += cells[i].picked && cells[i].state == ST_NONE; return k; }
 
 /* ---------- the log (Details) ---------- */
+#include "applog.c"          /* the window's log on disk: out\logs (2026-11-23) */
 static void logw(const WCHAR *t) {
+    alogw("details:", t);
     if (nlog == MAXLOG) { free(logv[0]); memmove(logv, logv + 1, (MAXLOG - 1) * sizeof *logv); nlog--; }
     logv[nlog++] = _wcsdup(t);
 }
@@ -216,10 +219,10 @@ static void narrow(const WCHAR *w, char *out, int cap) { int i; for (i = 0; w[i]
 typedef struct { int mode, argc; char *argv[64]; char buf[4096]; } Run;
 static void job_line(void *ctx, const char *line) {          /* one JSON record: to the window as a WM_LINE (the window frees it) */
     Run *r = (Run *)ctx; int n = MultiByteToWideChar(CP_UTF8, 0, line, -1, NULL, 0); WCHAR *w = (WCHAR *)malloc((n + 1) * sizeof(WCHAR));
-    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, n); PostMessageW(hMain, WM_LINE, r->mode, (LPARAM)w);
+    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, n); alog("job> %s", line); PostMessageW(hMain, WM_LINE, r->mode, (LPARAM)w);
 }
 static DWORD WINAPI job_thread(LPVOID p) {
-    Run *r = (Run *)p; int code = runner_main(r->argc, r->argv, job_line, r);
+    Run *r = (Run *)p; int code; alog("job thread started (mode %d)", r->mode); code = runner_main(r->argc, r->argv, job_line, r); alog("job thread ended, code %d", code);
     PostMessageW(hMain, WM_ENDED, r->mode, (DWORD)code); free(r); return 0;
 }
 static int run(const WCHAR *cmd, int mode) {          /* cmd: gui_job.py's arguments (choices|build <style> ...) */
@@ -451,6 +454,7 @@ static void anim_tick(void) {
 }
 static void on_ended(int mode, DWORD code) {
     int i;
+    alog("job ended: mode %d, code %lu", mode, (unsigned long)code);
     busy = 0; KillTimer(hMain, 1); KillTimer(hMain, 4); anim_tick();
     if (mode == 1) {
         drop_pending();
@@ -1531,6 +1535,7 @@ static void undo_step(int redo) {          /* Ctrl+Z (redo 0) / Ctrl+Y (redo 1) 
 }
 static void act(int kind, int idx) {          /* every click and key: do it, then start or stop the animation timer */
     static Snap before, after; int u = undoable(kind) && !busy;
+    snprintf(alLastAct, sizeof alLastAct, "act %d,%d (busy %d, cards %d, more %d)", kind, idx, busy, ncell, moreOpen); alog("click %s", alLastAct);
     if (u) snap_take(&before);
     act2(kind, idx); anim_tick();
     if (u) { snap_take(&after); if (!snap_eq(&before, &after)) { if (nUndo == NUNDO) { memmove(undoS, undoS + 1, sizeof(Snap) * (NUNDO - 1)); nUndo--; } undoS[nUndo++] = before; nRedo = 0; } }          /* U1: kept for Ctrl+Z */
@@ -1744,7 +1749,14 @@ static void ini(int save) {
         GetPrivateProfileStringW(L"window", L"seed", L"", t, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, t, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
     }
 }
-static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
+static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l);
+static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {          /* applog: the message being handled, for the hang watchdog */
+    LONG pm = alMsg; DWORD pt = alMsgTick; LRESULT r;
+    alMsg = (LONG)m; alMsgTick = GetTickCount(); InterlockedIncrement(&alMsgDepth);
+    r = proc_in(h, m, w, l);
+    InterlockedDecrement(&alMsgDepth); alMsg = pm; alMsgTick = pt; return r;
+}
+static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l) {
 #ifdef BBB_NK
     if (NK && (m == WM_MOUSEMOVE || m == WM_LBUTTONDOWN || m == WM_LBUTTONUP || m == WM_LBUTTONDBLCLK || m == WM_RBUTTONDOWN || m == WM_RBUTTONUP || m == WM_MOUSEWHEEL || m == WM_KEYDOWN || m == WM_KEYUP || m == WM_CHAR)) {          /* Nuklear sees every input; the side panel is its */
         POINT pt; int side; nkui_event(h, m, w, l);
@@ -1917,6 +1929,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     swprintf(e, MAX_PATH, L"%ls\\bbb_kit_folder.txt", kit); f = _wfopen(e, L"r");
     if (f) { char a[MAX_PATH]; if (fgets(a, sizeof a, f)) { a[strcspn(a, "\r\n")] = 0; if (a[0]) swprintf(kit, MAX_PATH, L"%hs", a); } fclose(f); }
     if (GetEnvironmentVariableW(L"BBB_KIT", e, MAX_PATH)) wcscpy(kit, e);
+    if (!selftest || GetEnvironmentVariableA("BBB_TEST_LOG", NULL, 0)) { WCHAR od[MAX_PATH]; swprintf(od, MAX_PATH, L"%ls\\out", kit); al_open(od, cmdA); }          /* applog */
     (void)t; SetEnvironmentVariableW(L"BBB_KIT", kit);          /* the runner's kit folder: this one (its out folder is beside the exe) */
     hJob = CreateJobObjectW(NULL, NULL);
     if (hJob) { memset(&ji, 0, sizeof ji); ji.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE; SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &ji, sizeof ji); }
@@ -2030,6 +2043,26 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     if (hits[k].kind == H_QUICK) quick = in ? 1 : -1; }
                 swprintf(p2, MAX_PATH, L"%ls.foot.txt", stShot); tf = _wfopen(p2, L"w");
                 if (tf) { fprintf(tf, "%s show %d quick %d side_max %d window %ldx%ld" "\n", show == 1 && quick == 1 ? "OK" : "FAIL", show, quick, sideMax, cr.right, cr.bottom); fclose(tf); }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_HANG", NULL, 0)) { alog("test: the window thread sleeps 8 s"); Sleep(8000); alog("test: awake"); { MSG mm; DWORD te = GetTickCount() + 2500; while (GetTickCount() < te) { while (PeekMessageW(&mm, NULL, 0, 0, PM_REMOVE)) DispatchMessageW(&mm); Sleep(10); } } }          /* applog: the watchdog must see it */
+            if (GetEnvironmentVariableA("BBB_TEST_CRASH", NULL, 0)) { volatile int *z = NULL; alog("test: a crash"); *z = 1; }          /* applog: the crash note and dump */
+            if (GetEnvironmentVariableA("BBB_TEST_FOLDCLICK", NULL, 0)) {          /* the user, 2026-11-23: "cannot click anything after More settings": clicks posted through the queue, as a mouse would */
+                FILE *tf; WCHAR p2[MAX_PATH]; int k, fx = -1, fy2 = -1, st0, p0, p1, t1; MSG mm; DWORD te;
+                capture(NULL); for (k = 0; k < nhit; k++) if (hits[k].kind == H_FOLD) { fx = (hits[k].r.left + hits[k].r.right) / 2; fy2 = (hits[k].r.top + hits[k].r.bottom) / 2; }
+                swprintf(p2, MAX_PATH, L"%ls.fold.txt", stShot); tf = _wfopen(p2, L"w");
+                if (tf) fprintf(tf, "before: more %d fold at %d,%d nhit %d tight %d sidemax %d" "\n", moreOpen, fx, fy2, nhit, sideTight, sideMax);
+                PostMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(fx, fy2)); PostMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(fx, fy2)); PostMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(fx, fy2));
+                p0 = nPaint; te = GetTickCount() + 2000; while (GetTickCount() < te) { while (PeekMessageW(&mm, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&mm); DispatchMessageW(&mm); } Sleep(10); }
+                p1 = nPaint; capture(NULL);
+                if (tf) fprintf(tf, "after fold: more %d paints in 2 s %d nhit %d tight %d sidemax %d sideoff %d busy %d help %d" "\n", moreOpen, p1 - p0, nhit, sideTight, sideMax, sideOff, busy, showHelp);
+                st0 = selStyle; fx = -1; for (k = 0; k < nhit; k++) if (hits[k].kind == H_STYLE && hits[k].idx == (st0 + 1) % NSTYLES) { fx = (hits[k].r.left + hits[k].r.right) / 2; fy2 = (hits[k].r.top + hits[k].r.bottom) / 2; }
+                PostMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM(fx, fy2)); PostMessageW(hMain, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(fx, fy2)); PostMessageW(hMain, WM_LBUTTONUP, 0, MAKELPARAM(fx, fy2));
+                t1 = nPaint; te = GetTickCount() + 2000; while (GetTickCount() < te) { while (PeekMessageW(&mm, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&mm); DispatchMessageW(&mm); } Sleep(10); }
+                if (tf) { fprintf(tf, "style click at %d,%d: style %d -> %d paints %d -> %s" "\n", fx, fy2, st0, selStyle, nPaint - t1, selStyle != st0 ? "OK" : "FAIL"); fclose(tf); }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_NHIT", NULL, 0)) {          /* how many click areas one paint makes, and the last kinds (the 400 cap) */
+                FILE *tf; WCHAR p2[MAX_PATH]; int k; capture(NULL); swprintf(p2, MAX_PATH, L"%ls.nhit.txt", stShot); tf = _wfopen(p2, L"w");
+                if (tf) { fprintf(tf, "nhit %d more %d cells %d" "\n", nhit, moreOpen, ncell); for (k = nhit > 8 ? nhit - 8 : 0; k < nhit; k++) fprintf(tf, "  kind %d idx %d" "\n", hits[k].kind, hits[k].idx); fclose(tf); }
             }
             if (GetEnvironmentVariableA("BBB_TEST_TIP", NULL, 0)) {          /* R3: the cut labels, and the first one's tooltip after a (sent) rest of the mouse */
                 FILE *tf; WCHAR p2[MAX_PATH]; int n0;

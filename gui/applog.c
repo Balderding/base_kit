@@ -1,0 +1,151 @@
+/* applog.c (2026-11-23, the user: "we need the logging to be right"): the window's own log on disk, included by bbb_kit.c.
+   One file a session, out\logs\bbb_kit_<date>_<time>.log, written and flushed line by line (it is all there even after a
+   crash), from every thread under one lock. What goes in:
+   - the start: version, command line, screen, the video cards Windows has, the settings file;
+   - every click or key that does something (act), every job the window starts, every line the job sends back, how it ended;
+   - a crash, on any thread: the exception, where (module + offset, for addr2sym.py), the stack, and a minidump beside the log;
+   - a hang: a watchdog thread asks the window every second; when it has not answered for 5 s it writes "NOT RESPONDING",
+     the message it is stuck in, the last click, the window thread's stack and one minidump; "responding again" when it is back.
+   Nothing here changes what the kit builds. */
+#include <dbghelp.h>
+static CRITICAL_SECTION alLock; static FILE *alF; static WCHAR alDir[MAX_PATH], alPath[MAX_PATH]; static DWORD alT0, alUiTid, alWdTid; static HANDLE alUiThread;
+static volatile LONG alMsg, alMsgDepth; static volatile DWORD alMsgTick; static char alLastAct[160];
+static void alog(const char *fmt, ...) {
+    va_list a; SYSTEMTIME t; if (!alF) return;
+    GetLocalTime(&t); EnterCriticalSection(&alLock);
+    fprintf(alF, "%02d:%02d:%02d.%03d %s ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, GetCurrentThreadId() == alUiTid ? "ui " : GetCurrentThreadId() == alWdTid ? "wd " : "job");
+    va_start(a, fmt); vfprintf(alF, fmt, a); va_end(a); fputc('\n', alF); fflush(alF);
+    LeaveCriticalSection(&alLock);
+}
+static void alogw(const char *what, const WCHAR *w) {          /* a wide line (a job record) as UTF-8 */
+    int n; char *s; if (!alF || !w) return;
+    n = WideCharToMultiByte(CP_UTF8, 0, w, -1, NULL, 0, NULL, NULL); s = (char *)malloc(n + 1); if (!s) return;
+    WideCharToMultiByte(CP_UTF8, 0, w, -1, s, n, NULL, NULL); alog("%s %s", what, s); free(s);
+}
+/* the exe's own function names, read once at the start from its COFF symbol table (the build keeps it), so a stack in
+   the log reads "paint+0x412" and not only an offset */
+typedef struct { DWORD rva; char name[48]; } AlSym;
+static AlSym *alSym; static int alNSym;
+static int al_symcmp(const void *a, const void *b) { DWORD x = ((const AlSym *)a)->rva, y = ((const AlSym *)b)->rva; return x < y ? -1 : x > y; }
+static void al_syms(void) {
+    WCHAR p[MAX_PATH]; HANDLE f, mp; unsigned char *v; IMAGE_DOS_HEADER *d; IMAGE_NT_HEADERS64 *nt; IMAGE_SECTION_HEADER *sec; DWORD i, ns, sz;
+    GetModuleFileNameW(NULL, p, MAX_PATH); f = CreateFileW(p, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL); if (f == INVALID_HANDLE_VALUE) return;
+    sz = GetFileSize(f, NULL); mp = CreateFileMappingW(f, NULL, PAGE_READONLY, 0, 0, NULL); v = mp ? (unsigned char *)MapViewOfFile(mp, FILE_MAP_READ, 0, 0, 0) : NULL;
+    if (v) {
+        d = (IMAGE_DOS_HEADER *)v; nt = (IMAGE_NT_HEADERS64 *)(v + d->e_lfanew); sec = IMAGE_FIRST_SECTION(nt); ns = nt->FileHeader.NumberOfSymbols;
+        if (nt->FileHeader.PointerToSymbolTable && (unsigned long long)nt->FileHeader.PointerToSymbolTable + (unsigned long long)ns * 18 < sz) {
+            unsigned char *st = v + nt->FileHeader.PointerToSymbolTable; const char *strs = (const char *)(st + ns * 18);
+            alSym = (AlSym *)malloc(sizeof(AlSym) * (ns + 1));
+            for (i = 0; alSym && i < ns; i++) {
+                IMAGE_SYMBOL *s = (IMAGE_SYMBOL *)(st + i * 18); short sn = s->SectionNumber;
+                if (sn > 0 && sn <= nt->FileHeader.NumberOfSections && ISFCN(s->Type) && (s->StorageClass == IMAGE_SYM_CLASS_EXTERNAL || s->StorageClass == IMAGE_SYM_CLASS_STATIC)) {
+                    AlSym *o = &alSym[alNSym++]; o->rva = sec[sn - 1].VirtualAddress + s->Value;
+                    if (s->N.Name.Short) { memcpy(o->name, s->N.ShortName, 8); o->name[8] = 0; } else { snprintf(o->name, sizeof o->name, "%s", strs + s->N.Name.Long); }
+                }
+                i += s->NumberOfAuxSymbols;
+            }
+            if (alNSym) qsort(alSym, alNSym, sizeof *alSym, al_symcmp);
+        }
+        UnmapViewOfFile(v);
+    }
+    if (mp) CloseHandle(mp);
+    CloseHandle(f);
+}
+/* where an address is: the module's name and the offset in it, and in our own exe the function */
+static void al_where(DWORD64 a, char *out, int cap) {
+    HMODULE m = NULL; char nm[MAX_PATH] = "?", *b;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)(ULONG_PTR)a, &m) && m) {
+        DWORD rva = (DWORD)(a - (DWORD64)(ULONG_PTR)m); GetModuleFileNameA(m, nm, MAX_PATH); b = strrchr(nm, '\\');
+        if (m == GetModuleHandleW(NULL) && alNSym) {
+            int lo = 0, hi = alNSym - 1, k = -1;
+            while (lo <= hi) { int md = (lo + hi) / 2; if (alSym[md].rva <= rva) { k = md; lo = md + 1; } else hi = md - 1; }
+            if (k >= 0) { snprintf(out, cap, "%s+0x%lx (%s+0x%lx)", b ? b + 1 : nm, (unsigned long)rva, alSym[k].name, (unsigned long)(rva - alSym[k].rva)); return; }
+        }
+        snprintf(out, cap, "%s+0x%lx", b ? b + 1 : nm, (unsigned long)rva);
+    } else snprintf(out, cap, "0x%llx", (unsigned long long)a);
+}
+typedef BOOL (WINAPI *PStackWalk64)(DWORD, HANDLE, HANDLE, LPSTACKFRAME64, PVOID, PREAD_PROCESS_MEMORY_ROUTINE64, PFUNCTION_TABLE_ACCESS_ROUTINE64, PGET_MODULE_BASE_ROUTINE64, PTRANSLATE_ADDRESS_ROUTINE64);
+typedef BOOL (WINAPI *PMiniDump)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION, PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
+typedef BOOL (WINAPI *PSymInit)(HANDLE, PCSTR, BOOL);
+static HMODULE alDbg; static PStackWalk64 pSW; static PMiniDump pMD; static PFUNCTION_TABLE_ACCESS_ROUTINE64 pFTA; static PGET_MODULE_BASE_ROUTINE64 pGMB;
+static void al_dbghelp(void) {
+    if (alDbg) return;
+    alDbg = LoadLibraryW(L"dbghelp.dll"); if (!alDbg) return;
+    pSW = (PStackWalk64)(void *)GetProcAddress(alDbg, "StackWalk64"); pMD = (PMiniDump)(void *)GetProcAddress(alDbg, "MiniDumpWriteDump");
+    pFTA = (PFUNCTION_TABLE_ACCESS_ROUTINE64)(void *)GetProcAddress(alDbg, "SymFunctionTableAccess64"); pGMB = (PGET_MODULE_BASE_ROUTINE64)(void *)GetProcAddress(alDbg, "SymGetModuleBase64");
+    { PSymInit si = (PSymInit)(void *)GetProcAddress(alDbg, "SymInitialize"); if (si) si(GetCurrentProcess(), NULL, TRUE); }
+}
+static void al_stack(HANDLE thread, CONTEXT *c) {          /* up to 32 frames, one line each */
+    STACKFRAME64 f; int i; char w[MAX_PATH + 32];
+    if (!pSW || !pFTA || !pGMB) { al_where(c->Rip, w, sizeof w); alog("  at %s (no stack: dbghelp missing)", w); return; }
+    memset(&f, 0, sizeof f); f.AddrPC.Offset = c->Rip; f.AddrStack.Offset = c->Rsp; f.AddrFrame.Offset = c->Rbp; f.AddrPC.Mode = f.AddrStack.Mode = f.AddrFrame.Mode = AddrModeFlat;
+    for (i = 0; i < 32 && pSW(IMAGE_FILE_MACHINE_AMD64, GetCurrentProcess(), thread, &f, c, NULL, pFTA, pGMB, NULL) && f.AddrPC.Offset; i++) { al_where(f.AddrPC.Offset, w, sizeof w); alog("  #%02d %s", i, w); }
+}
+static void al_dump(const char *why, EXCEPTION_POINTERS *ep) {          /* a minidump beside the log: every thread's stack and the memory they use */
+    WCHAR p[MAX_PATH]; HANDLE f; SYSTEMTIME t; MINIDUMP_EXCEPTION_INFORMATION x;
+    if (!pMD || !alDir[0]) return;
+    GetLocalTime(&t); swprintf(p, MAX_PATH, L"%ls\\%hs_%04d%02d%02d_%02d%02d%02d.dmp", alDir, why, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    f = CreateFileW(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); if (f == INVALID_HANDLE_VALUE) { alog("  (the dump could not be written: error %lu)", GetLastError()); return; }
+    x.ThreadId = GetCurrentThreadId(); x.ExceptionPointers = ep; x.ClientPointers = FALSE;
+    if (pMD(GetCurrentProcess(), GetCurrentProcessId(), f, (MINIDUMP_TYPE)(MiniDumpWithThreadInfo | MiniDumpWithIndirectlyReferencedMemory), ep ? &x : NULL, NULL, NULL)) alogw("  dump written:", p);
+    else alog("  (the dump failed: error %lu)", GetLastError());
+    CloseHandle(f);
+}
+static LONG WINAPI al_crash(EXCEPTION_POINTERS *ep) {
+    static volatile LONG once; char w[MAX_PATH + 32];
+    if (InterlockedExchange(&once, 1)) return EXCEPTION_CONTINUE_SEARCH;
+    al_dbghelp(); al_where((DWORD64)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress, w, sizeof w);
+    alog("CRASH exception 0x%08lx at %s on the %s thread; last click: %s", ep->ExceptionRecord->ExceptionCode, w, GetCurrentThreadId() == alUiTid ? "window" : "job", alLastAct[0] ? alLastAct : "none");
+    if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2)
+        alog("  it %s address 0x%llx", ep->ExceptionRecord->ExceptionInformation[0] ? "wrote to" : "read from", (unsigned long long)ep->ExceptionRecord->ExceptionInformation[1]);
+    { CONTEXT c = *ep->ContextRecord; al_stack(GetCurrentThread(), &c); }
+    al_dump("crash", ep); alog("the window closes now; this log and the dump are in %ls", L"out\\logs");
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+static DWORD WINAPI al_watch(LPVOID p) {          /* the hang watchdog */
+    DWORD stuck = 0, dumped = 0; (void)p; alWdTid = GetCurrentThreadId();
+    for (;;) {
+        DWORD_PTR r; Sleep(1000);
+        if (!hMain) continue;
+        if (SendMessageTimeoutW(hMain, WM_NULL, 0, 0, SMTO_NORMAL, 1000, &r)) { if (stuck >= 5) alog("responding again after %lu s", stuck); stuck = 0; dumped = 0; continue; }
+        if (!IsWindow(hMain)) return 0;
+        stuck += 2;
+        if (stuck >= 5 && !dumped) {
+            CONTEXT c; dumped = 1; al_dbghelp();
+            if (alMsgDepth > 0) alog("NOT RESPONDING for %lu s: the window thread is in message 0x%04lx for %lu ms; last click: %s", stuck, (unsigned long)alMsg, GetTickCount() - alMsgTick, alLastAct[0] ? alLastAct : "none");
+            else alog("NOT RESPONDING for %lu s: the window thread is busy outside any message; last click: %s", stuck, alLastAct[0] ? alLastAct : "none");
+            if (alUiThread && SuspendThread(alUiThread) != (DWORD)-1) {
+                memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_FULL;
+                if (GetThreadContext(alUiThread, &c)) { alog("  the window thread's stack:"); al_stack(alUiThread, &c); }
+                ResumeThread(alUiThread);
+            }
+            al_dump("hang", NULL);
+        } else if (stuck >= 5 && stuck % 30 == 0) alog("still not responding (%lu s)", stuck);
+    }
+}
+static void al_settings(void) {          /* the settings file, as it is at the start */
+    WCHAR p[MAX_PATH]; FILE *f; char l[300];
+    swprintf(p, MAX_PATH, L"%ls\\..\\bbb_kit.ini", alDir); f = _wfopen(p, L"r"); if (!f) { alog("settings: no bbb_kit.ini yet"); return; }
+    { char all[4000] = ""; while (fgets(l, sizeof l, f)) { size_t n = strlen(l); while (n && (l[n - 1] == '\n' || l[n - 1] == '\r')) l[--n] = 0; if (l[0] == '[') continue; if (strlen(all) + n + 2 < sizeof all) { strcat(all, l); strcat(all, " "); } } alog("settings: %s", all); }
+    fclose(f);
+}
+static void al_open(const WCHAR *outDir, const char *cmdline) {          /* out\logs\bbb_kit_<stamp>.log; called once, early in WinMain */
+    SYSTEMTIME t; int i; DISPLAY_DEVICEW dd; char ver[32] = "?"; WCHAR vp[MAX_PATH]; FILE *vf;
+    InitializeCriticalSection(&alLock); alUiTid = GetCurrentThreadId(); alT0 = GetTickCount();
+    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &alUiThread, THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, 0);
+    swprintf(alDir, MAX_PATH, L"%ls\\logs", outDir); CreateDirectoryW(outDir, NULL); CreateDirectoryW(alDir, NULL);
+    GetLocalTime(&t); swprintf(alPath, MAX_PATH, L"%ls\\bbb_kit_%04d%02d%02d_%02d%02d%02d.log", alDir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    alF = _wfopen(alPath, L"w");
+    SetUnhandledExceptionFilter(al_crash);
+#ifdef KIT_VERSION
+    snprintf(ver, sizeof ver, "%s", KIT_VERSION); (void)vp; (void)vf;
+#else
+    swprintf(vp, MAX_PATH, L"%ls\\..\\VERSION", outDir); vf = _wfopen(vp, L"r"); if (vf) { if (fgets(ver, sizeof ver, vf)) ver[strcspn(ver, "\r\n")] = 0; fclose(vf); }
+#endif
+    al_syms();
+    alog("bbb_kit %s started, pid %lu, command line: %s", ver, GetCurrentProcessId(), cmdline && *cmdline ? cmdline : "(none)");
+    alog("screen %dx%d, %lu CPU threads", GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), (unsigned long)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+    for (i = 0; ; i++) { memset(&dd, 0, sizeof dd); dd.cb = sizeof dd; if (!EnumDisplayDevicesW(NULL, i, &dd, 0)) break; if (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) { char n[128]; WideCharToMultiByte(CP_UTF8, 0, dd.DeviceString, -1, n, sizeof n, NULL, NULL); alog("video card: %s%s", n, dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE ? " (main screen)" : ""); } }
+    al_settings();
+    CreateThread(NULL, 0, al_watch, NULL, 0, NULL);
+}
