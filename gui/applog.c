@@ -10,13 +10,15 @@
 #include <dbghelp.h>
 #include <psapi.h>
 typedef BOOL (WINAPI *PGPMI)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD); static PGPMI pGPMI;          /* GetProcessMemoryInfo, loaded at run time */
+#include <signal.h>
+static volatile DWORD alLastLog;          /* the tick of the last line (the heartbeat writes "alive" when 10 s passed without one) */
 static CRITICAL_SECTION alLock; static FILE *alF; static WCHAR alDir[MAX_PATH], alPath[MAX_PATH]; static DWORD alT0, alUiTid, alWdTid; static HANDLE alUiThread;
 static volatile LONG alMsg, alMsgDepth; static volatile DWORD alMsgTick; static char alLastAct[160];
 static void alog(const char *fmt, ...) {
     va_list a; SYSTEMTIME t; if (!alF) return;
     GetLocalTime(&t); EnterCriticalSection(&alLock);
     fprintf(alF, "%02d:%02d:%02d.%03d %s ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, GetCurrentThreadId() == alUiTid ? "ui " : GetCurrentThreadId() == alWdTid ? "wd " : "job");
-    va_start(a, fmt); vfprintf(alF, fmt, a); va_end(a); fputc('\n', alF); fflush(alF);
+    va_start(a, fmt); vfprintf(alF, fmt, a); va_end(a); fputc('\n', alF); fflush(alF); alLastLog = GetTickCount();
     LeaveCriticalSection(&alLock);
 }
 static void alogw(const char *what, const WCHAR *w) {          /* a wide line (a job record) as UTF-8 */
@@ -117,23 +119,80 @@ static void al_beat(int every30) {          /* every 10 s: the paints if any; ev
         if (pGPMI) pGPMI(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS *)&pm, sizeof pm);
         alog("resources: GDI %lu, USER %lu, handles %lu, memory %.0f MB", GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS), hc, pm.PrivateUsage / 1048576.0); }
 }
+/* a fatal exception seen first-chance: the watchdog writes it (its own stack: a stack overflow leaves the faulting thread
+   none), then the crash goes on as before */
+static HANDLE alFatalEv, alFatalDone; static volatile LONG alFatalOnce; static EXCEPTION_RECORD alFatalRec; static CONTEXT alFatalCtx; static DWORD alFatalTid; static HANDLE alFatalThread;
+static void al_fatal_write(void) {
+    char w[MAX_PATH + 32]; EXCEPTION_POINTERS ep = { &alFatalRec, &alFatalCtx }; CONTEXT c = alFatalCtx;
+    al_dbghelp(); al_where((DWORD64)(ULONG_PTR)alFatalRec.ExceptionAddress, w, sizeof w);
+    alog("CRASH (first chance) exception 0x%08lx%s at %s on the %s thread; last click: %s", alFatalRec.ExceptionCode,
+         alFatalRec.ExceptionCode == EXCEPTION_STACK_OVERFLOW ? " (stack overflow)" : alFatalRec.ExceptionCode == 0xC0000374 ? " (heap corruption)" : "",
+         w, alFatalTid == alUiTid ? "window" : "job", alLastAct[0] ? alLastAct : "none");
+    if (alFatalRec.ExceptionCode == EXCEPTION_ACCESS_VIOLATION && alFatalRec.NumberParameters >= 2)
+        alog("  it %s address 0x%llx", alFatalRec.ExceptionInformation[0] ? "wrote to" : "read from", (unsigned long long)alFatalRec.ExceptionInformation[1]);
+    al_stack(alFatalThread, &c);
+    {   WCHAR pth[MAX_PATH]; HANDLE f; SYSTEMTIME t; MINIDUMP_EXCEPTION_INFORMATION x;
+        GetLocalTime(&t); swprintf(pth, MAX_PATH, L"%ls\\crash_%04d%02d%02d_%02d%02d%02d.dmp", alDir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        if (pMD && (f = CreateFileW(pth, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL)) != INVALID_HANDLE_VALUE) {
+            x.ThreadId = alFatalTid; x.ExceptionPointers = &ep; x.ClientPointers = FALSE;
+            if (pMD(GetCurrentProcess(), GetCurrentProcessId(), f, (MINIDUMP_TYPE)(MiniDumpWithThreadInfo | MiniDumpWithIndirectlyReferencedMemory), &x, NULL, NULL)) alogw("  dump written:", pth);
+            CloseHandle(f);
+        }
+    }
+}
+static LONG CALLBACK al_veh(EXCEPTION_POINTERS *ep) {
+    DWORD c = ep->ExceptionRecord->ExceptionCode;
+    if (c != EXCEPTION_ACCESS_VIOLATION && c != EXCEPTION_STACK_OVERFLOW && c != 0xC0000374 && c != EXCEPTION_ILLEGAL_INSTRUCTION && c != EXCEPTION_INT_DIVIDE_BY_ZERO) return EXCEPTION_CONTINUE_SEARCH;
+    if (InterlockedExchange(&alFatalOnce, 1)) return EXCEPTION_CONTINUE_SEARCH;
+    alFatalRec = *ep->ExceptionRecord; alFatalCtx = *ep->ContextRecord; alFatalTid = GetCurrentThreadId();
+    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &alFatalThread, THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, 0);
+    if (alFatalEv && alFatalDone && GetCurrentThreadId() != alWdTid) { SetEvent(alFatalEv); WaitForSingleObject(alFatalDone, 8000); }
+    return EXCEPTION_CONTINUE_SEARCH;          /* the crash goes on: the filter, Windows */
+}
+static void al_abort(int sig) {          /* abort(): a C++ terminate or a failed check in a library */
+    (void)sig; RtlCaptureContext(&alFatalCtx); memset(&alFatalRec, 0, sizeof alFatalRec); alFatalRec.ExceptionCode = 0x40000015; alFatalRec.ExceptionAddress = (void *)(ULONG_PTR)alFatalCtx.Rip;
+    alog("CRASH: abort() was called (a library gave up); last click: %s", alLastAct[0] ? alLastAct : "none");
+    alFatalTid = GetCurrentThreadId(); DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &alFatalThread, THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, 0);
+    if (!InterlockedExchange(&alFatalOnce, 1) && alFatalEv && alFatalDone) { SetEvent(alFatalEv); WaitForSingleObject(alFatalDone, 8000); }
+    _exit(3);
+}
+static void al_paintfail(const char *what, int w, int h, DWORD err) {          /* a paint that could not make its back buffer: at most once a second */
+    static DWORD last; DWORD now = GetTickCount(); if (now - last < 1000) return; last = now;
+    alog("PAINT FAILED: %s for %dx%d, error %lu; GDI objects %lu, USER objects %lu", what, w, h, err, GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS));
+}
+static volatile LONG *alJobPend; static volatile int *alJobMode; static volatile DWORD *alJobCode, *alJobTick;          /* bbb_kit.c's job end (set by al_job_watch) */
+static void al_job_watch(volatile LONG *pend, volatile int *mode, volatile DWORD *code, volatile DWORD *tick) { alJobPend = pend; alJobMode = mode; alJobCode = code; alJobTick = tick; }
+static VOID WINAPI al_wd_exit(PVOID v) {          /* runs when the watchdog thread ends (it never should): who ended it */
+    void *fr[32]; USHORT n, i; char w[MAX_PATH + 32]; (void)v;
+    alog("WATCHDOG THREAD ENDING (it should run until the window closes); its stack:");
+    n = RtlCaptureStackBackTrace(0, 32, fr, NULL);
+    for (i = 0; i < n; i++) { al_where((DWORD64)(ULONG_PTR)fr[i], w, sizeof w); alog("  #%02u %s", (unsigned)i, w); }
+}
 static DWORD WINAPI al_watch(LPVOID p) {          /* the hang watchdog */
     DWORD stuck = 0, dumped = 0, ticks = 0; (void)p; alWdTid = GetCurrentThreadId();
+    alog("watchdog: started");
+    { DWORD fi = FlsAlloc(al_wd_exit); if (fi != FLS_OUT_OF_INDEXES) FlsSetValue(fi, (PVOID)1); }          /* its end is logged, whatever ends it */
     for (;;) {
-        DWORD_PTR r; Sleep(1000);
-        if (++ticks % 10 == 0) al_beat(ticks % 30 == 0);
+        DWORD_PTR r;
+        if (alFatalEv && WaitForSingleObject(alFatalEv, 1000) == WAIT_OBJECT_0) { al_fatal_write(); SetEvent(alFatalDone); continue; }          /* a fatal exception on another thread */
+        if (!alFatalEv) Sleep(1000);
+        if (++ticks % 10 == 0) { al_beat(ticks % 30 == 0); if (GetTickCount() - alLastLog >= 9500) alog("alive"); }
+        if (alJobPend && *alJobPend && hMain && GetTickCount() - *alJobTick > 2000) {          /* the job ended but the window has not handled it */
+            static DWORD said; if (*alJobTick != said) { said = *alJobTick; alog("the window has not handled the job's end after %lu ms: posting it again (queue full or lost?)", GetTickCount() - *alJobTick);
+                if (!PostMessageW(hMain, WM_ENDED, (WPARAM)*alJobMode, (LPARAM)*alJobCode)) alog("  PostMessage(WM_ENDED) failed again: error %lu", GetLastError()); } }
         if (!hMain) continue;
         if (SendMessageTimeoutW(hMain, WM_NULL, 0, 0, SMTO_NORMAL, 1000, &r)) { if (stuck >= 5) alog("responding again after %lu s", stuck); stuck = 0; dumped = 0; continue; }
-        if (!IsWindow(hMain)) return 0;
+        if (!IsWindow(hMain)) { alog("watchdog: the window is gone, the watchdog stops"); return 0; }
         stuck += 2;
         if (stuck >= 5 && !dumped) {
             CONTEXT c; dumped = 1; al_dbghelp();
             if (alMsgDepth > 0) alog("NOT RESPONDING for %lu s: the window thread is in message 0x%04lx for %lu ms; last click: %s", stuck, (unsigned long)alMsg, GetTickCount() - alMsgTick, alLastAct[0] ? alLastAct : "none");
             else alog("NOT RESPONDING for %lu s: the window thread is busy outside any message; last click: %s", stuck, alLastAct[0] ? alLastAct : "none");
-            if (alUiThread && SuspendThread(alUiThread) != (DWORD)-1) {
-                memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_FULL;
-                if (GetThreadContext(alUiThread, &c)) { alog("  the window thread's stack:"); al_stack(alUiThread, &c); }
-                ResumeThread(alUiThread);
+            if (alUiThread && SuspendThread(alUiThread) != (DWORD)-1) {          /* only the registers while it is stopped; resumed at once */
+                int got; memset(&c, 0, sizeof c); c.ContextFlags = CONTEXT_FULL;
+                got = GetThreadContext(alUiThread, &c);
+                ResumeThread(alUiThread);          /* before the stack walk: dbghelp takes locks the stopped thread may hold (never leave it stopped) */
+                if (got) { alog("  the window thread's stack (walked after it was resumed):"); al_stack(alUiThread, &c); }
             }
             al_dump("hang", NULL);
         } else if (stuck >= 5 && stuck % 30 == 0) alog("still not responding (%lu s)", stuck);
@@ -153,6 +212,9 @@ static void al_open(const WCHAR *outDir, const char *cmdline) {          /* out\
     GetLocalTime(&t); swprintf(alPath, MAX_PATH, L"%ls\\bbb_kit_%04d%02d%02d_%02d%02d%02d.log", alDir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     alF = _wfopen(alPath, L"w");
     SetUnhandledExceptionFilter(al_crash);
+    alFatalEv = CreateEventW(NULL, FALSE, FALSE, NULL); alFatalDone = CreateEventW(NULL, FALSE, FALSE, NULL);
+    AddVectoredExceptionHandler(1, al_veh);          /* first, before any other handler: crashes the filter would miss */
+    signal(SIGABRT, al_abort);
     { HMODULE k = GetModuleHandleW(L"kernel32.dll"); pGPMI = k ? (PGPMI)(void *)GetProcAddress(k, "K32GetProcessMemoryInfo") : NULL; }
 #ifdef KIT_VERSION
     snprintf(ver, sizeof ver, "%s", KIT_VERSION); (void)vp; (void)vf;
@@ -160,7 +222,10 @@ static void al_open(const WCHAR *outDir, const char *cmdline) {          /* out\
     swprintf(vp, MAX_PATH, L"%ls\\..\\VERSION", outDir); vf = _wfopen(vp, L"r"); if (vf) { if (fgets(ver, sizeof ver, vf)) ver[strcspn(ver, "\r\n")] = 0; fclose(vf); }
 #endif
     al_syms();
-    alog("bbb_kit %s started, pid %lu, command line: %s", ver, GetCurrentProcessId(), cmdline && *cmdline ? cmdline : "(none)");
+#ifndef KIT_COMMIT
+#define KIT_COMMIT "?"
+#endif
+    alog("bbb_kit %s (commit %s) started, pid %lu, command line: %s", ver, KIT_COMMIT, GetCurrentProcessId(), cmdline && *cmdline ? cmdline : "(none)");
     alog("screen %dx%d, %lu CPU threads", GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), (unsigned long)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
     for (i = 0; ; i++) { memset(&dd, 0, sizeof dd); dd.cb = sizeof dd; if (!EnumDisplayDevicesW(NULL, i, &dd, 0)) break; if (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) { char n[128]; WideCharToMultiByte(CP_UTF8, 0, dd.DeviceString, -1, n, sizeof n, NULL, NULL); alog("video card: %s%s", n, dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE ? " (main screen)" : ""); } }
     al_settings();

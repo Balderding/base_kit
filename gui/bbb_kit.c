@@ -189,6 +189,7 @@ static void redraw(void) { InvalidateRect(hMain, NULL, FALSE); }
 static int npicked(void) { int i, k = 0; for (i = 0; i < ncell; i++) k += cells[i].picked && cells[i].state == ST_NONE; return k; }
 
 /* ---------- the log (Details) ---------- */
+#define WM_ENDED_FWD          /* applog's watchdog re-posts WM_ENDED */
 #include "applog.c"          /* the window's log on disk: out\logs (2026-11-23) */
 static void logw(const WCHAR *t) {
     alogw("details:", t);
@@ -223,11 +224,15 @@ static void narrow(const WCHAR *w, char *out, int cap) { int i; for (i = 0; w[i]
 typedef struct { int mode, argc; char *argv[64]; char buf[4096]; } Run;
 static void job_line(void *ctx, const char *line) {          /* one JSON record: to the window as a WM_LINE (the window frees it) */
     Run *r = (Run *)ctx; int n = MultiByteToWideChar(CP_UTF8, 0, line, -1, NULL, 0); WCHAR *w = (WCHAR *)malloc((n + 1) * sizeof(WCHAR));
-    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, n); alog("job> %s", line); PostMessageW(hMain, WM_LINE, r->mode, (LPARAM)w);
+    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, n); alog("job> %s", line);
+    if (!PostMessageW(hMain, WM_LINE, r->mode, (LPARAM)w)) { alog("PostMessage(WM_LINE) failed: error %lu (the line is lost)", GetLastError()); free(w); }
 }
+static volatile LONG jobEndPending; static volatile int jobEndMode; static volatile DWORD jobEndCode, jobEndTick;          /* the job's end, until the window handled it */
 static DWORD WINAPI job_thread(LPVOID p) {
     Run *r = (Run *)p; int code; alog("job thread started (mode %d)", r->mode); code = runner_main(r->argc, r->argv, job_line, r); alog("job thread ended, code %d", code);
-    PostMessageW(hMain, WM_ENDED, r->mode, (DWORD)code); free(r); return 0;
+    jobEndMode = r->mode; jobEndCode = (DWORD)code; jobEndTick = GetTickCount(); jobEndPending = 1;          /* the watchdog checks the window handled it */
+    {   int k; for (k = 0; k < 50; k++) { if (PostMessageW(hMain, WM_ENDED, r->mode, (DWORD)code)) break; alog("PostMessage(WM_ENDED) failed: error %lu, try %d", GetLastError(), k + 1); Sleep(100); } }
+    free(r); return 0;
 }
 static int run(const WCHAR *cmd, int mode) {          /* cmd: gui_job.py's arguments (choices|build <style> ...) */
     static WCHAR b[2800]; Run *r = (Run *)calloc(1, sizeof *r); char *q; HANDLE th;
@@ -458,6 +463,7 @@ static void anim_tick(void) {
 }
 static void on_ended(int mode, DWORD code) {
     int i;
+    jobEndPending = 0;
     alog("job ended: mode %d, code %lu; the window's priority: class 0x%lx, thread %d", mode, (unsigned long)code, GetPriorityClass(GetCurrentProcess()), GetThreadPriority(GetCurrentThread()));
     busy = 0; KillTimer(hMain, 1); KillTimer(hMain, 4); anim_tick();
     if (mode == 1) {
@@ -1107,8 +1113,10 @@ static void act(int kind, int idx);
 #include "theme_sample.c"          /* U4: a picture of the chosen theme beside its name */
 static void paint(HDC out, int W, int H) {
     HBITMAP bm; HGDIOBJ obm; int y, i, mx = S(SIDE_W), mw = W - mx, np = npicked(), fy = H - S(FOOT_H), HH = S(HEAD_H + STRIP_H), rowsH = 0, rowsN = 0; WCHAR b[200];
-    DC = CreateCompatibleDC(out); bm = CreateCompatibleBitmap(out, W, H); obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
-    GdipCreateFromHDC(DC, &G); GdipSetSmoothingMode(G, lookPix ? SmoothingModeNone : SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
+    DC = CreateCompatibleDC(out); if (!DC) al_paintfail("CreateCompatibleDC", W, H, GetLastError());
+    bm = CreateCompatibleBitmap(out, W, H); if (!bm) al_paintfail("CreateCompatibleBitmap", W, H, GetLastError());
+    obm = SelectObject(DC, bm); SetBkMode(DC, TRANSPARENT);
+    { GpStatus gs = GdipCreateFromHDC(DC, &G); if (gs != Ok) al_paintfail("GdipCreateFromHDC", W, H, (DWORD)gs); } GdipSetSmoothingMode(G, lookPix ? SmoothingModeNone : SmoothingModeAntiAlias); GdipSetInterpolationMode(G, InterpolationModeHighQualityBicubic); GdipSetPixelOffsetMode(G, PixelOffsetModeHalf);
     nhit = 0; ntip = 0; ntext = 0; fillrect(0, 0, W, H, C_BG); fillrect(0, 0, mx, H, C_SIDE); fillrect(mx, 0, 1, H, C_LINE);
     if (lookPix && lookTex) {          /* textures: stone on the side panel, a navy scanline title bar over it, faint scanlines on the top */
         int tb = snp(S(66));
@@ -1374,7 +1382,7 @@ static void paint(HDC out, int W, int H) {
         if (by + bh > H - S(4)) by = tipY - S(8) - bh;
         rr(bx, by, bw, bh, S(4), C_CARD, C_ACC, 1); txt(tipText, bx + S(8), by, bw - S(16), bh, fSmall, C_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS); tipNo = 0;
     }
-    GdipFlush(G, FlushIntentionSync); GdipDeleteGraphics(G); BitBlt(out, 0, 0, W, H, DC, 0, 0, SRCCOPY); SelectObject(DC, obm); DeleteObject(bm); DeleteDC(DC);
+    GdipFlush(G, FlushIntentionSync); GdipDeleteGraphics(G); if (!BitBlt(out, 0, 0, W, H, DC, 0, 0, SRCCOPY)) al_paintfail("BitBlt", W, H, GetLastError()); SelectObject(DC, obm); DeleteObject(bm); DeleteDC(DC);
 }
 /* the help page: a panel over the window, opened with ? (Shift+/), F1 or the Help button, closed with Esc or a click */
 static int para(const WCHAR *title, const WCHAR *body, int x, int y, int w) {
@@ -1753,6 +1761,7 @@ static void ini(int save) {
         GetPrivateProfileStringW(L"window", L"seed", L"", t, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, t, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
     }
 }
+static int test_deep(int n) { volatile char pad[4096]; pad[0] = (char)n; return pad[0] + test_deep(n + 1) + pad[100]; }          /* BBB_TEST_STACKOVF */
 static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l);
 static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {          /* applog: the message being handled, for the hang watchdog */
     LONG pm = alMsg; DWORD pt = alMsgTick, t0 = GetTickCount(), dt; LRESULT r;
@@ -1793,6 +1802,28 @@ static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l) {
             { FILE *f = _wfopen(stShot, L"w"); double secs = (t - t0) / 1000.0, pct = secs > 0 ? 100.0 * (c - c0) / 1000.0 / secs : 0;
               if (f) { fprintf(f, "%s idle %.1f s: cpu %.0f ms = %.2f %% of a core, %d redraws, in_front %d" "\n", pct < 1.0 ? "OK" : "HIGH", secs, (double)(c - c0), pct, nPaint, in_front()); fclose(f); } }
             PostQuitMessage(0); return 0;
+        }
+        if (w == 21) {          /* BBB_REPLAY (the user, 2026-11-23: "use my desktop", "use my focus"): the real mouse moves to each click area and clicks, as a hand would */
+            static int step; static char rp[600]; char *t; int k = -1, i = 0, n = 0, q;
+            if (!rp[0]) GetEnvironmentVariableA("BBB_REPLAY", rp, sizeof rp);
+            for (t = rp; *t && n < step; t++) if (*t == ';') n++;
+            if (!*t || sscanf(t, "%d,%d", &k, &i) != 2) { if (step++ == 1000) {} alog("replay: done, the window closes in 15 s"); KillTimer(h, 21); SetTimer(h, 22, 15000, NULL); return 0; }
+            for (q = nhit - 1; q >= 0; q--) if (hits[q].kind == k && hits[q].idx == i) break;
+            if (q < 0) { alog("replay: step %d: click area %d,%d not on screen, skipped", step, k, i); step++; return 0; }
+            {   POINT pt = { (hits[q].r.left + hits[q].r.right) / 2, (hits[q].r.top + hits[q].r.bottom) / 2 }; INPUT in[2];
+                ClientToScreen(h, &pt); SetForegroundWindow(h); SetCursorPos(pt.x, pt.y); memset(in, 0, sizeof in);
+                in[0].type = in[1].type = INPUT_MOUSE; in[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN; in[1].mi.dwFlags = MOUSEEVENTF_LEFTUP; SendInput(2, in, sizeof(INPUT));
+                alog("replay: step %d: real click on %d,%d at %ld,%ld", step, k, i, pt.x, pt.y); }
+            step++; return 0;
+        }
+        if (w == 22) { KillTimer(h, 22); alog("replay: closing"); PostMessageW(h, WM_CLOSE, 0, 0); return 0; }
+        if (w == 23) {          /* BBB_REPLAY_TIPS: the real mouse rests on each cut label in turn (its tooltip comes after 0.5 s) */
+            static int t2;
+            if (t2 >= ntip || t2 >= 60) { alog("replay tips: done (%d)", t2); KillTimer(h, 23); SetTimer(h, 22, 3000, NULL); return 0; }
+            {   POINT pt = { (tips[t2].r.left + tips[t2].r.right) / 2, (tips[t2].r.top + tips[t2].r.bottom) / 2 }; char nm[90];
+                WideCharToMultiByte(CP_UTF8, 0, tips[t2].s, -1, nm, sizeof nm, NULL, NULL); ClientToScreen(h, &pt); SetCursorPos(pt.x, pt.y);
+                alog("replay tips: %d of %d: \"%s\" at %ld,%ld", t2 + 1, ntip, nm, pt.x, pt.y); }
+            t2++; return 0;
         }
         if (w == 2) KillTimer(h, 2);
         else if (w == 3) {          /* the meters: a redraw only when what they show changed, and only in front (or building) */
@@ -1980,6 +2011,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
         if (savedMax) show = SW_SHOWMAXIMIZED;
     }
     meters_tick(); SetTimer(hMain, 3, 500, NULL);          /* the PC's meters, twice a second */
+    if (!selftest && GetEnvironmentVariableA("BBB_REPLAY", NULL, 0)) { alog("replay: starts in 3 s"); SetTimer(hMain, 21, 800, NULL); }
+    if (!selftest && GetEnvironmentVariableA("BBB_REPLAY_TIPS", NULL, 0)) { alog("replay tips: start"); SetForegroundWindow(hMain); SetTimer(hMain, 23, 800, NULL); }          /* the user's clicks again, with the real mouse */
     ShowWindow(hMain, selftest ? SW_SHOWNOACTIVATE : show); UpdateWindow(hMain);
     if (selftest == 4) mv_open();          /* --modelstest: the Models window (its timer writes the pictures and quits) */
     if (selftest) { char e[8]; if (GetEnvironmentVariableA("BBB_TEST_LOOK", e, sizeof e) >= 3) { lookPix = e[0] == '1'; lookTex = e[1] == '1'; lookFont = e[2] == '1'; } }          /* a test may ask for another look: 3 digits, pixel textures font */
@@ -2060,6 +2093,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                 swprintf(p2, MAX_PATH, L"%ls.foot.txt", stShot); tf = _wfopen(p2, L"w");
                 if (tf) { fprintf(tf, "%s show %d quick %d side_max %d window %ldx%ld" "\n", show == 1 && quick == 1 ? "OK" : "FAIL", show, quick, sideMax, cr.right, cr.bottom); fclose(tf); }
             }
+            {   char e[400]; if (GetEnvironmentVariableA("BBB_TEST_ACTS", e, sizeof e)) {          /* replay a user's clicks (kind,idx;kind,idx...), a paint after each */
+                char *t = e; int k, i; while (*t) { if (sscanf(t, "%d,%d", &k, &i) == 2) { alog("test: act %d,%d", k, i); act(k, i); capture(NULL); alog("test: painted"); } t = strchr(t, ';'); if (!t) break; t++; } } }
             if (GetEnvironmentVariableA("BBB_TEST_METERMS", NULL, 0)) {          /* how long the meters take (they run on the window thread twice a second) */
                 int k; LARGE_INTEGER q0, q1, q2, q3, fq; QueryPerformanceFrequency(&fq);
                 for (k = 0; k < 12; k++) { float pc[LIVE_MAXCORE], cs; Sleep(500); QueryPerformanceCounter(&q0); live_cpu(pc, LIVE_MAXCORE); QueryPerformanceCounter(&q1); live_job(hJob, cpuV, LIVE_MAXCORE, &cs); QueryPerformanceCounter(&q2); gpuV = live_gpu(); QueryPerformanceCounter(&q3);
@@ -2076,7 +2111,9 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     alog("test: view %d, 300 paints: GDI objects %lu -> %lu, USER objects %lu -> %lu", v, g0, GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), u0, GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS)); }
             }
             if (GetEnvironmentVariableA("BBB_TEST_HANG", NULL, 0)) { alog("test: the window thread sleeps 8 s"); Sleep(8000); alog("test: awake"); { MSG mm; DWORD te = GetTickCount() + 2500; while (GetTickCount() < te) { while (PeekMessageW(&mm, NULL, 0, 0, PM_REMOVE)) DispatchMessageW(&mm); Sleep(10); } } }          /* applog: the watchdog must see it */
-            if (GetEnvironmentVariableA("BBB_TEST_CRASH", NULL, 0)) { volatile int *z = NULL; alog("test: a crash"); *z = 1; }          /* applog: the crash note and dump */
+            if (GetEnvironmentVariableA("BBB_TEST_CRASH", NULL, 0)) { volatile int *z = NULL; alog("test: a crash"); *z = 1; }
+            if (GetEnvironmentVariableA("BBB_TEST_STACKOVF", NULL, 0)) { alog("test: a stack overflow"); test_deep(0); }
+            if (GetEnvironmentVariableA("BBB_TEST_ABORT", NULL, 0)) { alog("test: abort()"); abort(); }          /* applog: the crash note and dump */
             if (GetEnvironmentVariableA("BBB_TEST_FOLDCLICK", NULL, 0)) {          /* the user, 2026-11-23: "cannot click anything after More settings": clicks posted through the queue, as a mouse would */
                 FILE *tf; WCHAR p2[MAX_PATH]; int k, fx = -1, fy2 = -1, st0, p0, p1, t1; MSG mm; DWORD te;
                 capture(NULL); for (k = 0; k < nhit; k++) if (hits[k].kind == H_FOLD) { fx = (hits[k].r.left + hits[k].r.right) / 2; fy2 = (hits[k].r.top + hits[k].r.bottom) / 2; }
