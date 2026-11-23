@@ -44,6 +44,47 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## New since 2.3.1 (in the repository, not in a release yet)
+
+**Faster, and kinder to a game in front.** A 160 mm base builds in about 20-50 s instead of 70-115 s, and eight choice
+cards draw in a few seconds. Every base comes out byte for byte the same as before. The building runs at below-normal
+priority, at most 4 bases at once (half the cores), and the joining uses up to 4 cores. Sitting idle, the window uses no
+CPU at all.
+
+**A window you can arrange.**
+- Drag the line between the settings and the cards, or the line above Details; double-click a line to put it back.
+  The window remembers both.
+- Everything fits the width: long labels end in "..." and show their whole text when the mouse rests on them.
+- Show and Build straight away always stay in sight at the bottom of the side panel.
+- "More settings (M)" folds away the less used rows (miniature, game scale, size of things, strength, printer, seed,
+  saved sets, overhangs, Manifold, speed), so the main choices fit without scrolling.
+
+**Fewer clicks: keys for everything.**
+
+| Key | Does |
+|---|---|
+| Arrows, Home, End | move over the designs (a gold ring) |
+| Space | pick the design the ring is on |
+| Page Up / Down | the style |
+| [ and ] | the base size |
+| M | more settings, or fewer |
+| Ctrl+Z, Ctrl+Y | undo or redo a setting or a pick (built files are never touched) |
+
+The keys that were there before still work: Enter, Esc, Ctrl+A, D, L, T, F, digits, + and -, F1 or ?.
+
+**Easier to read.**
+- Every text passes a contrast check (WCAG AA).
+- A selected chip has a small dark square in its corner, not only a colour.
+- A card that could not be built says why on the card. So does one the kit had to rebuild as a new variant.
+
+**A picture of a theme.** Rest the mouse on the chosen theme: a drawing of one base of that theme appears. It is made
+once and kept in `out\theme_samples`.
+
+**Two new ground settings, OFF by default** (see the settings table). They are waiting for the printed look before they
+could become defaults:
+- `feet_pad`: a clear spot of plain textured ground for the figure's feet.
+- `small_base_cap`: at most 4-5 details on a base under 33 mm.
+
 ## What is new in 2.3 (and 2.3.1): square bases, a window that fits your screen, textured ground
 
 ![Sixteen bases built by 2.3, two of every size from 30 to 160 mm](examples/sheet_2.3.0.png)
@@ -648,6 +689,8 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `min_part_mm` | 0.5 | Object parts thinner than this are trimmed (or the object thickened first). 0 = off |
 | `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
 | `cart_on_track` | true | A cart by a track stands on its rails |
+| `feet_pad` | false | A clear spot for the figure's feet where it stands: an oval about 18 x 12 mm for a 32 mm figure (1.5 times for many-legged models, a tank's box for tracked ones) keeps only the ground and its texture; low rails and floors passing under it stay |
+| `small_base_cap` | false | On a base under 33 mm at most 4 details (under 27 mm) or 5; the ones laid last go first. The ground, cracks and texture stay |
 | `edge_wear` | true | Stone slabs, flagstones, headstones, tombs and steps get a few angular chips out of their edges (about 0.9 mm for FDM, 0.6 mm for resin) |
 | `prop_sink_mm` | 0.4 | Things standing on the ground sit in it: their top is this much lower (at most 15 % of their height). 0 = off |
 | `story_direction` | true | On a base with a subject (a wreck, a ruin, a crater), the debris lies along lines out from it, as if thrown or fallen from it |
