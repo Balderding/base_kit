@@ -2,6 +2,7 @@
    gg2.mk / pickF that gg3.make installs, and the helpers every layout file uses (an arena that holds the
    geometries a layout makes, geometry and Scene calls that raise as Python raises, the voronoi joint net). */
 #include <stdio.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -249,7 +250,7 @@ int ly_pickF(const char *const *table, int k0, int cnt, int n, const char **out,
                 memcpy(w, t, (size_t)L); w[L] = 0; t += L;
                 if (LYMK->scene_skip && (!strcmp(w, "track") || !strcmp(w, "ruts") || !strcmp(w, "planks") || !strcmp(w, "trail"))) continue;
                 for (j = 0; j < np; j++) if (!strcmp(pool[j], w)) { dup = 1; break; }
-                if (!dup) { pool[np] = buf[bi]; bi = (bi + 1) % 64; strcpy(pool[np], w); np++; }
+                if (!dup) { pool[np] = buf[bi]; bi = (bi + 1) % 64; str_bcopy(pool[np], sizeof buf[0], w);          /* buf[64][32] */ np++; }
             }
         }
         qsort(pool, (size_t)np, sizeof pool[0], cmpstr);

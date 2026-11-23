@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <math.h>
 #include <float.h>
 #include "models.h"
@@ -2538,7 +2539,7 @@ int mdl_removed(const char *rel) {
         rm_read = 1;
         if (n && n < MAX_PATH) {
             while (n && w[n - 1] != L'\\' && w[n - 1] != L'/') n--;
-            wcscpy(w + n, L"removed_models.txt"); f = _wfopen(w, L"rb");
+            wcs_bcopy(w + n, (size_t)(MAX_PATH - n), L"removed_models.txt"); f = _wfopen(w, L"rb");
             if (f) {
                 while (fgets(line, sizeof line, f)) {
                     size_t L = strlen(line); while (L && (line[L - 1] == '\n' || line[L - 1] == '\r' || line[L - 1] == ' ')) line[--L] = 0;

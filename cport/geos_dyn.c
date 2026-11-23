@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include "geos_dyn.h"
 
 GeosApi G;
@@ -33,7 +34,7 @@ int geos_load(void) {
         s = strrchr(p, '\\'); if (s) { *s = 0; SetDllDirectoryA(p); *s = '\\'; }
         m = LoadLibraryA(p); SetDllDirectoryA(NULL);
     }
-    if (!m && GetModuleFileNameA(NULL, p, sizeof p)) { s = strrchr(p, '\\'); if (s) { strcpy(s, "\\geos"); m = try_dir(p); } }
+    if (!m && GetModuleFileNameA(NULL, p, sizeof p)) { s = strrchr(p, '\\'); if (s) { str_bcopy(s, sizeof p - (size_t)(s - p), "\\geos"); m = try_dir(p); } }
     if (!m && GetEnvironmentVariableA("APPDATA", p, sizeof p)) {
         char d[MAX_PATH]; snprintf(d, sizeof d, "%s\\Python\\Python315\\site-packages\\shapely.libs", p); m = try_dir(d);
     }

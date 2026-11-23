@@ -8,6 +8,7 @@
      the message it is stuck in, the last click, the window thread's stack and one minidump; "responding again" when it is back.
    Nothing here changes what the kit builds. */
 #include <dbghelp.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <psapi.h>
 typedef BOOL (WINAPI *PGPMI)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD); static PGPMI pGPMI;          /* GetProcessMemoryInfo, loaded at run time */
 #include <signal.h>
@@ -212,7 +213,7 @@ static DWORD WINAPI al_watch(LPVOID p) {          /* the hang watchdog */
 static void al_settings(void) {          /* the settings file, as it is at the start */
     WCHAR p[MAX_PATH]; FILE *f; char l[300];
     swprintf(p, MAX_PATH, L"%ls\\..\\bbb_kit.ini", alDir); f = _wfopen(p, L"r"); if (!f) { alog("settings: no bbb_kit.ini yet"); return; }
-    { char all[4000] = ""; while (fgets(l, sizeof l, f)) { size_t n = strlen(l); while (n && (l[n - 1] == '\n' || l[n - 1] == '\r')) l[--n] = 0; if (l[0] == '[') continue; if (strlen(all) + n + 2 < sizeof all) { strcat(all, l); strcat(all, " "); } } alog("settings: %s", all); }
+    { char all[4000] = ""; while (fgets(l, sizeof l, f)) { size_t n = strlen(l); while (n && (l[n - 1] == '\n' || l[n - 1] == '\r')) l[--n] = 0; if (l[0] == '[') continue; if (strlen(all) + n + 2 < sizeof all) { SCAT(all, l); SCAT(all, " "); } } alog("settings: %s", all); }
     fclose(f);
 }
 static void al_open(const WCHAR *outDir, const char *cmdline) {          /* out\logs\bbb_kit_<stamp>.log; called once, early in WinMain */

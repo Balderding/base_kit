@@ -26,6 +26,7 @@
 #define _UNICODE
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <windowsx.h>
 #include <shellapi.h>
 #include <objbase.h>
@@ -319,22 +320,22 @@ static void live_poll(void) {
         if (L->have && nt.t0 > L->nt.t0 + 0.5) live_restart(L);
         L->nt = nt; L->have = 1; si = stage_ix(nt.stage);
         if ((!L->nseg || L->segS[L->nseg - 1] != si) && L->nseg < 16) { L->segS[L->nseg] = si; L->segT[L->nseg] = L->nseg ? t : nt.t0; L->nseg++; }
-        if (nt.plan[0] && wcscmp(nt.plan, L->planPath)) { GpImage *im = load_copy(nt.plan, 520); if (im) { if (L->plan) GdipDisposeImage(L->plan); L->plan = im; wcscpy(L->planPath, nt.plan); } }
+        if (nt.plan[0] && wcscmp(nt.plan, L->planPath)) { GpImage *im = load_copy(nt.plan, 520); if (im) { if (L->plan) GdipDisposeImage(L->plan); L->plan = im; WCOPY(L->planPath, nt.plan); } }
         if (!L->plan) { swprintf(p, MAX_PATH, L"%ls\\%hs_%d.txt.shapes", liveDir, c->seed, c->n); shapes_read(L, p); }
         if (L->expect > 0) { double left = L->expect - (t - nt.t0); if (left < 0) left = 0; if (left < L->shownLeft) L->shownLeft = left; }          /* never goes back up */
     }
 }
 static void live_text(const LiveC *L, WCHAR *b, int cap) {          /* what is being done, in words */
     const LiveNote *n = &L->nt; int done = 0, k;
-    if (!L->have) { wcscpy(b, L"starting ..."); return; }
+    if (!L->have) { wcs_bcopy(b, (size_t)cap, L"starting ..."); return; }
     switch (stage_ix(n->stage)) {
     case 0: swprintf(b, cap, L"laying out the scene: %d pieces", n->pieces); break;
     case 1: if (n->ntile) { for (k = 0; k < n->ntile; k++) done += n->tdone[k]; swprintf(b, cap, L"height field: %d of %d tiles, %d thread%ls", done, n->ntile, n->threads, n->threads == 1 ? L"" : L"s"); }
             else if (n->steps_total) swprintf(b, cap, L"height field: step %d of %d (one core)", n->steps_done, n->steps_total);
-            else wcscpy(b, L"height field"); break;
-    case 2: wcscpy(b, L"making the mesh"); break;
-    case 3: wcscpy(b, spGpu ? L"drawing the 3D picture (video card)" : L"drawing the 3D picture"); break;
-    default: wcscpy(b, L"print check");
+            else wcs_bcopy(b, (size_t)cap, L"height field"); break;
+    case 2: wcs_bcopy(b, (size_t)cap, L"making the mesh"); break;
+    case 3: wcs_bcopy(b, (size_t)cap, spGpu ? L"drawing the 3D picture (video card)" : L"drawing the 3D picture"); break;
+    default: wcs_bcopy(b, (size_t)cap, L"print check");
     }
 }
 static double live_frac(const LiveC *L, double t) {          /* how far this base is, 0..1; -1 = not known yet */
@@ -345,7 +346,7 @@ static double live_frac(const LiveC *L, double t) {          /* how far this bas
 }
 static void live_left(const LiveC *L, double t, WCHAR *b, int cap) {          /* the time left, in words */
     double el = L && L->have ? t - L->nt.t0 : 0;
-    if (!L || !L->have || L->expect <= 0) wcscpy(b, L"estimating ...");
+    if (!L || !L->have || L->expect <= 0) wcs_bcopy(b, (size_t)cap, L"estimating ...");
     else if (el > L->expect) swprintf(b, cap, L"longer than usual: %d s so far", (int)el);
     else swprintf(b, cap, L"%d s left", (int)(L->shownLeft + 0.99));
 }
@@ -363,18 +364,18 @@ static void ask_choices(int fresh) {
     if (busy) return;
     if (fresh || !ncell) {
         if (fresh != 2) { for (i = 0; i < ncell; i++) free_cell(&cells[i]); ncell = 0; scrollY = 0; outFolder[0] = 0; }          /* 2: several sizes, the next size: the cards so far stay (review P2-6) */
-        strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; { double o = GAMEMM[selScale] / 32.0 * 3.0 * OBJM[selObj]; snprintf(curObj, sizeof curObj, "%.3g", o > 1.0 ? o : 1.0); curFig = (int)GAMEMM[selScale]; }
+        SCOPY(curStyle, STYLES[selStyle]); SCOPY(curSize, SIZES[selSize]); SCOPY(curDetail, DETAILV[selDetail]); SCOPY(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; { double o = GAMEMM[selScale] / 32.0 * 3.0 * OBJM[selObj]; snprintf(curObj, sizeof curObj, "%.3g", o > 1.0 ? o : 1.0); curFig = (int)GAMEMM[selScale]; }
     }
     if (ncell + cnt > MAXC) cnt = MAXC - ncell;
     if (cnt <= 0) { sub_set(L"That is as many choices as fit. Build some, or press Show new choices to start over."); redraw(); return; }
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
-    if (curSup) wcscat(extra, L" --supports on");
+    if (curSup) WCAT(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
     theme_opt(extra, 400); if (seedBuf[0]) swprintf(extra + wcslen(extra), 24, L" --seed %hs", seedBuf);
     for (i = 2; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* smooth details / organic rocks change the layout: the choices are drawn the same way */
     swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
-        for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); strcpy(cells[ncell].size, curSize); cells[ncell++].state = ST_PENDING; }
+        for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); SCOPY(cells[ncell].size, curSize); cells[ncell++].state = ST_PENDING; }
         wanted = cnt; doneN = 0; swprintf(head, 200, L"Drawing %d %hs bases to choose from", cnt, curStyle); swprintf(sub, 512, L"%hs mm. They appear as they are ready; this takes about half a minute.", curSize);
     }
     redraw();
@@ -386,11 +387,11 @@ static void build(void) {
     for (i = 0; i < ncell; i++) if (cells[i].picked && cells[i].state == ST_NONE) { swprintf(picks + wcslen(picks), 40, L"%ls%hs:%d", k++ ? L"," : L"", cells[i].seed, cells[i].n); }
     if (!k) return;
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
-    if (curSup) wcscat(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
+    if (curSup) WCAT(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
     theme_opt(extra, 400); swprintf(extra + wcslen(extra), 48, L" --strength %hs --printer %hs", STRENGTHS[selStr], selPrinter ? "resin" : "fdm");
-    if (platePick) wcscat(extra, L" --plate on");          /* the print plate, only when on */
-    if (mendThin) wcscat(extra, L" --mend on");          /* the sliver mend, only when on */
+    if (platePick) WCAT(extra, L" --plate on");          /* the print plate, only when on */
+    if (mendThin) WCAT(extra, L" --mend on");          /* the sliver mend, only when on */
     for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
     if (batchFolder[0]) swprintf(extra + wcslen(extra), 80, L" --folder %ls", batchFolder);          /* several sizes: one folder for the batch (review P2-6 / N5) */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
@@ -414,7 +415,7 @@ static void on_line(int mode, const WCHAR *t) {
     (void)mode;
     if (t[0] != L'{' || !jstr(t, L"ev", ev, 24)) { if (t[0]) logw(t); return; }          /* not a record: something the job said that is not a record (an error); keep it for Details */
     if (!wcscmp(ev, L"log")) { static WCHAR b[4000]; jstr(t, L"text", b, 4000); logw(b); if (showDetails) redraw(); return; }
-    if (!wcscmp(ev, L"error")) { jstr(t, L"text", sub, 300); wcscpy(head, L"That did not work"); logw(sub); redraw(); return; }
+    if (!wcscmp(ev, L"error")) { jstr(t, L"text", sub, 300); WCOPY(head, L"That did not work"); logw(sub); redraw(); return; }
     if (!wcscmp(ev, L"folder")) { jstr(t, L"folder", outFolder, MAX_PATH); return; }
     if (!wcscmp(ev, L"fetch")) {          /* the first run: the free model packs are being fetched, say so plainly */
         WCHAR ti[80]; jstr(t, L"title", ti, 80);
@@ -426,7 +427,7 @@ static void on_line(int mode, const WCHAR *t) {
     if (!wcscmp(ev, L"choice")) {
         for (i = 0; i < ncell && cells[i].state != ST_PENDING; i++) ;
         if (i == ncell) { if (ncell >= MAXC) return; ncell++; }
-        c = &cells[i]; memset(c, 0, sizeof *c); strcpy(c->size, curSize); c->state = ST_NONE; c->n = (int)jnum(t, L"n"); c->tier = (int)jnum(t, L"tier");
+        c = &cells[i]; memset(c, 0, sizeof *c); SCOPY(c->size, curSize); c->state = ST_NONE; c->n = (int)jnum(t, L"n"); c->tier = (int)jnum(t, L"tier");
         { WCHAR ws[32]; jstr(t, L"seed", ws, 32); narrow(ws, c->seed, 16); }
         jstr(t, L"theme", c->theme, 64);
         if (jstr(t, L"img", path, MAX_PATH)) GdipLoadImageFromFile(path, &c->img);
@@ -443,12 +444,12 @@ static void on_line(int mode, const WCHAR *t) {
         if (jtrue(t, L"ok") && jnum(t, L"secs") > 0) live_remember(liveTimes, curStyle, curSize, c->tier, jnum(t, L"secs"));          /* for the next time left */
         if (jtrue(t, L"ok")) {
             c->state = jtrue(t, L"variant") ? ST_VARIANT : ST_OK; c->secs = jnum(t, L"secs"); jstr(t, L"stl", c->stl, MAX_PATH); nOK++;
-            if (jtrue(t, L"mended")) { c->retry = 2; wcscpy(c->why, L"Mended: the picked design failed the print check on a mesh fault, so the kit built it again with faces thinner than 0.02 mm dissolved (no point moves). It is the design you picked."); }          /* the sliver mend */
+            if (jtrue(t, L"mended")) { c->retry = 2; WCOPY(c->why, L"Mended: the picked design failed the print check on a mesh fault, so the kit built it again with faces thinner than 0.02 mm dissolved (no point moves). It is the design you picked."); }          /* the sliver mend */
             if (jstr(t, L"img", path, MAX_PATH) && path[0]) GdipLoadImageFromFile(path, &c->img3);
             if (jstr(t, L"img3c", path, MAX_PATH) && path[0]) GdipLoadImageFromFile(path, &c->img3c);          /* the colour view (the COLOUR toggle) */
             c->col = colLast && c->img3c;
             if (jstr(t, L"img2", path, MAX_PATH) && path[0]) { GpImage *d2 = NULL; GdipLoadImageFromFile(path, &d2); if (d2) { if (c->img) GdipDisposeImage(c->img); c->img = d2; } }          /* the drawing of what was really built */
-            if (c->state == ST_VARIANT) { WCHAR th[64]; if (jstr(t, L"theme", th, 64) && th[0]) wcscpy(c->theme, th); if (wcsncmp(c->why, L"rebuilt as", 10)) wcscpy(c->why, L"The picked design failed the print check, so the kit built a fresh variant in its place. Click to show its STL file."); }
+            if (c->state == ST_VARIANT) { WCHAR th[64]; if (jstr(t, L"theme", th, 64) && th[0]) WCOPY(c->theme, th); if (wcsncmp(c->why, L"rebuilt as", 10)) WCOPY(c->why, L"The picked design failed the print check, so the kit built a fresh variant in its place. Click to show its STL file."); }
         } else { c->state = ST_FAIL; jstr(t, L"why", c->why, 220); nBad++; }
         c->picked = 0; doneN++; swprintf(head, 200, L"Building: %d of %d done", doneN, wanted); redraw();
         if (selftest == 3 && !demoShot && doneN == 2) { WCHAR q[MAX_PATH]; demoShot = 1; anim = 9; swprintf(q, MAX_PATH, L"%ls.2_building.bmp", stShot); capture(q); }
@@ -469,8 +470,8 @@ static void on_ended(int mode, DWORD code) {
     busy = 0; KillTimer(hMain, 1); KillTimer(hMain, 4); anim_tick();
     if (mode == 1) {
         drop_pending();
-        if (ncell) { wcscpy(head, L"Click the bases you want"); sub_set(L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
-        else { wcscpy(head, L"No choices came back"); swprintf(sub, 512, L"The job ended with code %lu. Press Details to see what it said.", code); }
+        if (ncell) { WCOPY(head, L"Click the bases you want"); sub_set(L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
+        else { WCOPY(head, L"No choices came back"); swprintf(sub, 512, L"The job ended with code %lu. Press Details to see what it said.", code); }
     } else {
         for (i = 0; i < ncell; i++) if (cells[i].state == ST_BUILDING) { cells[i].state = ST_NONE; cells[i].retry = 0; }
         if (nBad) swprintf(head, 200, L"Done: %d built and checked, %d not built", nOK, nBad); else swprintf(head, 200, L"Done: %d built and checked", nOK);
@@ -915,8 +916,8 @@ static void card(int i, int x, int y, int w, int h) {
     else txt(c->theme, x + pad, capY, iw, S(18), fUI, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     switch (c->state) {
     case ST_BUILDING: {          /* what is being done, in words (every view) */
-        WCHAR st[120]; if (c->lv && c->lv->have) live_text(c->lv, st, 120); else wcscpy(st, L"building ...");
-        if (c->retry) { WCHAR r2[160]; swprintf(r2, 160, L"new variant: %ls", st); wcscpy(st, r2); }
+        WCHAR st[120]; if (c->lv && c->lv->have) live_text(c->lv, st, 120); else WCOPY(st, L"building ...");
+        if (c->retry) { WCHAR r2[160]; swprintf(r2, 160, L"new variant: %ls", st); WCOPY(st, r2); }
         txt(st, x + pad, capY + S(20), iw, S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); break; }
     case ST_OK: swprintf(b, 160, c->retry == 2 ? L"MENDED  %.0f s" : L"BUILT  %.0f s", c->secs); pill(b, x + pad, capY + S(20), S(c->retry == 2 ? 112 : 96), S(18), C_ACC, C_ONACC); break;          /* mended: the same design, its thin faces dissolved */
     case ST_VARIANT: {          /* room for the COLOUR toggle; step 2: why, beside the label (cut with ..., the whole reason in its tooltip) */
@@ -1016,7 +1017,7 @@ static void big_view(int x0, int y0, int w0, int h0, int nrw) {
         int tx = bx + pw + S(10), tw = bw - pw - S(26), ty = by + S(18);
         txt(c->theme, tx, ty, tw, S(28), fBig, C_TEXT, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); ty += S(30);
         swprintf(b, 160, L"design %hs-%d, detail %d of 4", c->seed, c->n, c->tier); txt(b, tx, ty, tw, S(18), fSmall, C_DIM, DT_LEFT | DT_SINGLELINE); ty += S(30);
-        if (L && L->have) live_text(L, b, 160); else wcscpy(b, L"starting ...");
+        if (L && L->have) live_text(L, b, 160); else WCOPY(b, L"starting ...");
         section(L"NOW", tx, ty, tw, S(18)); ty += S(22); txt(b, tx, ty, tw, S(40), fUI, C_ACC, DT_LEFT | DT_WORDBREAK); ty += S(44);
         if (lvTime) {
             double f = live_frac(L, t);
@@ -1185,7 +1186,7 @@ static void paint(HDC out, int W, int H) {
         section(L"DESIGN SEED  (EMPTY = NEW EACH TIME)", x0, y, wAll, S(18)); y += S(20);
         if (lookPix) { pbox(x0, y, wAll - cw - S(4), bh, 1, seedEdit ? 4 : 0, hov(H_SEED, 0)); pbox(x0 + wAll - cw, y, cw, bh, 1, 0, hov(H_SEED, 1)); }
         else { rr(x0, y, wAll - cw - S(4), bh, S(6), C_BG, seedEdit ? C_ACCH : C_LINE, seedEdit ? S(2) : 1); rr(x0 + wAll - cw, y, cw, bh, S(6), hov(H_SEED, 1) ? C_CARDH : C_CARD, C_LINE, 1); }
-        if (seedEdit) swprintf(sb, 64, L"%hs_", seedBuf); else if (seedBuf[0]) swprintf(sb, 64, L"%hs", seedBuf); else wcscpy(sb, L"new each time (click to type one)");
+        if (seedEdit) swprintf(sb, 64, L"%hs_", seedBuf); else if (seedBuf[0]) swprintf(sb, 64, L"%hs", seedBuf); else WCOPY(sb, L"new each time (click to type one)");
         txt(sb, x0 + S(8), y, wAll - cw - S(20), bh, seedBuf[0] || seedEdit ? fMono : fSmall, seedBuf[0] || seedEdit ? C_TEXT : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE); hit(x0, y, wAll - cw - S(4), bh, H_SEED, 0);
         ltxt(L"Clear", x0 + wAll - cw, y, cw, bh, fUI, C_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 0, -1); hit(x0 + wAll - cw, y, cw, bh, H_SEED, 1);
         y += bh + S(8);
@@ -1353,7 +1354,7 @@ static void paint(HDC out, int W, int H) {
     fillrect(mx + 1, fy, mw, lookPix ? PX : 1, C_LINE);
     {
         int by, bh, x, rx, btnw; footFit = foot_need() <= mw; by = fy + S(15); bh = S(36); x = mx + S(22); rx = W - S(22); btnw = NW(L"Build the picked bases", S(220));
-        if (busy == 2) swprintf(b, 200, L"%d to go", wanted - doneN); else if (np == 1) wcscpy(b, L"1 picked"); else swprintf(b, 200, L"%d picked", np);
+        if (busy == 2) swprintf(b, 200, L"%d to go", wanted - doneN); else if (np == 1) WCOPY(b, L"1 picked"); else swprintf(b, 200, L"%d picked", np);
         { int lw0 = NW(L"20 picked", S(84)), w1 = NW(L"Pick all", S(84)), w2 = NW(L"Clear", S(70)), w3 = NW(L"More choices", S(118));
         ltxt(b, x, by, lw0, bh, fBtn, np || busy == 2 ? C_ACC : C_DIM, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1, -1); x += lw0 + S(4);
         button(L"Pick all", x, by, w1, bh, busy || !ncell ? 3 : 0, H_ALL); x += w1 + S(8);
@@ -1361,7 +1362,7 @@ static void paint(HDC out, int W, int H) {
         button(L"More choices", x, by, w3, bh, busy || !ncell ? 3 : 0, H_MORE); }
         if (busy) button(L"Stop", rx - btnw, by - S(3), btnw, bh + S(6), 2, H_STOP);
         else {
-            if (np == 1) wcscpy(b, L"Build 1 base"); else if (np) swprintf(b, 200, L"Build %d bases", np); else wcscpy(b, L"Build the picked bases");
+            if (np == 1) WCOPY(b, L"Build 1 base"); else if (np) swprintf(b, 200, L"Build %d bases", np); else WCOPY(b, L"Build the picked bases");
             button(b, rx - btnw, by - S(3), btnw, bh + S(6), np ? 1 : 3, H_GO);
         }
         { int wo = NW(L"Open folder", S(110)), wd = NW(L"Hide details", S(104));
@@ -1456,13 +1457,13 @@ static void capture(const WCHAR *path) {
 /* ---------- acting on clicks and keys ---------- */
 static void open_folder(void) {
     WCHAR p[MAX_PATH];
-    if (outFolder[0] && GetFileAttributesW(outFolder) != INVALID_FILE_ATTRIBUTES) wcscpy(p, outFolder); else swprintf(p, MAX_PATH, L"%ls\\out", kit);
-    if (GetFileAttributesW(p) == INVALID_FILE_ATTRIBUTES) wcscpy(p, kit);
+    if (outFolder[0] && GetFileAttributesW(outFolder) != INVALID_FILE_ATTRIBUTES) wcs_bcopy(p, MAX_PATH, outFolder); else swprintf(p, MAX_PATH, L"%ls\\out", kit);
+    if (GetFileAttributesW(p) == INVALID_FILE_ATTRIBUTES) wcs_bcopy(p, MAX_PATH, kit);
     ShellExecuteW(hMain, L"open", p, NULL, NULL, SW_SHOWNORMAL);
 }
 static void sets_ini(WCHAR *p) {
     if (selftest) { swprintf(p, MAX_PATH, L"%ls.sets.ini", stShot); return; }          /* review P2-5: a test never touches the real out\bbb_kit.ini */
-    swprintf(p, MAX_PATH, L"%ls\\out", kit); CreateDirectoryW(p, NULL); wcscat(p, L"\\bbb_kit.ini");
+    swprintf(p, MAX_PATH, L"%ls\\out", kit); CreateDirectoryW(p, NULL); wcs_bcat(p, MAX_PATH, L"\\bbb_kit.ini");
 }
 static void set_io(int k, int save) {          /* out\bbb_kit.ini [setN]: style, sizes, how many, detail, miniature, game scale, object size, strength, theme, seed */
     /* review P3-1 (2026-11-22): style and sizes by NAME (a list position shifts when a size is added); a set saved
@@ -1494,7 +1495,7 @@ static void set_io(int k, int save) {          /* out\bbb_kit.ini [setN]: style,
         if (old) sizeMask = (unsigned)strtoul(a, NULL, 10) & ((1u << NSIZES) - 1u);
         else { char *t = strtok(a, ","); sizeMask = 0; for (; t; t = strtok(NULL, ",")) for (i = 0; i < NSIZES; i++) if (!strcmp(SIZES[i], t)) sizeMask |= 1u << i; }
     }
-    GetPrivateProfileStringW(sec, L"seed", L"", v, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
+    GetPrivateProfileStringW(sec, L"seed", L"", v, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 16, NULL, NULL); a[15] = 0; SCOPY(seedBuf, a); }
     GetPrivateProfileStringW(sec, L"theme", L"", v, 64, p); selTheme = 0;
     if (v[0]) { const char *nm[64]; char a[64]; int n = kd_theme_names(STYLES[selStyle], nm, 64); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL); for (i = 0; i < n; i++) if (!strcmp(nm[i], a)) selTheme = i + 1; }
     swprintf(sub, 512, L"Set %d loaded: %hs, %d base%ls.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s");
@@ -1515,8 +1516,8 @@ static int **snap_vars(int *n) {
 static void snap_take(Snap *s) {
     int n, i, **V = snap_vars(&n); memset(s, 0, sizeof *s);
     for (i = 0; i < n; i++) s->v[i] = *V[i];
-    s->mask = sizeMask; strcpy(s->seed, seedBuf); s->n = ncell;
-    for (i = 0; i < ncell; i++) { strcpy(s->cs[i], cells[i].seed); s->cn[i] = cells[i].n; s->pk[i] = (unsigned char)cells[i].picked; }
+    s->mask = sizeMask; SCOPY(s->seed, seedBuf); s->n = ncell;
+    for (i = 0; i < ncell; i++) { SCOPY(s->cs[i], cells[i].seed); s->cn[i] = cells[i].n; s->pk[i] = (unsigned char)cells[i].picked; }
 }
 static int snap_eq(const Snap *a, const Snap *b) {
     int n, i; snap_vars(&n);
@@ -1528,7 +1529,7 @@ static int snap_eq(const Snap *a, const Snap *b) {
 static void snap_put(const Snap *s) {
     int n, i, j, **V = snap_vars(&n), fontWas = lookFont, pixWas = lookPix;
     for (i = 0; i < n; i++) *V[i] = s->v[i];
-    sizeMask = s->mask; strcpy(seedBuf, s->seed);
+    sizeMask = s->mask; SCOPY(seedBuf, s->seed);
     for (j = 0; j < ncell; j++) for (i = 0; i < s->n; i++) if (cells[j].n == s->cn[i] && !strcmp(cells[j].seed, s->cs[i])) { if (cells[j].state == ST_NONE) cells[j].picked = s->pk[i]; break; }
     speed_env();
     if (fontWas != lookFont || pixWas != lookPix) make_fonts();
@@ -1602,7 +1603,7 @@ static void act2(int kind, int idx) {
         if (c->state == ST_NONE) c->picked = !c->picked;
         else if ((c->state == ST_OK || c->state == ST_VARIANT) && c->stl[0]) { WCHAR a[MAX_PATH + 20]; swprintf(a, MAX_PATH + 20, L"/select,\"%ls\"", c->stl); ShellExecuteW(hMain, L"open", L"explorer.exe", a, NULL, SW_SHOWNORMAL); }
         np = npicked();
-        if (np) { if (np == 1) wcscpy(head, L"1 base picked"); else swprintf(head, 200, L"%d bases picked", np); sub_set(L"Press Build when you have the ones you want. \"More choices\" adds another batch and keeps your picks."); }
+        if (np) { if (np == 1) WCOPY(head, L"1 base picked"); else swprintf(head, 200, L"%d bases picked", np); sub_set(L"Press Build when you have the ones you want. \"More choices\" adds another batch and keeps your picks."); }
         break; }
     }
     redraw();
@@ -1648,7 +1649,7 @@ static void hover_at(int x, int y) {
     int i, k = H_NONE, id = -1; POINT p = { x, y };
     {   int t = -1, j; for (j = ntip - 1; j >= 0; j--) if (PtInRect(&tips[j].r, p)) { t = j; break; }          /* R3: a cut label under the mouse: its tooltip in half a second */
         if (t < 0) { if (tipCur >= 0 || tipShown) { tipCur = -1; tipShown = 0; KillTimer(hMain, 7); redraw(); } }
-        else if (tipCur < 0 || wcscmp(tipText, tips[t].s)) { int was = tipShown; tipCur = t; tipShown = 0; wcscpy(tipText, tips[t].s); tipX = x; tipY = y; SetTimer(hMain, 7, 500, NULL); if (was) redraw(); } }
+        else if (tipCur < 0 || wcscmp(tipText, tips[t].s)) { int was = tipShown; tipCur = t; tipShown = 0; WCOPY(tipText, tips[t].s); tipX = x; tipY = y; SetTimer(hMain, 7, 500, NULL); if (was) redraw(); } }
     for (i = nhit - 1; i >= 0; i--) if (PtInRect(&hits[i].r, p)) { k = hits[i].kind; id = hits[i].idx; break; }
     if (k == H_CARD && !PtInRect(&gridR, p)) { k = H_NONE; id = -1; }
     if (k != hovK || id != hovI) {
@@ -1723,8 +1724,8 @@ static void ini(int save) {
                                    L"liveview", L"livecores", L"livegpu", L"liveshape", L"livetime", L"liverows", L"joinsolid", L"mfsmaller", L"mfstrict", L"mfsmooth", L"mfrocks", L"objsize" };          /* "game": the game scale (2026-11-20; the old "look" key, the figure size with classic, is not read now), "objsize": the slider */
     swprintf(p, MAX_PATH, L"%ls\\out", kit);
     if (save) CreateDirectoryW(p, NULL);
-    wcscat(p, L"\\bbb_kit.ini");
-    if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcscpy(p, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
+    wcs_bcat(p, MAX_PATH, L"\\bbb_kit.ini");
+    if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcs_bcopy(p, MAX_PATH, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
     if (save) { swprintf(v, 16, L"%d", moreOpen); WritePrivateProfileStringW(L"window", L"more", v, p); } else moreOpen = GetPrivateProfileIntW(L"window", L"more", 0, p) ? 1 : 0;          /* U2 */
     if (save) { swprintf(v, 16, L"%d", platePick); WritePrivateProfileStringW(L"window", L"plate", v, p); } else platePick = GetPrivateProfileIntW(L"window", L"plate", 0, p) ? 1 : 0;          /* the print plate */
     if (save) { swprintf(v, 16, L"%d", mendThin); WritePrivateProfileStringW(L"window", L"mend", v, p); } else mendThin = GetPrivateProfileIntW(L"window", L"mend", 0, p) ? 1 : 0;          /* the sliver mend */
@@ -1759,7 +1760,7 @@ static void ini(int save) {
         { WCHAR pv[16]; GetPrivateProfileStringW(L"window", L"printer", L"fdm", pv, 16, p); selPrinter = !_wcsicmp(pv, L"resin"); }
         sizeMulti = GetPrivateProfileIntW(L"window", L"several", 0, p) ? 1 : 0;
         GetPrivateProfileStringW(L"window", L"sizes", L"0", t, 64, p); sizeMask = (unsigned)wcstoul(t, NULL, 10) & ((1u << NSIZES) - 1u);
-        GetPrivateProfileStringW(L"window", L"seed", L"", t, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, t, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
+        GetPrivateProfileStringW(L"window", L"seed", L"", t, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, t, -1, a, 16, NULL, NULL); a[15] = 0; SCOPY(seedBuf, a); }
     }
 }
 static int test_deep(int n) { volatile char pad[4096]; pad[0] = (char)n; return pad[0] + test_deep(n + 1) + pad[100]; }          /* BBB_TEST_STACKOVF */
@@ -1971,12 +1972,12 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     else if (!strncmp(cmdA, "--resizetest", 12)) { selftest = 2; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
     else if (!strncmp(cmdA, "--idletest", 10)) { selftest = 6; idleSecs = 60; { const char *q = cmdA + 10 + (cmdA[10] == ' '); idleSecs = atoi(q); if (idleSecs < 1) idleSecs = 60; while (*q && *q != ' ') q++; if (*q) q++; swprintf(stShot, MAX_PATH, L"%hs", q); } }          /* --idletest <secs> <out.txt>: sit idle, hidden, and say what it cost */
     else if (!strncmp(cmdA, "--modelstest", 12)) { selftest = 4; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 12 + (cmdA[12] == ' ')); }
-    else if (!strncmp(cmdA, "--selftest", 10)) { selftest = 1; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); if (!stShot[0]) wcscpy(stShot, L"bbb_selftest.bmp"); }
+    else if (!strncmp(cmdA, "--selftest", 10)) { selftest = 1; swprintf(stShot, MAX_PATH, L"%hs", cmdA + 10 + (cmdA[10] == ' ')); if (!stShot[0]) WCOPY(stShot, L"bbb_selftest.bmp"); }
     GetModuleFileNameW(NULL, kit, MAX_PATH); sl = wcsrchr(kit, L'\\');
     if (sl) *sl = 0;
     swprintf(e, MAX_PATH, L"%ls\\bbb_kit_folder.txt", kit); f = _wfopen(e, L"r");
     if (f) { char a[MAX_PATH]; if (fgets(a, sizeof a, f)) { a[strcspn(a, "\r\n")] = 0; if (a[0]) swprintf(kit, MAX_PATH, L"%hs", a); } fclose(f); }
-    if (GetEnvironmentVariableW(L"BBB_KIT", e, MAX_PATH)) wcscpy(kit, e);
+    if (GetEnvironmentVariableW(L"BBB_KIT", e, MAX_PATH)) WCOPY(kit, e);
     if (!selftest || GetEnvironmentVariableA("BBB_TEST_LOG", NULL, 0)) { WCHAR od[MAX_PATH]; swprintf(od, MAX_PATH, L"%ls\\out", kit); al_open(od, cmdA); }          /* applog */
     (void)t; SetEnvironmentVariableW(L"BBB_KIT", kit);          /* the runner's kit folder: this one (its out folder is beside the exe) */
     hJob = CreateJobObjectW(NULL, NULL);
@@ -1997,7 +1998,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
 #ifdef BBB_NK
     NK = nkui_init("Segoe UI", S(13)); nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme);
 #endif
-    wcscpy(head, L"Pick a style and a size"); sub_set(L"Then press Show choices. Nothing is built until you press Build.");
+    WCOPY(head, L"Pick a style and a size"); sub_set(L"Then press Show choices. Nothing is built until you press Build.");
     { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) swprintf(sub, 512, L"%.290hs", kd_themes_note); }          /* review P2-3: what happened with themes.json, at start */
     memset(&wc, 0, sizeof wc); wc.style = CS_DBLCLKS; wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
@@ -2020,9 +2021,9 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
     if (selftest == 2) {          /* --resizetest: make the window larger, then as small as it will go, and write down what it became */
         FILE *o; WCHAR q[MAX_PATH]; RECT a, b2, c2; LONG st = GetWindowLongW(hMain, GWL_STYLE); int i;
         GetClientRect(hMain, &a); SetWindowPos(hMain, NULL, 0, 0, a.right + S(520), a.bottom + S(300), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE); GetClientRect(hMain, &b2);
-        for (i = 0; i < 26; i++) { memset(&cells[i], 0, sizeof(Cell)); cells[i].state = ST_NONE; cells[i].n = i + 1; cells[i].tier = 4; cells[i].picked = i % 5 == 0; strcpy(cells[i].seed, "test"); swprintf(cells[i].theme, 64, L"sample %d", i + 1); }
+        for (i = 0; i < 26; i++) { memset(&cells[i], 0, sizeof(Cell)); cells[i].state = ST_NONE; cells[i].n = i + 1; cells[i].tier = 4; cells[i].picked = i % 5 == 0; SCOPY(cells[i].seed, "test"); swprintf(cells[i].theme, 64, L"sample %d", i + 1); }
         Sleep(500); meters_tick();          /* the meters need two readings to show anything */
-        ncell = 26; wcscpy(head, L"Resize test: 26 sample cards"); PostMessageW(hMain, WM_CHAR, '1', 0); PostMessageW(hMain, WM_CHAR, '5', 0);
+        ncell = 26; WCOPY(head, L"Resize test: 26 sample cards"); PostMessageW(hMain, WM_CHAR, '1', 0); PostMessageW(hMain, WM_CHAR, '5', 0);
         { MSG m2; while (PeekMessageW(&m2, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&m2); DispatchMessageW(&m2); } }
         { char e[32]; int tw2, th2; if (GetEnvironmentVariableA("BBB_TEST_CLIENT", e, sizeof e) && sscanf(e, "%dx%d", &tw2, &th2) == 2) {          /* a test: the window's inside exactly this big (a screen size), one picture + the UI check, then quit */
             RECT wr = { 0, 0, tw2, th2 }; AdjustWindowRect(&wr, st, FALSE); SetWindowPos(hMain, NULL, 0, 0, wr.right - wr.left, wr.bottom - wr.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -2143,7 +2144,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
             if (GetEnvironmentVariableA("BBB_TEST_TIP", NULL, 0)) {          /* R3: the cut labels, and the first one's tooltip after a (sent) rest of the mouse */
                 FILE *tf; WCHAR p2[MAX_PATH]; int n0;
                 capture(NULL); n0 = ntip;
-                if (n0) { RECT tr = tips[0].r; WCHAR first[200]; wcscpy(first, tips[0].s);
+                if (n0) { RECT tr = tips[0].r; WCHAR first[200]; WCOPY(first, tips[0].s);
                     SendMessageW(hMain, WM_MOUSEMOVE, 0, MAKELPARAM((tr.left + tr.right) / 2, (tr.top + tr.bottom) / 2)); SendMessageW(hMain, WM_TIMER, 7, 0);
                     swprintf(p2, MAX_PATH, L"%ls.tip.bmp", stShot); capture(p2);
                     swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w");
@@ -2152,7 +2153,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                 else { swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w"); if (tf) { fprintf(tf, "OK cut 0" "\n"); fprintf(tf, "sidew %d main_need %d lookW %d scale %.2f" "\n", sideW, main_need(), lookW, SC); fclose(tf); } }
             }
             if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* F1: cards building, built, failed, waiting, for the contrast test */
-                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; wcscpy(cells[3].why, L"rebuilt as a new variant: the picked design was not one closed solid"); cells[4].state = ST_FAIL; wcscpy(cells[4].why, L"print check: too similar to urban_40mm_02 (12% different)"); cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
+                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; WCOPY(cells[3].why, L"rebuilt as a new variant: the picked design was not one closed solid"); cells[4].state = ST_FAIL; WCOPY(cells[4].why, L"print check: too similar to urban_40mm_02 (12% different)"); cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
             capture(stShot);
             if (GetEnvironmentVariableA("BBB_TEST_TEXTS", NULL, 0)) {          /* F1: every text's box and colour, for work\\rest\\contrast.py */
                 WCHAR p2[MAX_PATH]; FILE *tf; int k; swprintf(p2, MAX_PATH, L"%ls.texts.txt", stShot); tf = _wfopen(p2, L"w, ccs=UTF-8");

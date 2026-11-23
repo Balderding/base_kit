@@ -1,5 +1,6 @@
 /* live.c: see live.h. Everything here is read only and cheap: the window calls it a few times a second. */
 #include <windows.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <pdh.h>
 #include <pdhmsg.h>
 #include <stdio.h>
@@ -155,7 +156,7 @@ int live_read(const WCHAR *dir, const char *seed, int n, LiveNote *o) {
     swprintf(p, MAX_PATH, L"%ls\\%hs_%d.txt.tiles", dir, seed, n);
     if (readall(p, b, sizeof b) > 0) {
         const char *s = val(b, "steps_done"); tiles(b, o);
-        if ((s = val(b, "exe_stage")) && !strncmp(s, "mesh", 4) && !strcmp(o->stage, "field")) strcpy(o->stage, "mesh");          /* the exe has the field done and is meshing */
+        if ((s = val(b, "exe_stage")) && !strncmp(s, "mesh", 4) && !strcmp(o->stage, "field")) SCOPY(o->stage, "mesh");          /* the exe has the field done and is meshing */
         s = val(b, "steps_done");
         if (s && atoi(s) > o->steps_done) o->steps_done = atoi(s);
         if ((s = val(b, "steps_total")) && atoi(s)) o->steps_total = atoi(s);

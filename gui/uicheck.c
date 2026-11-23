@@ -28,7 +28,7 @@ static void ui_check(const WCHAR *tag) {
     for (i = 0; i < nh; i++) {          /* click each safe one where it is drawn: it must change the state; then put it back */
         int k = H[i].kind, cx = (H[i].r.left + H[i].r.right) / 2, cy = (H[i].r.top + H[i].r.bottom) / 2, keep[40], m = 0, *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3], &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvParts, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &showHelp,
                                                                                                                        &selTheme, &selStr, &seedEdit, &sizeMulti, &setSave, &selPrinter, &moreOpen, &platePick, &mendThin };          /* review P2-5: the plan B rows put back too */
-        int nv = (int)(sizeof V / sizeof V[0]), pk[MAXC], q; unsigned kmask = sizeMask; char kseed[16]; strcpy(kseed, seedBuf);
+        int nv = (int)(sizeof V / sizeof V[0]), pk[MAXC], q; unsigned kmask = sizeMask; char kseed[16]; SCOPY(kseed, seedBuf);
         if (k == H_SHOW || k == H_GO || k == H_QUICK || k == H_MORE || k == H_FOLD || k == H_STOP || k == H_OPEN || k == H_NONE || k == H_MODELS) continue;
         if (cy < 0 || cy >= c.bottom || cx < 0 || cx >= c.right) continue;
         for (m = 0; m < nv; m++) keep[m] = *V[m]; for (q = 0; q < ncell; q++) pk[q] = cells[q].picked;
@@ -43,7 +43,7 @@ static void ui_check(const WCHAR *tag) {
                          (k == H_SCALE && H[i].idx == selScale) || (k == H_OBJ && H[i].idx == selObj) || (k == H_VIEW && H[i].idx == lvView) || (k == H_COUNT && (H[i].idx == 0 || (H[i].idx < 0 && selCount == 1) || (H[i].idx > 0 && selCount == 20)));
             if (!chosen) { fprintf(f, "NO CHANGE %s %d (clicked at %d,%d)\n", KN[k], H[i].idx, cx, cy); nnochange++; }
         }
-        for (m = 0; m < nv; m++) *V[m] = keep[m]; for (q = 0; q < ncell; q++) cells[q].picked = pk[q]; sizeMask = kmask; strcpy(seedBuf, kseed);
+        for (m = 0; m < nv; m++) *V[m] = keep[m]; for (q = 0; q < ncell; q++) cells[q].picked = pk[q]; sizeMask = kmask; SCOPY(seedBuf, kseed);
         speed_env(); capture(NULL);
     }
     fprintf(f, "clicked %d, no change %d, layout problems %d\n", nclick, nnochange, bad);

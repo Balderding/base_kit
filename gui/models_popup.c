@@ -38,7 +38,7 @@ static int mv_load_res(void) {          /* the pictures packed in the exe (PREVI
 }
 enum { MV_ALL = 1000, MV_STYLE = 1001, MV_OFF = 1002 }; static RECT mvR[8]; static int mvK[8];
 static RECT *mvTR; static int *mvTI, nTV, capTV;          /* the tiles on screen: where, and which model */
-static void mv_rm_path(WCHAR *p) { DWORD n = GetModuleFileNameW(NULL, p, MAX_PATH); while (n && p[n - 1] != L'\\' && p[n - 1] != L'/') n--; wcscpy(p + n, L"removed_models.txt"); }
+static void mv_rm_path(WCHAR *p) { DWORD n = GetModuleFileNameW(NULL, p, MAX_PATH); while (n && p[n - 1] != L'\\' && p[n - 1] != L'/') n--; wcs_bcopy(p + n, (size_t)(MAX_PATH - n), L"removed_models.txt"); }
 static int mv_same(const char *a, const char *b) { for (; *a && *b; a++, b++) { char x = *a == '\\' ? '/' : *a, y = *b == '\\' ? '/' : *b; if (x != y) return 0; } return *a == *b; }
 static void mv_rm_read(void) {          /* which models are taken out: the file's lines */
     WCHAR p[MAX_PATH + 40]; FILE *f; char line[600]; int i;
@@ -78,7 +78,7 @@ static void mv_load(void) {          /* new lines of the index: the one being wr
         for (i = 0; i < nMV && wcscmp(MV[i].png, w); i++) {}
         if (i < nMV) continue;
         if (nMV == capMV) { capMV = capMV ? 2 * capMV : 512; MV = (MvTile *)realloc(MV, sizeof *MV * (size_t)capMV); }
-        t = &MV[nMV++]; memset(t, 0, sizeof *t); wcscpy(t->png, w);
+        t = &MV[nMV++]; memset(t, 0, sizeof *t); WCOPY(t->png, w);
         snprintf(t->name, sizeof t->name, "%s", c[1]); snprintf(t->styles, sizeof t->styles, "%s", c[2]); t->L = atoi(c[3]); t->Hh = atoi(c[4]); snprintf(t->rel, sizeof t->rel, "%s", c[5]);
         for (i = 0; t->name[i]; i++) if (t->name[i] == '_') t->name[i] = ' ';
         GdipLoadImageFromFile(t->png, &t->img); add++;

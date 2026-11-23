@@ -237,7 +237,7 @@ static double big_of(double mm) { return ft_figure() ? 1.0 : mm >= 59.9 ? 1.2 : 
 /* split on whitespace into a static word array (borrowed copies) */
 typedef struct { char *buf; char *w[256]; int n; } Words;
 static void words(Words *W, const char *s) {
-    char *p; W->n = 0; W->buf = (char *)LM(strlen(s) + 1); strcpy(W->buf, s); p = W->buf;
+    char *p; W->n = 0; W->buf = (char *)LM(strlen(s) + 1); memcpy(W->buf, s, strlen(s) + 1);          /* sized to fit above */ p = W->buf;
     for (;;) {
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f' || *p == '\v') p++;
         if (!*p) break;
@@ -593,7 +593,7 @@ static char *layout_facts(Sc *sc) {          /* layout_facts(sc) */
         for (i = 0; i < nk; i++) key[i] = -ks[i].a;
         if (nk) R_(px_sorted_idx(key, nk, 1, idx) == 0 ? 0 : SC_ERR);
         for (i = 0; i < nk && i < 3; i++) if (ks[idx[i]].a > da) {
-            char *t = (char *)LM(strlen(ks[idx[i]].k->s) + 1), *q; strcpy(t, ks[idx[i]].k->s);
+            char *t = (char *)LM(strlen(ks[idx[i]].k->s) + 1), *q; memcpy(t, ks[idx[i]].k->s, strlen(ks[idx[i]].k->s) + 1);          /* sized to fit above */
             for (q = t; *q; q++) if (*q == '_') *q = ' ';
             top[ntop++] = t;
         }

@@ -16,6 +16,11 @@ set OUT=..\bbb_kit.exe
 if not "%~1"=="" set OUT=%~1
 rem previews.bin: the Models window's pictures, packed into the exe. Missing: a placeholder, made right after the first link
 if not exist previews.bin (echo BBPV0) > previews.bin
+rem the text-copy guard (2026-11-23: a 335-character hint copied with wcscpy into a 300-character buffer overwrote the window
+rem handle and froze the window): no plain wcscpy / wcscat / strcpy / strcat / sprintf in gui\ or cport\; use cport\safestr.h
+rem (WCOPY, WCAT, SCOPY, SCAT, wcs_bcopy ...). A line marked safestr-ok is let through.
+findstr /R /N /C:"\<wcscpy(" /C:"\<wcscat(" /C:"\<strcpy(" /C:"\<strcat(" /C:"\<sprintf(" *.c ..\cport\*.c ..\cport\*.cpp 2>nul | findstr /V "safestr-ok" > "%TEMP%\bbb_unsafe_copies.txt"
+for %%A in ("%TEMP%\bbb_unsafe_copies.txt") do if %%~zA gtr 0 (echo Unbounded text copies [use cport\safestr.h]: & type "%TEMP%\bbb_unsafe_copies.txt" & exit /b 1)
 set PASS=1
 set KITVER=
 if exist ..\VERSION set /p KITVER=<..\VERSION

@@ -10,6 +10,7 @@
    Included by runner.c (it uses the runner's helpers). */
 int bsdde_model_row(int i, const char **style, const char **name, const char **rel, double *mm);          /* bld_sd_models.c (bld_sdde.h clashes with the runner) */
 #include "features.h"
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include "models.h"
 #include "shot.h"
 typedef struct { const char *rel, *name; char styles[1200]; double L, real, Lmm, Hmm; char png[MAX_PATH * 3]; Mesh m; int ok; } MvEnt;
@@ -63,7 +64,7 @@ static int job_models(const char *pack) {
             E[ne].real = sdr_real_of(st, nm, &r, &d) && r > 0 ? r : 0; E[ne].L = mm;          /* mm: classic mm a model unit, for one with no real size */
             ne++;
         }
-        if (!strstr(E[j].styles, st) && strlen(E[j].styles) + strlen(st) + 3 < sizeof E[j].styles) { if (E[j].styles[0]) strcat(E[j].styles, ", "); strcat(E[j].styles, st); }
+        if (!strstr(E[j].styles, st) && strlen(E[j].styles) + strlen(st) + 3 < sizeof E[j].styles) { if (E[j].styles[0]) SCAT(E[j].styles, ", "); SCAT(E[j].styles, st); }
     }
     ev("log", "s", "text", "Models preview: rendering the models the kit uses");
     todo = (int *)malloc(sizeof(int) * (size_t)(ne ? ne : 1));

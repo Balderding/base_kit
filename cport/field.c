@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <math.h>
 #include "field.h"
 #include "pyx.h"
@@ -224,7 +225,7 @@ static GEOSGeometry *rd_g(Rd *r) {
 static void sk_add(char *sk, int len, const char *line) {          /* skipped: one line per failed step, no repeats */
     size_t L = strlen(line); const char *p = sk;
     while ((p = strstr(p, line))) { if ((p == sk || p[-1] == '\n') && p[L] == '\n') return; p += L; }
-    if (strlen(sk) + L + 2 < (size_t)len) { strcat(sk, line); strcat(sk, "\n"); }
+    if (strlen(sk) + L + 2 < (size_t)len) { str_bcat(sk, (size_t)len, line); str_bcat(sk, (size_t)len, "\n"); }
 }
 
 /* one step on the tiles it reaches, one after another (Field._apply); 0 = it failed somewhere (the tiles before it keep it) */

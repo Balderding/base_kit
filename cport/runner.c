@@ -3,6 +3,7 @@
    --core-layout (the old Python bridge only with BBB_LAYOUT_PYTHON=1, for debugging).
    Plain C, Windows (CreateProcess for the helpers, threads for the workers). */
 #include <windows.h>
+#include "safestr.h"          /* bounded text copies (2026-11-23) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -309,7 +310,7 @@ static SRWLOCK SPAWN = SRWLOCK_INIT;          /* one child started at a time (th
 static void core_exe(WCHAR *w);
 static int find_python(WCHAR *py) {
     WCHAR e[MAX_PATH];
-    if (GetEnvironmentVariableW(L"BBB_PYTHON", e, MAX_PATH) && GetFileAttributesW(e) != INVALID_FILE_ATTRIBUTES) { wcscpy(py, e); return 1; }
+    if (GetEnvironmentVariableW(L"BBB_PYTHON", e, MAX_PATH) && GetFileAttributesW(e) != INVALID_FILE_ATTRIBUTES) { wcs_bcopy(py, MAX_PATH, e); return 1; }
     return SearchPathW(NULL, L"python.exe", NULL, MAX_PATH, py, NULL) > 0;          /* no fixed install path: BBB_PYTHON or PATH */
 }
 typedef struct { const char *k, *v; } EnvSet;          /* v NULL: removed */
@@ -511,7 +512,7 @@ typedef struct { HANDLE h; Sb s; } RdJob;
 static DWORD WINAPI rd_thread(void *a) { RdJob *j = a; char b[1 << 16]; DWORD got; while (ReadFile(j->h, b, sizeof b, &got, NULL) && got) sb_add(&j->s, b, got); return 0; }
 static void core_exe(WCHAR *w) {          /* BBB_CORE_EXE, else this exe when the runner is inside bbb_kit.exe, else bbb_kit.exe beside it */
     WCHAR e[MAX_PATH * 2];
-    if (GetEnvironmentVariableW(L"BBB_CORE_EXE", e, MAX_PATH * 2)) { wcscpy(w, e); return; }
+    if (GetEnvironmentVariableW(L"BBB_CORE_EXE", e, MAX_PATH * 2)) { wcs_bcopy(w, MAX_PATH * 2, e); return; }
     HMODULE h = NULL; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)(void *)core_exe, &h);
     GetModuleFileNameW(h, w, MAX_PATH * 2); size_t n = wcslen(w);
     if (n > 4 && !_wcsicmp(w + n - 4, L".exe")) return;
@@ -597,7 +598,7 @@ static int mesh_f32_clean(Mesh *m) {
 /* loose slivers (2026-11-21): a part of the mesh under 1 mm2 that does not reach the bottom (left by a cut at a detail's edge)
    does not print and makes slicers warn: its faces are left out. Parts are faces joined through edges at the same place. */
 static int sl_find(int *p, int i) { while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; } return i; }
-static const double *vs_v; static int vs_cmp(const void *a, const void *b) {
+static _Thread_local const double *vs_v; static int vs_cmp(const void *a, const void *b) {          /* per thread: up to 4 bases sort at once (a shared vs_v crashed a 4-base build, 2026-11-23) */
     const double *x = vs_v + 3 * (size_t)*(const int *)a, *y = vs_v + 3 * (size_t)*(const int *)b;
     for (int k = 0; k < 3; k++) { if (x[k] < y[k]) return -1; if (x[k] > y[k]) return 1; } return 0;
 }
@@ -1493,7 +1494,7 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
                             for (int k = 0; k < n; k++) { double x = xy[2 * k], y = xy[2 * k + 1], e = sqrt((x / r) * (x / r) + (y / ry) * (y / ry)); if (e > 0.95) { xy[2 * k] = x * 0.95 / e; xy[2 * k + 1] = y * 0.95 / e; } }
                         }
                         {   /* on the ground the model stands on (cleared and level): the commonest surface height in the space, in 0.1 mm steps */
-                            static int hist[400]; int best = -1; memset(hist, 0, sizeof hist);
+                            int hist[400]; int best = -1; memset(hist, 0, sizeof hist);          /* not static: every worker thread builds a base at once (a shared one mixed their counts) */
                             for (int i = 0; i < soup.nv; i++) { double x = soup.v[3 * i], y = soup.v[3 * i + 1], z = soup.v[3 * i + 2];
                                 if ((box ? fabs(x) <= hx && fabs(y) <= hy : x * x + y * y <= rad * rad) && x * x + y * y < 0.9 * r * r && z > 1.0 && z < 40.0) hist[(int)(z * 10)]++; }
                             for (int q = 0; q < 400; q++) if (hist[q] && (best < 0 || hist[q] > hist[best])) best = q;
@@ -1670,7 +1671,7 @@ int runner_main(int argc, char **argv, runner_out_fn out, void *ctx) {
     Args a = { argc, av };
     if (a.argc >= 1 && !strcmp(a.argv[0], "themes")) {          /* --job themes [--out file]: every built-in theme, to copy into themes.json */
         extern int kd_themes_write(const char *path); char p[MAX_PATH * 3]; const char *o = opt(&a, "--out", "");
-        if (o[0]) snprintf(p, sizeof p, "%s", o); else { WCHAR w[MAX_PATH]; GetModuleFileNameW(NULL, w, MAX_PATH); WCHAR *s = wcsrchr(w, L'\\'); if (s) *s = 0; WideCharToMultiByte(CP_UTF8, 0, w, -1, p, (int)sizeof p - 24, NULL, NULL); strcat(p, "\\themes.builtin.json"); }
+        if (o[0]) snprintf(p, sizeof p, "%s", o); else { WCHAR w[MAX_PATH]; GetModuleFileNameW(NULL, w, MAX_PATH); WCHAR *s = wcsrchr(w, L'\\'); if (s) *s = 0; WideCharToMultiByte(CP_UTF8, 0, w, -1, p, (int)sizeof p - 24, NULL, NULL); SCAT(p, "\\themes.builtin.json"); }
         int r3 = kd_themes_write(p); if (r3 == 0) ev("done", "ss", "job", "themes", "file", p); else ev("error", "s", "text", "the themes file could not be written");
         free(av); return r3 ? 2 : 0;
     }
