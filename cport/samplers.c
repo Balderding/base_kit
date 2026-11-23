@@ -897,17 +897,44 @@ void sm_tag_all(SmTag *fns, const char *const *names, const int *same, int n) {
        return P, d */
 typedef struct { const GEOSGeometry **v; int n, cap; } GPtrs;
 static void gp_push(GPtrs *l, const GEOSGeometry *g) { if (l->n >= l->cap) { l->cap = l->cap ? 2 * l->cap : 256; l->v = (const GEOSGeometry **)realloc((void *)l->v, sizeof(*l->v) * (size_t)l->cap); } l->v[l->n++] = g; }
+/* PLAN-threads A: the buffer test's answer per polygon, kept for the layout (cleared by sm_bare_memo_clear). A hit needs
+   the same Geo id (never reused), the same geometry pointer, area, bounds and lim, all bit-equal. */
+typedef struct { unsigned long long uid; const GEOSGeometry *g; double lim, area, bb[4]; int empty; } BareMemo;
+static BareMemo *bmemo; static int bmemo_cap, bmemo_n; long long bare_memo_hits, bare_memo_miss;
+void sm_bare_memo_clear(void) { if (bmemo) memset(bmemo, 0, sizeof(BareMemo) * (size_t)bmemo_cap); bmemo_n = 0; bare_memo_hits = bare_memo_miss = 0; }
+static int bm_same(const BareMemo *m, const Geo *q, double lim, double ar, const double *bb) {
+    return m->uid == q->uid && m->g == q->g && !memcmp(&m->lim, &lim, sizeof lim) && !memcmp(&m->area, &ar, sizeof ar) && !memcmp(m->bb, bb, sizeof m->bb);
+}
+static BareMemo *bm_slot(unsigned long long uid) {          /* open addressing; grows at half full */
+    if (bmemo_n * 2 >= bmemo_cap) {
+        int oc = bmemo_cap, i; BareMemo *old = bmemo;
+        bmemo_cap = oc ? oc * 2 : 4096; bmemo = (BareMemo *)calloc((size_t)bmemo_cap, sizeof(BareMemo)); bmemo_n = 0;
+        for (i = 0; i < oc; i++) if (old[i].uid) { BareMemo *d = bm_slot(old[i].uid); *d = old[i]; bmemo_n++; }
+        free(old);
+    }
+    {   size_t h = (size_t)(uid * 0x9E3779B97F4A7C15ull) & (size_t)(bmemo_cap - 1);
+        while (bmemo[h].uid && bmemo[h].uid != uid) h = (h + 1) & (size_t)(bmemo_cap - 1);
+        return &bmemo[h]; }
+}
 static int bare_one(const GeoList *ps, double lim, double big, GPtrs *small, GPtrs *rings) {
     int j;
     for (j = 0; j < ps->n; j++) {
-        Geo *q = ps->v[j]; int e;
+        Geo *q = ps->v[j]; int e; double ar, bb[4]; BareMemo *m;
         if (!q) continue;
         if ((e = is_empty(q)) < 0) return SC_ERR;
         if (e) continue;
-        if (area(q) < big * 0.5) { gp_push(small, q->g); continue; }
-        {   GEOSGeometry *b = shp_buffer(q->g, -lim * 0.9, 4, SHP_CAP_ROUND, SHP_JOIN_ROUND, 5.0, 0);
+        ar = area(q);
+        if (ar < big * 0.5) { gp_push(small, q->g); continue; }
+        shp_bounds(q->g, bb); m = bm_slot(q->uid);
+        if (bm_same(m, q, lim, ar, bb)) { e = m->empty; bare_memo_hits++; }
+        else {
+            GEOSGeometry *b = shp_buffer(q->g, -lim * 0.9, 4, SHP_CAP_ROUND, SHP_JOIN_ROUND, 5.0, 0);
             if (!b) return SC_ERR;
             e = shp_is_empty(b); shp_free(b);
+            if (!m->uid) bmemo_n++;
+            m->uid = q->uid; m->g = q->g; m->lim = lim; m->area = ar; memcpy(m->bb, bb, sizeof bb); m->empty = e; bare_memo_miss++;
+        }
+        {
             if (e) gp_push(small, q->g);
             else {
                 const GEOSGeometry *ex = shp_exterior(q->g);

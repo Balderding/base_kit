@@ -2,6 +2,7 @@
    work\cscene\runner\layout_bridge.py, which held the last Python of a job). */
 #include <windows.h>
 #include "thrdiag.h"
+extern long long bare_memo_hits, bare_memo_miss;          /* samplers.c, PLAN-threads A */
 #include <psapi.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -459,6 +460,7 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
     memset(&out, 0, sizeof out); sf_s3d = bs_s3d = ns_s3d = &out.s3d;
     debug_hooks();
     memset(&thr_diag, 0, sizeof thr_diag);          /* PLAN-threads step 0 */
+    { void sm_bare_memo_clear(void); sm_bare_memo_clear(); }          /* PLAN-threads A: a new layout, a new memo */
     ULONGLONG tl0 = GetTickCount64();          /* speed plan step 1: the scene / the command groups / the shells, in seconds */
     s = mk_make(style, n, &out, &err);
     ULONGLONG tl1 = GetTickCount64();
@@ -515,7 +517,7 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
                 if (pg) pg(GetCurrentProcess(), &pm, sizeof pm);
                 fprintf(df, "%s scene %.0f setup %.0f make %.0f pre %.0f final %.0f finds %ld tries %ld accepted %ld hist", s->name, (double)(tl1 - tl0), thr_diag.setup, thr_diag.make, thr_diag.pre, thr_diag.final_, thr_diag.finds, thr_diag.tries, thr_diag.accepted);
                 for (int q = 0; q < 12; q++) fprintf(df, " %ld", thr_diag.acc_hist[q]);
-                fprintf(df, " | groups %.0f | shells %.0f s3 %.0f smooth %.0f chains %ld chain_max %.0f ork %.0f | peak %.0f MB\n", (double)(tl2 - tl1), (double)(tl3 - tl2), thr_diag.shells_s3, thr_diag.shells_smooth, thr_diag.chains, thr_diag.chain_max, thr_diag.shells_ork, pm.PeakWorkingSetSize / 1048576.0);
+                fprintf(df, " bare memo %lld/%lld | groups %.0f | shells %.0f s3 %.0f smooth %.0f chains %ld chain_max %.0f ork %.0f | peak %.0f MB\n", bare_memo_hits, bare_memo_hits + bare_memo_miss, (double)(tl2 - tl1), (double)(tl3 - tl2), thr_diag.shells_s3, thr_diag.shells_smooth, thr_diag.chains, thr_diag.chain_max, thr_diag.shells_ork, pm.PeakWorkingSetSize / 1048576.0);
                 fclose(df); } }
         h = mgj_dict();
         mgj_set(&h, "t_scene", mgj_float((tl1 - tl0) / 1000.0)); mgj_set(&h, "t_input", mgj_float((tl2 - tl1) / 1000.0)); mgj_set(&h, "t_shells", mgj_float((tl3 - tl2) / 1000.0));

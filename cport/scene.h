@@ -21,7 +21,7 @@
 #define SC_ERR (-1)
 
 /* ---------------- geometry handles ---------------- */
-typedef struct Geo { GEOSGeometry *g; int rc; } Geo;
+typedef struct Geo { GEOSGeometry *g; int rc; unsigned long long uid; } Geo;          /* uid: never reused in a process (samplers.c bare memo) */
 Geo *geo_new(GEOSGeometry *g);            /* takes g over (NULL -> NULL); rc = 1 */
 Geo *geo_ref(Geo *g);                     /* rc + 1, returns g (NULL is fine) */
 void geo_unref(Geo *g);                   /* rc - 1, frees at 0 (NULL is fine) */

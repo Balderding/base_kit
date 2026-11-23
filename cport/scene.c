@@ -3,6 +3,7 @@
    any of them (the Scene classes are skipped whole, the T_* functions are in sizefix.SKIP), so this is the source as
    written. The geometry is cport\shp.c (shapely 2.2.0's own GEOS calls); the leaves are cport\leaf.c. */
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -30,7 +31,8 @@ int scene_config(double base_mm, int mesh, double ts, double max_h, int chamfer_
 }
 
 /* ======================= handles and lists ======================= */
-Geo *geo_new(GEOSGeometry *g) { Geo *h; if (!g) return NULL; h = (Geo *)malloc(sizeof *h); h->g = g; h->rc = 1; return h; }
+static _Atomic unsigned long long geo_uids;          /* PLAN-threads A: every Geo gets a new id, never reused */
+Geo *geo_new(GEOSGeometry *g) { Geo *h; if (!g) return NULL; h = (Geo *)malloc(sizeof *h); h->g = g; h->rc = 1; h->uid = ++geo_uids; return h; }
 Geo *geo_ref(Geo *g) { if (g) g->rc++; return g; }
 void geo_unref(Geo *g) { if (g && --g->rc == 0) { shp_free(g->g); free(g); } }
 static void grow(void **v, int *cap, int n, size_t sz) { if (n >= *cap) { *cap = *cap ? *cap * 2 : 8; *v = realloc(*v, sz * (size_t)*cap); } }
