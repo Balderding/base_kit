@@ -1238,7 +1238,18 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
         const char *v = VARIANTS[k];
         EnterCriticalSection(&rs->lock);
         if (k == 0) rs_print("  >> %s  building", R->base); else rs_print("  >> %s  retry with fresh variant %s", R->base, v);
-        ev(k == 0 ? "start" : "retry", "si", "seed", rs->salt, "n", n);          /* gui_job: the ">>" line */
+        if (k == 0) ev("start", "si", "seed", rs->salt, "n", n);          /* gui_job: the ">>" line */
+        else {          /* PLAN-next step 2: why the picked design was not kept, in a few words, for its card */
+            const char *r = R->ntries ? R->tries[R->ntries - 1].reason : NULL, *w;
+            if (!r) w = "failed";
+            else if (strstr(r, "too similar")) w = "was too like a design built just before";
+            else if (strstr(r, "came out flat")) w = "came out with a flat top";
+            else if (strstr(r, "pieces dropped")) w = "lost too many of its pieces";
+            else if (strstr(r, "loose piece") || strstr(r, "watertight") || strstr(r, "solid")) w = "was not one closed solid";
+            else if (strstr(r, "over ") && strstr(r, "limit")) w = "took too long";
+            else w = "failed the print check";
+            ev("retry", "sis", "seed", rs->salt, "n", n, "why", w);
+        }
         LeaveCriticalSection(&rs->lock);
         Bridge *br = rs_bridge(rs); Built B; build_once(rs, br, n, v, &B); rs_give_back(rs, br);
         char stl[MAX_PATH * 3]; snprintf(stl, sizeof stl, "%s\\%s\\%s.stl", rs->out, rs->style, R->base);

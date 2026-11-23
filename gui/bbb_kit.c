@@ -419,7 +419,7 @@ static void on_line(int mode, const WCHAR *t) {
         for (i = ncell - 1; i >= 0; i--) if (cells[i].state == ST_PENDING) { memmove(&cells[i], &cells[i + 1], (ncell - i - 1) * sizeof(Cell)); ncell--; break; }
         logw(t); redraw(); return;
     }
-    if (!wcscmp(ev, L"retry")) { if ((c = cell_of(t))) c->retry = 1; redraw(); return; }
+    if (!wcscmp(ev, L"retry")) { if ((c = cell_of(t))) { WCHAR w[160] = L""; c->retry = 1; jstr(t, L"why", w, 160); if (w[0]) swprintf(c->why, 220, L"rebuilt as a new variant: the picked design %ls", w); } redraw(); return; }          /* step 2: the reason kept for the card */
     if (!wcscmp(ev, L"built") && (c = cell_of(t))) {
         if (c->lv) c->lv->tEnd = now_unix();          /* its row over time ends here */
         if (lvView == 2 && c - cells == bigNow) { shrinkI = (int)(c - cells); shrinkT = GetTickCount(); shrinkFrom = bigR; SetTimer(hMain, 5, 30, NULL); }          /* the Big view's base goes back down into its card */
@@ -430,7 +430,7 @@ static void on_line(int mode, const WCHAR *t) {
             if (jstr(t, L"img3c", path, MAX_PATH) && path[0]) GdipLoadImageFromFile(path, &c->img3c);          /* the colour view (the COLOUR toggle) */
             c->col = colLast && c->img3c;
             if (jstr(t, L"img2", path, MAX_PATH) && path[0]) { GpImage *d2 = NULL; GdipLoadImageFromFile(path, &d2); if (d2) { if (c->img) GdipDisposeImage(c->img); c->img = d2; } }          /* the drawing of what was really built */
-            if (c->state == ST_VARIANT) { WCHAR th[64]; if (jstr(t, L"theme", th, 64) && th[0]) wcscpy(c->theme, th); wcscpy(c->why, L"The picked design failed the print check, so the kit built a fresh variant in its place. Click to show its STL file."); }
+            if (c->state == ST_VARIANT) { WCHAR th[64]; if (jstr(t, L"theme", th, 64) && th[0]) wcscpy(c->theme, th); if (wcsncmp(c->why, L"rebuilt as", 10)) wcscpy(c->why, L"The picked design failed the print check, so the kit built a fresh variant in its place. Click to show its STL file."); }
         } else { c->state = ST_FAIL; jstr(t, L"why", c->why, 220); nBad++; }
         c->picked = 0; doneN++; swprintf(head, 200, L"Building: %d of %d done", doneN, wanted); redraw();
         if (selftest == 3 && !demoShot && doneN == 2) { WCHAR q[MAX_PATH]; demoShot = 1; anim = 9; swprintf(q, MAX_PATH, L"%ls.2_building.bmp", stShot); capture(q); }
@@ -899,7 +899,11 @@ static void card(int i, int x, int y, int w, int h) {
         if (c->retry) { WCHAR r2[160]; swprintf(r2, 160, L"new variant: %ls", st); wcscpy(st, r2); }
         txt(st, x + pad, capY + S(20), iw, S(18), fSmall, C_ACC, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS); break; }
     case ST_OK: swprintf(b, 160, L"BUILT  %.0f s", c->secs); pill(b, x + pad, capY + S(20), S(96), S(18), C_ACC, C_ONACC); break;
-    case ST_VARIANT: { int pw = c->img3c ? iw - S(86) : iw; pill(L"built as a new variant", x + pad, capY + S(20), pw < S(160) ? pw : S(160), S(18), C_GOLD, C_ONGOLD); break; }          /* room for the COLOUR toggle */
+    case ST_VARIANT: {          /* room for the COLOUR toggle; step 2: why, beside the label (cut with ..., the whole reason in its tooltip) */
+        int room = c->img3c ? iw - S(86) : iw, pw = S(92) < room ? S(92) : room;
+        pill(L"new variant", x + pad, capY + S(20), pw, S(18), C_GOLD, C_ONGOLD);
+        if (room - pw - S(6) > S(20) && !wcsncmp(c->why, L"rebuilt as", 10)) txt(c->why + 26, x + pad + pw + S(6), capY + S(20), room - pw - S(6), S(18), fSmall, C_GOLD, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        break; }
     case ST_FAIL: {          /* F3 (2026-11-22): why, on the card itself (cut with ..., the whole reason in its tooltip), not only in Details */
         int pw = S(72) < iw ? S(72) : iw;
         pill(L"not built", x + pad, capY + S(20), pw, S(18), C_GOLD, C_ONGOLD);
@@ -2026,7 +2030,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                 else { swprintf(p2, MAX_PATH, L"%ls.tip.txt", stShot); tf = _wfopen(p2, L"w"); if (tf) { fprintf(tf, "OK cut 0" "\n"); fprintf(tf, "sidew %d main_need %d lookW %d scale %.2f" "\n", sideW, main_need(), lookW, SC); fclose(tf); } }
             }
             if (GetEnvironmentVariableA("BBB_LOOK_SAMPLES", NULL, 0)) {          /* F1: cards building, built, failed, waiting, for the contrast test */
-                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; cells[4].state = ST_FAIL; wcscpy(cells[4].why, L"print check: too similar to urban_40mm_02 (12% different)"); cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
+                cells[1].state = ST_BUILDING; cells[2].state = ST_OK; cells[2].secs = 38; cells[3].state = ST_VARIANT; wcscpy(cells[3].why, L"rebuilt as a new variant: the picked design was not one closed solid"); cells[4].state = ST_FAIL; wcscpy(cells[4].why, L"print check: too similar to urban_40mm_02 (12% different)"); cells[7].state = ST_PENDING; busy = 2; wanted = 8; doneN = 3; anim = 5; }
             capture(stShot);
             if (GetEnvironmentVariableA("BBB_TEST_TEXTS", NULL, 0)) {          /* F1: every text's box and colour, for work\\rest\\contrast.py */
                 WCHAR p2[MAX_PATH]; FILE *tf; int k; swprintf(p2, MAX_PATH, L"%ls.texts.txt", stShot); tf = _wfopen(p2, L"w, ccs=UTF-8");
