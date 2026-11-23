@@ -8,7 +8,7 @@ static void ui_state(char *s, size_t n) {
              selStyle, selSize, selDetail, selMini, selCount, selSup, selJoin, selScale, selObj, mfOn[0], mfOn[1], mfOn[2], mfOn[3], spThr, spGpu, lookPix, lookTex, lookFont,
              lvView, lvParts, lvCores, lvGpu, lvShape, lvTime, lvRows, showDetails, showHelp, pk, ncell > 0 ? cells[0].col : 0, selTheme, selStr, seedEdit * 1000 + (int)strlen(seedBuf), sizeMulti, sizeMask, setSave, selPrinter);
 }
-static const char *KN[] = { "none", "style", "size", "detail", "mini", "count", "overhangs", "show", "more", "all", "clear", "go", "stop", "open", "details", "card", "help", "quick", "scale", "oval", "look", "speed", "view", "parts", "colour", "join", "manifold", "objsize", "models", "theme", "seed", "strength", "several", "set", "printer", "square", "fold" };
+static const char *KN[] = { "none", "style", "size", "detail", "mini", "count", "overhangs", "show", "more", "all", "clear", "go", "stop", "open", "details", "card", "help", "quick", "scale", "oval", "look", "speed", "view", "parts", "colour", "join", "manifold", "objsize", "models", "theme", "seed", "strength", "several", "set", "printer", "square", "fold", "plate" };
 static void ui_check(const WCHAR *tag) {
     WCHAR p[MAX_PATH]; FILE *f; RECT c; int i, j, nh, bad = 0, nclick = 0, nnochange = 0; struct { RECT r; int kind, idx; } H[400]; char a[400], b[400];
     swprintf(p, MAX_PATH, L"%ls.%ls.uicheck.txt", stShot, tag); f = _wfopen(p, L"w"); if (!f) return;
@@ -27,7 +27,7 @@ static void ui_check(const WCHAR *tag) {
     }
     for (i = 0; i < nh; i++) {          /* click each safe one where it is drawn: it must change the state; then put it back */
         int k = H[i].kind, cx = (H[i].r.left + H[i].r.right) / 2, cy = (H[i].r.top + H[i].r.bottom) / 2, keep[40], m = 0, *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3], &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvParts, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &showHelp,
-                                                                                                                       &selTheme, &selStr, &seedEdit, &sizeMulti, &setSave, &selPrinter, &moreOpen };          /* review P2-5: the plan B rows put back too */
+                                                                                                                       &selTheme, &selStr, &seedEdit, &sizeMulti, &setSave, &selPrinter, &moreOpen, &platePick };          /* review P2-5: the plan B rows put back too */
         int nv = (int)(sizeof V / sizeof V[0]), pk[MAXC], q; unsigned kmask = sizeMask; char kseed[16]; strcpy(kseed, seedBuf);
         if (k == H_SHOW || k == H_GO || k == H_QUICK || k == H_MORE || k == H_FOLD || k == H_STOP || k == H_OPEN || k == H_NONE || k == H_MODELS) continue;
         if (cy < 0 || cy >= c.bottom || cx < 0 || cx >= c.right) continue;

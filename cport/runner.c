@@ -1535,6 +1535,7 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
         } else ev("built", "sibs", "seed", P->seed, "n", n, "ok", 0, "why", "the runner said OK but there is no STL file");
     }
 }
+#include "plate3mf.c"          /* the print plate: the picked bases in one 3MF (the user, 2026-11-22) */
 static int job_build(Args *a, const char *style) {
     const char *size = opt(a, "--size", "30"), *mini = opt(a, "--mini", ""), *sup = opt(a, "--supports", ""), *join = opt(a, "--join", ""), *smaller = opt(a, "--smaller", ""), *strict = opt(a, "--strict", ""), *picks = opt(a, "--picks", ""), *scale_s = opt(a, "--scale", "");
     const char *smooth = opt(a, "--smooth", ""), *rocks = opt(a, "--rocks", "");          /* smooth details, organic rocks on|off */
@@ -1633,6 +1634,9 @@ static int job_build(Args *a, const char *style) {
         okc += P.okc; bad += P.bad;
         free(seen); free(rs.envw); free(rs.res); for (int i = 0; i < rs.nrecent; i++) free(rs.recent[i].H); free(rs.recent); free(rs.free_br); DeleteCriticalSection(&rs.lock);
     }
+    {   int pv = on_off(opt(a, "--plate", ""));          /* the print plate: --plate on|off, else settings print_plate (OFF by default) */
+        if (pv < 0) pv = cfg_bool("print_plate", 0);
+        if (pv && okc) plate_write(dest, printer_resin()); }
     ev("done", "siis", "job", "build", "ok", okc, "failed", bad, "folder", dest);
     for (int g = 0; g < ng; g++) { free(seeds[g]); free(nums[g]); }
     return 0;

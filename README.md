@@ -80,6 +80,11 @@ The keys that were there before still work: Enter, Esc, Ctrl+A, D, L, T, F, digi
 **A picture of a theme.** Rest the mouse on the chosen theme: a drawing of one base of that theme appears. It is made
 once and kept in `out\theme_samples`.
 
+**A print plate: one 3MF of all the picked bases.** Under "More settings", "Also a print plate" (or `print_plate` in
+settings.json, `--plate on` on the command line) writes `plate.3mf` beside the STLs. Each base is its own object, laid
+out on the printer's bed 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm, from the Printer setting); what does not fit
+goes on `plate_2.3mf` and on. Open it in the slicer: one object per base. The STLs are not changed. Off by default.
+
 **Two new ground settings, OFF by default** (see the settings table). They are waiting for the printed look before they
 could become defaults:
 - `feet_pad`: a clear spot of plain textured ground for the figure's feet.
@@ -689,6 +694,7 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `min_part_mm` | 0.5 | Object parts thinner than this are trimmed (or the object thickened first). 0 = off |
 | `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
 | `cart_on_track` | true | A cart by a track stands on its rails |
+| `print_plate` | false | Also writes `plate.3mf` (and `plate_2.3mf` ...): all the picked bases on the printer's bed, one object each, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). The STLs are unchanged |
 | `feet_pad` | false | A clear spot for the figure's feet where it stands: an oval about 18 x 12 mm for a 32 mm figure (1.5 times for many-legged models, a tank's box for tracked ones) keeps only the ground and its texture; low rails and floors passing under it stay |
 | `small_base_cap` | false | On a base under 33 mm at most 4 details (under 27 mm) or 5; the ones laid last go first. The ground, cracks and texture stay |
 | `edge_wear` | true | Stone slabs, flagstones, headstones, tombs and steps get a few angular chips out of their edges (about 0.9 mm for FDM, 0.6 mm for resin) |

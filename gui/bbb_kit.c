@@ -82,13 +82,14 @@ static int sideW = SIDE_W0, sideWant = SIDE_W0;          /* sideWant: what the u
 enum { DET_H0 = 170, DET_MIN = 110 };
 static int detailsH = DET_H0, detWant = DET_H0;          /* R2: the Details pane's height in design px, dragged by the line above it; detWant saved as detailsh */
 static int cardFocus = -1, gridCols = 1, gridRowH = 1, gridVH = 1, gridPad = 0;          /* U3: the card the arrows are on (-1 none), and the grid as last drawn */
+static int platePick;          /* the print plate (--plate on): the picked bases in one 3MF beside their STLs; OFF by default, saved as plate */
 static int moreOpen;          /* U2: the side panel's "More settings" fold is open (saved as more in bbb_kit.ini; tests: open unless BBB_TEST_MORE=0) */
 static int divDrag, divHover;          /* R1 / R2: which line is being dragged / is under the mouse: 1 the side panel's, 2 the Details pane's */
 #define SIDE_W sideW
 enum { HEAD_H = 74, STRIP_H = 30, FOOT_H = 66, MAXC = 80, MAXLOG = 300 };
 enum { ST_PENDING, ST_NONE, ST_BUILDING, ST_OK, ST_VARIANT, ST_FAIL };
 enum { H_NONE, H_STYLE, H_SIZE, H_DETAIL, H_MINI, H_COUNT, H_SUP, H_SHOW, H_MORE, H_ALL, H_CLEAR, H_GO, H_STOP, H_OPEN, H_DETAILS, H_CARD, H_HELP, H_QUICK, H_SCALE, H_OVAL, H_LOOK, H_SPEED, H_VIEW, H_PARTS, H_COL, H_JOIN, H_MF, H_OBJ, H_MODELS,
-       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER, H_SQ, H_FOLD };
+       H_THEME, H_SEED, H_STR, H_MULTI, H_SET, H_PRINTER, H_SQ, H_FOLD, H_PLATE };
 
 struct LiveC;          /* a building card's live view (below, "the live view") */
 typedef struct { char seed[16], size[16]; int n, tier, picked, state, retry, col; GpImage *img, *img3, *img3c; double secs; WCHAR theme[64], why[220], stl[MAX_PATH]; struct LiveC *lv; } Cell;
@@ -374,6 +375,7 @@ static void build(void) {
     if (curSup) wcscat(extra, curJoin ? L" --supports on --join on" : L" --supports on --join off");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
     theme_opt(extra, 400); swprintf(extra + wcslen(extra), 48, L" --strength %hs --printer %hs", STRENGTHS[selStr], selPrinter ? "resin" : "fdm");
+    if (platePick) wcscat(extra, L" --plate on");          /* the print plate, only when on */
     for (i = 0; i < MF_N; i++) swprintf(extra + wcslen(extra), 24, L" --%hs %ls", MFA[i], mfOn[i] ? L"on" : L"off");          /* the MANIFOLD switches */
     if (batchFolder[0]) swprintf(extra + wcslen(extra), 80, L" --folder %ls", batchFolder);          /* several sizes: one folder for the batch (review P2-6 / N5) */
     swprintf(cmd, 2600, L"build %hs --size %hs --picks %ls%ls", curStyle, curSize, picks, extra);
@@ -1157,6 +1159,7 @@ static void paint(HDC out, int W, int H) {
     chips(L"GAME SCALE  (HOW TALL A MAN IS)", SCALES, 3, 3, selScale, H_SCALE, &y); obj_slider(&y);
     chips(L"STYLE STRENGTH  (2 = BOLDER FOR PAINT)", STRENGTHS, NSTR, 5, selStr, H_STR, &y);
     chips(L"PRINTER  (GRAIN AND SMALLEST DETAIL)", PRINTERS, 2, 2, selPrinter, H_PRINTER, &y);
+    chip("Also a print plate (one 3MF of all of them)", S(16), y, S(SIDE_W - 32), S(24), platePick, H_PLATE, 0); y += S(30);          /* the user, 2026-11-22 */
     {          /* the design seed: empty = new designs each time; type a word to get the same designs again */
         int x0 = S(16), wAll = S(SIDE_W - 32), bh = sideTight ? S(24) : S(26), cw = S(70) < wAll / 4 ? S(70) : wAll / 4; WCHAR sb[64];
         section(L"DESIGN SEED  (EMPTY = NEW EACH TIME)", x0, y, wAll, S(18)); y += S(20);
@@ -1485,7 +1488,7 @@ typedef struct { int v[40]; unsigned mask; char seed[16]; int n; char cs[MAXC][1
 static int **snap_vars(int *n) {
     static int *V[] = { &selStyle, &selSize, &selDetail, &selMini, &selCount, &selSup, &selJoin, &selScale, &selObj, &mfOn[0], &mfOn[1], &mfOn[2], &mfOn[3],
                         &spThr, &spGpu, &lookPix, &lookTex, &lookFont, &lvView, &lvCores, &lvGpu, &lvShape, &lvTime, &lvRows, &showDetails, &selTheme,
-                        &selStr, &sizeMulti, &selPrinter, &moreOpen };
+                        &selStr, &sizeMulti, &selPrinter, &moreOpen, &platePick };
     *n = (int)(sizeof V / sizeof V[0]); return V;
 }
 static void snap_take(Snap *s) {
@@ -1535,6 +1538,7 @@ static void act2(int kind, int idx) {
     case H_SIZE: if (sizeMulti) { sizeMask ^= 1u << idx; if (sizeMask & (1u << idx)) selSize = idx; } else selSize = idx; break;
     case H_OVAL: if (sizeMulti) { sizeMask ^= 1u << (NROUND + idx); if (sizeMask & (1u << (NROUND + idx))) selSize = NROUND + idx; } else selSize = NROUND + idx; break;
     case H_FOLD: moreOpen = !moreOpen; sideOff = 0; break;          /* U2: the settings fold */
+    case H_PLATE: platePick = !platePick; break;          /* the print plate */
     case H_SQ: { int q = NROUND + NOVAL + idx; if (sizeMulti) { sizeMask ^= 1u << q; if (sizeMask & (1u << q)) selSize = q; } else selSize = q; } break;
     case H_MULTI: sizeMulti = !sizeMulti; if (sizeMulti && !sizeMask) sizeMask = 1u << selSize; break;
     case H_THEME: { int nt = theme_count(); if (idx == 0) selTheme = 0; else if (nt) selTheme = (selTheme + idx + nt + 1) % (nt + 1); break; }
@@ -1662,6 +1666,7 @@ static void hover_at(int x, int y) {
             if (id >= 0 && id < 4) wcscpy(sub, mt[id]);
         }
         if (k == H_MULTI) wcscpy(sub, L"Several sizes at once: click each size you want (round or oval). \"Build straight away\" then builds that many bases for every size, one size after another.");
+        if (k == H_PLATE) wcscpy(sub, L"Print plate: besides each base's STL, one 3MF file (plate.3mf) with all the built bases laid out on the printer's bed, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). Open it in the slicer: one object per base. More than fit: plate_2.3mf and on.");
         if (k == H_THEME) wcscpy(sub, L"Theme: Any lets the kit choose among the style's themes. Step with < and > to make every base one theme; click the middle for Any again. A themes.json beside bbb_kit.exe adds your own.");
         if (k == H_PRINTER) wcscpy(sub, L"Printer: FDM (filament) gets a coarser ground grain, deep enough to print in layers, and keeps no detail under 3 mm. Resin gets the finer grain and keeps details down to 2 mm.");
         if (k == H_STR) wcscpy(sub, L"Style strength: 1 is the standard look. Higher gives deeper cracks, bolder rock shapes and chips and a coarser ground grain, which catch washes and drybrushing better; lower is softer.");
@@ -1697,6 +1702,7 @@ static void ini(int save) {
     wcscat(p, L"\\bbb_kit.ini");
     if (selftest) { WCHAR te[MAX_PATH]; if (!GetEnvironmentVariableW(L"BBB_TEST_INI", te, MAX_PATH)) return; wcscpy(p, te); }          /* a test: its own ini, never out\\bbb_kit.ini */
     if (save) { swprintf(v, 16, L"%d", moreOpen); WritePrivateProfileStringW(L"window", L"more", v, p); } else moreOpen = GetPrivateProfileIntW(L"window", L"more", 0, p) ? 1 : 0;          /* U2 */
+    if (save) { swprintf(v, 16, L"%d", platePick); WritePrivateProfileStringW(L"window", L"plate", v, p); } else platePick = GetPrivateProfileIntW(L"window", L"plate", 0, p) ? 1 : 0;          /* the print plate */
     if (save) { swprintf(v, 16, L"%d", sideWant); WritePrivateProfileStringW(L"window", L"sidew", v, p); swprintf(v, 16, L"%d", detWant); WritePrivateProfileStringW(L"window", L"detailsh", v, p); }          /* R1, R2 */
     else { sideW = sideWant = (int)GetPrivateProfileIntW(L"window", L"sidew", SIDE_W0, p); detailsH = detWant = (int)GetPrivateProfileIntW(L"window", L"detailsh", DET_H0, p); }
     if (save) {          /* the window's size and place, so it opens next time the way it was left */
