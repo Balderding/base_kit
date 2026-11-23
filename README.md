@@ -44,6 +44,32 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
+## What is new in 2.5: no more freezes or crashes while building, faster layouts
+
+![Sixteen bases built by 2.5, two of every size from 30 to 160 mm](examples/sheet_2.5.0.png)
+
+*Sixteen bases freshly built by 2.5 with the default settings: two of every size from 30 to 160 mm.*
+
+**Fixed.**
+- The window froze after "More settings" was opened: the hint of "Also a print plate" was too long for its space and
+  overwrote the window's own handle, so it stopped redrawing while clicks still worked. Every hint now fits, and the
+  build refuses code that could copy text past the end of its space.
+- The window went sluggish while bases were built: a job lowered the whole program's priority, the window too, for
+  good. Now only the building work runs low and the window stays quick, also with a game in front.
+- Crashes while several bases were built at once, and a base sometimes getting another base's ground grain: bases
+  building side by side shared some working memory. Each has its own now; four bases built together come out byte for
+  byte the same as each built alone.
+- `--workers N` on the command line is obeyed for builds.
+
+**Faster.** The layout is about a quarter quicker (the "never bare" check remembers its answer for shapes that did not
+change; up to 12 s less on a 160 mm base). Organic rocks are built on 2 threads a base, about a third quicker
+(`layout_threads` in settings.json: 1 = the old way, 3 = more speed).
+
+**A log for when something goes wrong.** `out\logs` holds one log a session: clicks, jobs, how the window closed, a
+heartbeat; a crash or a hang is written there with where in the code it happened, and a dump file.
+
+A base built on its own comes out exactly as in 2.4 (checked byte for byte).
+
 ## What is new in 2.4: faster, a print plate, keys for everything, a window you can arrange
 
 ![Sixteen bases built by 2.4, two of every size from 30 to 160 mm](examples/sheet_2.4.0.png)
@@ -455,14 +481,14 @@ STL files; `python tools\make_examples.py` makes a fresh set).
 <!-- EXAMPLES -->
 | Size | | |
 |---|---|---|
-| **30 mm** | ![swamp 30 mm](examples/030mm_1_swamp.png)<br>swamp: "serpent pool" | ![highland 30 mm](examples/030mm_2_highland.png)<br>highland: "sheepfold" |
-| **40 mm** | ![graveyard 40 mm](examples/040mm_1_graveyard.png)<br>graveyard: "crypt door" | ![forest 40 mm](examples/040mm_2_forest.png)<br>forest: "stream ford" |
-| **50 mm** | ![urban 50 mm](examples/050mm_1_urban.png)<br>urban: "bomb site" | ![coast 50 mm](examples/050mm_2_coast.png)<br>coast: "jetty" |
-| **60 mm** | ![sundered 60 mm](examples/060mm_1_sundered.png)<br>sundered: "collapsed arcade" | ![temple 60 mm](examples/060mm_2_temple.png)<br>temple: "sealed vault" |
-| **80 mm** | ![infestation 80 mm](examples/080mm_1_infestation.png)<br>infestation: "overrun cargo" | ![dungeon 80 mm](examples/080mm_2_dungeon.png)<br>dungeon: "treasure hoard" |
-| **100 mm** | ![frontier 100 mm](examples/100mm_1_frontier.png)<br>frontier: "storefront" | ![trederra 100 mm](examples/100mm_2_trederra.png)<br>trederra: "gun pit" |
-| **130 mm** | ![fortress 130 mm](examples/130mm_1_fortress.png)<br>fortress: "armoury" | ![cynder 130 mm](examples/130mm_2_cynder.png)<br>cynder: "forge altar" |
-| **160 mm** | ![mine 160 mm](examples/160mm_1_mine.png)<br>mine: "tunnel mouth" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "old diggings" |
+| **30 mm** | ![swamp 30 mm](examples/030mm_1_swamp.png)<br>swamp: "sunken shrine" | ![highland 30 mm](examples/030mm_2_highland.png)<br>highland: "standing stones" |
+| **40 mm** | ![graveyard 40 mm](examples/040mm_1_graveyard.png)<br>graveyard: "fresh grave" | ![forest 40 mm](examples/040mm_2_forest.png)<br>forest: "bear den" |
+| **50 mm** | ![urban 50 mm](examples/050mm_1_urban.png)<br>urban: "barricade" | ![coast 50 mm](examples/050mm_2_coast.png)<br>coast: "whale bones" |
+| **60 mm** | ![sundered 60 mm](examples/060mm_1_sundered.png)<br>sundered: "barricaded doorway" | ![temple 60 mm](examples/060mm_2_temple.png)<br>temple: "high altar" |
+| **80 mm** | ![infestation 80 mm](examples/080mm_1_infestation.png)<br>infestation: "egg chamber" | ![dungeon 80 mm](examples/080mm_2_dungeon.png)<br>dungeon: "summoning circle" |
+| **100 mm** | ![frontier 100 mm](examples/100mm_1_frontier.png)<br>frontier: "broken wagon" | ![trederra 100 mm](examples/100mm_2_trederra.png)<br>trederra: "field graves" |
+| **130 mm** | ![fortress 130 mm](examples/130mm_1_fortress.png)<br>fortress: "koi pond" | ![cynder 130 mm](examples/130mm_2_cynder.png)<br>cynder: "lava vent" |
+| **160 mm** | ![mine 160 mm](examples/160mm_1_mine.png)<br>mine: "tunnel mouth" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "carcass in the wash" |
 <!-- /EXAMPLES -->
 
 **Every base is one place.** A base is not a pile of objects: it has a subject (a mine shaft, a wreck, a shrine), a
@@ -707,6 +733,7 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
 | `cart_on_track` | true | A cart by a track stands on its rails |
 | `mend_thin_faces` | false | When a picked design fails the print check on a mesh fault (not a closed solid, loose pieces), build the same design once more with faces thinner than 0.02 mm given their neighbour's height (no point moves) before making a different variant; the card says MENDED. It mends some failures, not all |
+| `layout_threads` | 2 | How many threads the organic rocks of one base are built on (1 = one at a time, as before 2.5; at most 3). The bases come out the same either way |
 | `print_plate` | false | Also writes `plate.3mf` (and `plate_2.3mf` ...): all the picked bases on the printer's bed, one object each, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). The STLs are unchanged |
 | `feet_pad` | false | A clear spot for the figure's feet where it stands: an oval about 18 x 12 mm for a 32 mm figure (1.5 times for many-legged models, a tank's box for tracked ones) keeps only the ground and its texture; low rails and floors passing under it stay |
 | `small_base_cap` | false | On a base under 33 mm at most 4 details (under 27 mm) or 5; the ones laid last go first. The ground, cracks and texture stay |
