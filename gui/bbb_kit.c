@@ -109,7 +109,8 @@ enum { FIT_W = 1650, FIT_H = 1000 };
 static double fit_sc(int w, int h) { double s = fmin(w / (double)FIT_W, h / (double)FIT_H);          /* R6: the screen alone sets the scale; the dividers only share the room out (a wider panel shrinking everything was worse) */ s = floor(s * 20 + 0.5) / 20; return s < 0.6 ? 0.6 : s > 3.0 ? 3.0 : s; }
 static int sideOff, sideMax, hitDy, txtDy, titleH;          /* the side panel's scroll (px), how far it can go, and the shift its click areas get */
 static HWND hMain; static double SC = 1.0; static HFONT fTitle, fLabel, fUI, fSmall, fBig, fBtn, fMono;
-static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[300], head[200], batchFolder[64];          /* batchFolder: several sizes, the batch's picked_ folder name */
+static WCHAR kit[MAX_PATH], outFolder[MAX_PATH], sub[512], head[200], batchFolder[64];          /* sub: written only through sub_set or a bounded swprintf (a 335-character hint in a 300 buffer overwrote hMain: the user's freeze, 2026-11-23) */
+static void sub_set(const WCHAR *t) { size_t n = t ? wcslen(t) : 0; if (n > 511) n = 511; if (t) memcpy(sub, t, n * sizeof(WCHAR)); sub[n] = 0; }          /* the line under the title, cut to fit */          /* batchFolder: several sizes, the batch's picked_ folder name */
 static char curStyle[32], curSize[16], curMini[16], curDetail[8], curScale[8] = "1", curObj[16] = "3"; static int curSup, curJoin = 1, selScale = 0, selObj = 5, curFig = 32;          /* selScale: the game scale (GAMEMM), selObj: the slider (OBJM) */
 static int selStyle = 6, selSize = 8, selDetail = 4, selMini = 0, selCount = 8, selSup = 0, selJoin = 1, showDetails = 0;
 /* plan B step 6 (2026-11-21): the theme picker (selTheme 0 = any, k = the style's k-th theme), the design seed box
@@ -241,7 +242,7 @@ static int run(const WCHAR *cmd, int mode) {          /* cmd: gui_job.py's argum
     for (q = strtok(r->buf, " "); q && r->argc < 63; q = strtok(NULL, " ")) r->argv[r->argc++] = q;
     r->mode = mode; runner_stop = 0; runner_job = hJob; runner_in_window = 1;          /* the job lowers only its own threads and helpers, never the window */
     th = CreateThread(NULL, 1 << 24, job_thread, r, 0, NULL);
-    if (!th) { swprintf(head, 200, L"The job could not be started"); swprintf(sub, 300, L"Windows error %lu.", GetLastError()); logw(sub); free(r); return 0; }
+    if (!th) { swprintf(head, 200, L"The job could not be started"); swprintf(sub, 512, L"Windows error %lu.", GetLastError()); logw(sub); free(r); return 0; }
     CloseHandle(th);
     busy = mode; anim = 0; SetTimer(hMain, 1, 60, NULL); return 1;
 }
@@ -365,7 +366,7 @@ static void ask_choices(int fresh) {
         strcpy(curStyle, STYLES[selStyle]); strcpy(curSize, SIZES[selSize]); strcpy(curDetail, DETAILV[selDetail]); strcpy(curMini, selMini ? MINIS[selMini] : ""); curSup = selSup; curJoin = selJoin; { double o = GAMEMM[selScale] / 32.0 * 3.0 * OBJM[selObj]; snprintf(curObj, sizeof curObj, "%.3g", o > 1.0 ? o : 1.0); curFig = (int)GAMEMM[selScale]; }
     }
     if (ncell + cnt > MAXC) cnt = MAXC - ncell;
-    if (cnt <= 0) { wcscpy(sub, L"That is as many choices as fit. Build some, or press Show new choices to start over."); redraw(); return; }
+    if (cnt <= 0) { sub_set(L"That is as many choices as fit. Build some, or press Show new choices to start over."); redraw(); return; }
     if (curMini[0]) swprintf(extra, 80, L" --mini %hs", curMini);
     if (curSup) wcscat(extra, L" --supports on");
     swprintf(extra + wcslen(extra), 40, L" --obj %hs --figure %d", curObj, curFig);
@@ -374,7 +375,7 @@ static void ask_choices(int fresh) {
     swprintf(cmd, 1200, L"choices %hs --size %hs --detail %hs --count %d%ls", curStyle, curSize, curDetail, cnt, extra);
     if (run(cmd, 1)) {
         for (i = 0; i < cnt; i++) { memset(&cells[ncell], 0, sizeof(Cell)); strcpy(cells[ncell].size, curSize); cells[ncell++].state = ST_PENDING; }
-        wanted = cnt; doneN = 0; swprintf(head, 200, L"Drawing %d %hs bases to choose from", cnt, curStyle); swprintf(sub, 300, L"%hs mm. They appear as they are ready; this takes about half a minute.", curSize);
+        wanted = cnt; doneN = 0; swprintf(head, 200, L"Drawing %d %hs bases to choose from", cnt, curStyle); swprintf(sub, 512, L"%hs mm. They appear as they are ready; this takes about half a minute.", curSize);
     }
     redraw();
 }
@@ -398,7 +399,7 @@ static void build(void) {
     if (run(cmd, 2)) {
         SetTimer(hMain, 4, 100, NULL);          /* the build's progress notes, ten times a second */
         for (i = 0; i < ncell; i++) if (cells[i].picked && cells[i].state == ST_NONE) { cells[i].state = ST_BUILDING; cells[i].retry = 0; }
-        wanted = k; doneN = nOK = nBad = 0; swprintf(head, 200, L"Building %d base%ls", k, k == 1 ? L"" : L"s"); wcscpy(sub, L"Each one is built as an STL and put through the print check.");
+        wanted = k; doneN = nOK = nBad = 0; swprintf(head, 200, L"Building %d base%ls", k, k == 1 ? L"" : L"s"); sub_set(L"Each one is built as an STL and put through the print check.");
     }
     redraw();
 }
@@ -418,10 +419,10 @@ static void on_line(int mode, const WCHAR *t) {
     if (!wcscmp(ev, L"fetch")) {          /* the first run: the free model packs are being fetched, say so plainly */
         WCHAR ti[80]; jstr(t, L"title", ti, 80);
         swprintf(head, 200, L"First run: fetching the free model packs (%d of %d)", (int)jnum(t, L"i"), (int)jnum(t, L"n"));
-        swprintf(sub, 300, L"%ls. Public-domain (CC0) models the details are made from, about %d MB in all, fetched once. Details shows from where.", ti, (int)jnum(t, L"mb"));
+        swprintf(sub, 512, L"%ls. Public-domain (CC0) models the details are made from, about %d MB in all, fetched once. Details shows from where.", ti, (int)jnum(t, L"mb"));
         redraw(); return;
     }
-    if (!wcscmp(ev, L"fetched")) { swprintf(head, 200, L"Drawing %d %hs bases to choose from", wanted, curStyle); wcscpy(sub, L"The model packs are here. The choices appear as they are ready."); redraw(); return; }
+    if (!wcscmp(ev, L"fetched")) { swprintf(head, 200, L"Drawing %d %hs bases to choose from", wanted, curStyle); sub_set(L"The model packs are here. The choices appear as they are ready."); redraw(); return; }
     if (!wcscmp(ev, L"choice")) {
         for (i = 0; i < ncell && cells[i].state != ST_PENDING; i++) ;
         if (i == ncell) { if (ncell >= MAXC) return; ncell++; }
@@ -468,19 +469,19 @@ static void on_ended(int mode, DWORD code) {
     busy = 0; KillTimer(hMain, 1); KillTimer(hMain, 4); anim_tick();
     if (mode == 1) {
         drop_pending();
-        if (ncell) { wcscpy(head, L"Click the bases you want"); wcscpy(sub, L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
-        else { wcscpy(head, L"No choices came back"); swprintf(sub, 300, L"The job ended with code %lu. Press Details to see what it said.", code); }
+        if (ncell) { wcscpy(head, L"Click the bases you want"); sub_set(L"A teal tick marks a picked base. Then press Build. \"More choices\" adds another batch and keeps your picks."); }
+        else { wcscpy(head, L"No choices came back"); swprintf(sub, 512, L"The job ended with code %lu. Press Details to see what it said.", code); }
     } else {
         for (i = 0; i < ncell; i++) if (cells[i].state == ST_BUILDING) { cells[i].state = ST_NONE; cells[i].retry = 0; }
         if (nBad) swprintf(head, 200, L"Done: %d built and checked, %d not built", nOK, nBad); else swprintf(head, 200, L"Done: %d built and checked", nOK);
-        wcscpy(sub, nOK ? L"Click a built base to see its STL file, or press Open folder. Pick more and build again if you like." : L"Nothing was built. Press Details to see why.");
+        sub_set(nOK ? L"Click a built base to see its STL file, or press Open folder. Pick more and build again if you like." : L"Nothing was built. Press Details to see why.");
     }
     redraw();
     if (selftest == 3) {          /* --demotest: the pictures for the README. 8 designs, 5 picked, built; a picture at each stage */
         WCHAR q[MAX_PATH]; static const int want[5] = { 0, 1, 3, 4, 6 };
         if (mode == 1) {
             for (i = 0; i < 5; i++) if (want[i] < ncell) cells[want[i]].picked = 1;
-            swprintf(head, 200, L"%d bases picked", npicked()); wcscpy(sub, L"Press Build when you have the ones you want. \"More choices\" adds another batch and keeps your picks.");
+            swprintf(head, 200, L"%d bases picked", npicked()); sub_set(L"Press Build when you have the ones you want. \"More choices\" adds another batch and keeps your picks.");
             swprintf(q, MAX_PATH, L"%ls.1_picked.bmp", stShot); capture(q); build();
         } else {
             FILE *f; swprintf(q, MAX_PATH, L"%ls.3_built.bmp", stShot); capture(q); showHelp = 1; swprintf(q, MAX_PATH, L"%ls.4_help.bmp", stShot); capture(q);
@@ -1479,10 +1480,10 @@ static void set_io(int k, int save) {          /* out\bbb_kit.ini [setN]: style,
         swprintf(v, 64, L"%hs", tn ? tn : ""); WritePrivateProfileStringW(sec, L"theme", v, p);
         swprintf(v, 64, L"%hs", seedBuf); WritePrivateProfileStringW(sec, L"seed", v, p);
         WritePrivateProfileStringW(sec, L"saved", L"2", p);
-        swprintf(sub, 300, L"Saved as set %d: %hs, %d base%ls. Click Set %d any time to choose all of it again.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s", k + 1);
+        swprintf(sub, 512, L"Saved as set %d: %hs, %d base%ls. Click Set %d any time to choose all of it again.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s", k + 1);
         return;
     }
-    if (!GetPrivateProfileIntW(sec, L"saved", 0, p)) { swprintf(sub, 300, L"Set %d is empty. Press \"Save to a set\", then Set %d, to keep what is chosen now.", k + 1, k + 1); return; }
+    if (!GetPrivateProfileIntW(sec, L"saved", 0, p)) { swprintf(sub, 512, L"Set %d is empty. Press \"Save to a set\", then Set %d, to keep what is chosen now.", k + 1, k + 1); return; }
     {   int old = GetPrivateProfileIntW(sec, L"saved", 0, p) == 1; char a[400];
         for (i = 0; i < 7; i++) { int x = (int)GetPrivateProfileIntW(sec, ik[i], *iv[i], p); if (x >= (i == 0) && x < lim[i]) *iv[i] = x; }
         GetPrivateProfileStringW(sec, L"style", L"", v, 64, p); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL);
@@ -1496,7 +1497,7 @@ static void set_io(int k, int save) {          /* out\bbb_kit.ini [setN]: style,
     GetPrivateProfileStringW(sec, L"seed", L"", v, 64, p); { char a[16]; WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 16, NULL, NULL); a[15] = 0; strcpy(seedBuf, a); }
     GetPrivateProfileStringW(sec, L"theme", L"", v, 64, p); selTheme = 0;
     if (v[0]) { const char *nm[64]; char a[64]; int n = kd_theme_names(STYLES[selStyle], nm, 64); WideCharToMultiByte(CP_UTF8, 0, v, -1, a, 64, NULL, NULL); for (i = 0; i < n; i++) if (!strcmp(nm[i], a)) selTheme = i + 1; }
-    swprintf(sub, 300, L"Set %d loaded: %hs, %d base%ls.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s");
+    swprintf(sub, 512, L"Set %d loaded: %hs, %d base%ls.", k + 1, STYLES[selStyle], selCount, selCount == 1 ? L"" : L"s");
 }
 static void act2(int kind, int idx);
 /* U1 (2026-11-22): undo / redo (Ctrl+Z, Ctrl+Y) of the settings and the picks. A snapshot of every setting the user
@@ -1543,7 +1544,7 @@ static void undo_step(int redo) {          /* Ctrl+Z (redo 0) / Ctrl+Y (redo 1) 
     if (*nt == NUNDO) { memmove(to, to + 1, sizeof(Snap) * (NUNDO - 1)); (*nt)--; }
     to[(*nt)++] = now;
     snap_put(&from[--(*nf)]);
-    swprintf(sub, 300, redo ? L"Redone. Ctrl+Z undoes it again (%d more to undo)." : L"Undone. Ctrl+Y redoes it (%d more to undo).", nUndo);
+    swprintf(sub, 512, redo ? L"Redone. Ctrl+Z undoes it again (%d more to undo)." : L"Undone. Ctrl+Y redoes it (%d more to undo).", nUndo);
 }
 static void act(int kind, int idx) {          /* every click and key: do it, then start or stop the animation timer */
     static Snap before, after; int u = undoable(kind) && !busy;
@@ -1586,7 +1587,7 @@ static void act2(int kind, int idx) {
     case H_SHOW: ask_choices(1); return;
     case H_MORE: ask_choices(0); return;
     case H_GO: build(); return;
-    case H_STOP: autoBuild = 0; nSizeQ = 0; if (busy) { runner_stop = 1; if (hJob) TerminateJobObject(hJob, 1); logw(L"Stopped."); wcscpy(sub, L"Stopped."); } break;
+    case H_STOP: autoBuild = 0; nSizeQ = 0; if (busy) { runner_stop = 1; if (hJob) TerminateJobObject(hJob, 1); logw(L"Stopped."); sub_set(L"Stopped."); } break;
     case H_ALL: if (!busy) for (i = 0; i < ncell; i++) if (cells[i].state == ST_NONE) cells[i].picked = 1; break;
     case H_CLEAR: if (!busy) for (i = 0; i < ncell; i++) cells[i].picked = 0; break;
     case H_OPEN: open_folder(); return;
@@ -1601,7 +1602,7 @@ static void act2(int kind, int idx) {
         if (c->state == ST_NONE) c->picked = !c->picked;
         else if ((c->state == ST_OK || c->state == ST_VARIANT) && c->stl[0]) { WCHAR a[MAX_PATH + 20]; swprintf(a, MAX_PATH + 20, L"/select,\"%ls\"", c->stl); ShellExecuteW(hMain, L"open", L"explorer.exe", a, NULL, SW_SHOWNORMAL); }
         np = npicked();
-        if (np) { if (np == 1) wcscpy(head, L"1 base picked"); else swprintf(head, 200, L"%d bases picked", np); wcscpy(sub, L"Press Build when you have the ones you want. \"More choices\" adds another batch and keeps your picks."); }
+        if (np) { if (np == 1) wcscpy(head, L"1 base picked"); else swprintf(head, 200, L"%d bases picked", np); sub_set(L"Press Build when you have the ones you want. \"More choices\" adds another batch and keeps your picks."); }
         break; }
     }
     redraw();
@@ -1656,18 +1657,18 @@ static void hover_at(int x, int y) {
             static const WCHAR *lt[3] = { L"Pixel look (key L): blocky pixel frames in whole art pixels. Off: the smooth look with round corners.",
                                           L"Textures (key T): stone on the side panel, scanline bars, a segmented progress bar, marching ants round picked bases. Pixel look only.",
                                           L"Pixel font (key F): a pixel font for labels, chips, buttons and the title; long text stays plain. Off: the plain font everywhere." };
-            wcscpy(sub, lt[id]);
+            sub_set(lt[id]);
         }
         if (k == H_SPEED) {          /* say what the speed switch under the mouse does */
             static const WCHAR *st[2] = { L"CPU threads: the height field and the mesh are made on as many CPU threads as the base needs (up to all of them), about 3 times faster for those steps. Off: one core, the proven path.",
                                           L"Video card: the 3D pictures are drawn by the video card (Direct3D 11), in a fraction of a second. Off: drawn by Windows' software renderer (all CPU cores), slower." };
-            wcscpy(sub, st[id]);
+            sub_set(st[id]);
         }
         if (k == H_VIEW) {          /* say what the view under the mouse shows */
             static const WCHAR *vt[3] = { L"Small: each building card says in words what is being done, with a bar for the time left; one CPU and one video card meter at the top.",
                                           L"Live card: the card being built shows the base taking shape (the plan, then the height field filling in tile by tile), what is being done and the time left.",
                                           L"Big view: the base being built fills the middle, large, with rows over time below. When it is done it goes back into its card and the next one takes its place." };
-            wcscpy(sub, vt[id]);
+            sub_set(vt[id]);
         }
         if (k == H_PARTS) {          /* say what the part under the mouse is */
             static const WCHAR *pt[6] = { L"Parts: choose what the live view shows. Each part has its own switch.",
@@ -1676,32 +1677,32 @@ static void hover_at(int x, int y) {
                                           L"Base taking shape: the building card (or the big view) shows the plan, then the height field tiles lighting up as the threads finish them.",
                                           L"Time left: a bar and seconds left, worked out from your earlier builds of the same style, size and detail. It never goes back up.",
                                           L"Rows over time: one row per base being built, coloured by what it is doing (laying out, height field, mesh, checks, picture)." };
-            if (id >= 0 && id <= 5) wcscpy(sub, pt[id]);
-            else if (id == 11) wcscpy(sub, L"The kit's own working threads, one bar each, busiest first (other programs are not counted). Idle threads are not shown.");
-            else if (id == 12) wcscpy(sub, gpuV < 0 ? L"The video card meter: Windows does not report the video card's use on this PC." : L"How much of the video card's 3D engine is in use (all programs). The kit draws its 3D pictures there.");
+            if (id >= 0 && id <= 5) sub_set(pt[id]);
+            else if (id == 11) sub_set(L"The kit's own working threads, one bar each, busiest first (other programs are not counted). Idle threads are not shown.");
+            else if (id == 12) sub_set(gpuV < 0 ? L"The video card meter: Windows does not report the video card's use on this PC." : L"How much of the video card's 3D engine is in use (all programs). The kit draws its 3D pictures there.");
         }
         if (k == H_MF) {          /* say what the Manifold switch under the mouse does */
             static const WCHAR *mt[4] = { L"Smaller files: Manifold draws the flat parts of each base with fewer, bigger triangles (the shape moves no more than 0.005 mm), so the STL is smaller and loads faster. Off: the mesh as it is made.",
                                           L"Strict check: the print check also asks Manifold whether the base is a valid closed solid, and builds a fresh variant if not. Off: the kit's own checks only.",
                                           L"Smooth details: objects keep their true rounded shape instead of stacked slices.",
                                           L"Organic rocks: rocks and stones grown as smooth lumpy shapes." };
-            if (id >= 0 && id < 4) wcscpy(sub, mt[id]);
+            if (id >= 0 && id < 4) sub_set(mt[id]);
         }
-        if (k == H_MULTI) wcscpy(sub, L"Several sizes at once: click each size you want (round or oval). \"Build straight away\" then builds that many bases for every size, one size after another.");
-        if (k == H_MEND) wcscpy(sub, L"Mend a failed design: when a picked design fails the print check on a mesh fault, the kit first builds the same design again with faces thinner than 0.02 mm dissolved (no point moves), before it makes a different variant. The card then says MENDED.");
-        if (k == H_PLATE) wcscpy(sub, L"Print plate: besides each base's STL, one 3MF file (plate.3mf) with all the built bases laid out on the printer's bed, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). Open it in the slicer: one object per base. More than fit: plate_2.3mf and on. The files are big: about 12 MB for four 40 mm bases, 40-60 MB a plate of 160 mm bases.");
-        if (k == H_THEME) wcscpy(sub, L"Theme: Any lets the kit choose among the style's themes. Step with < and > to make every base one theme; click the middle for Any again. A themes.json beside bbb_kit.exe adds your own.");
-        if (k == H_PRINTER) wcscpy(sub, L"Printer: FDM (filament) gets a coarser ground grain, deep enough to print in layers, and keeps no detail under 3 mm. Resin gets the finer grain and keeps details down to 2 mm.");
-        if (k == H_STR) wcscpy(sub, L"Style strength: 1 is the standard look. Higher gives deeper cracks, bolder rock shapes and chips and a coarser ground grain, which catch washes and drybrushing better; lower is softer.");
-        if (k == H_SEED) wcscpy(sub, id == 1 ? L"Clear the seed: new designs each time." : L"Design seed: type a word (letters and digits) to get the same designs again, on any PC. Empty: new designs each time. Enter or Esc when done.");
-        if (k == H_SET) wcscpy(sub, id == 3 ? L"Save to a set: press this, then Set 1, 2 or 3, to keep the style, sizes, number, detail, miniature, scale, object size, strength, theme and seed chosen now." : L"Click to choose everything kept in this set again (\"-\" = nothing saved in it yet).");
-        if (k == H_JOIN) wcscpy(sub, L"Join into one solid: the objects that may overhang are joined into the base as one clean solid (Manifold), and a piece that would hang in the air is left out. Off: each object is its own shell sunk into the base, for the slicer to join.");
-        if (k == H_COL) wcscpy(sub, L"Colour view: the finished 3D base coloured as its 2D drawing (the same colours), to check each part is where it should be. Click again for the plain grey picture.");
+        if (k == H_MULTI) sub_set(L"Several sizes at once: click each size you want (round or oval). \"Build straight away\" then builds that many bases for every size, one size after another.");
+        if (k == H_MEND) sub_set(L"Mend a failed design: when a picked design fails the print check on a mesh fault, the kit first builds the same design again with faces thinner than 0.02 mm dissolved (no point moves), before it makes a different variant. The card then says MENDED.");
+        if (k == H_PLATE) sub_set(L"Print plate: one 3MF file (plate.3mf) with all the built bases on the printer's bed, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm); more go on plate_2.3mf and on. One object per base in the slicer. Big files: about 12 MB for four 40 mm bases.");
+        if (k == H_THEME) sub_set(L"Theme: Any lets the kit choose among the style's themes. Step with < and > to make every base one theme; click the middle for Any again. A themes.json beside bbb_kit.exe adds your own.");
+        if (k == H_PRINTER) sub_set(L"Printer: FDM (filament) gets a coarser ground grain, deep enough to print in layers, and keeps no detail under 3 mm. Resin gets the finer grain and keeps details down to 2 mm.");
+        if (k == H_STR) sub_set(L"Style strength: 1 is the standard look. Higher gives deeper cracks, bolder rock shapes and chips and a coarser ground grain, which catch washes and drybrushing better; lower is softer.");
+        if (k == H_SEED) sub_set(id == 1 ? L"Clear the seed: new designs each time." : L"Design seed: type a word (letters and digits) to get the same designs again, on any PC. Empty: new designs each time. Enter or Esc when done.");
+        if (k == H_SET) sub_set(id == 3 ? L"Save to a set: press this, then Set 1, 2 or 3, to keep the style, sizes, number, detail, miniature, scale, object size, strength, theme and seed chosen now." : L"Click to choose everything kept in this set again (\"-\" = nothing saved in it yet).");
+        if (k == H_JOIN) sub_set(L"Join into one solid: the objects that may overhang are joined into the base as one clean solid (Manifold), and a piece that would hang in the air is left out. Off: each object is its own shell sunk into the base, for the slicer to join.");
+        if (k == H_COL) sub_set(L"Colour view: the finished 3D base coloured as its 2D drawing (the same colours), to check each part is where it should be. Click again for the plain grey picture.");
         if (k == H_CARD && !busy && cells[id].state != ST_PENDING) {          /* say what the card under the mouse is */
             Cell *c = &cells[id];
-            if (c->why[0]) swprintf(sub, 300, L"%ls", c->why);
-            else if (c->state == ST_OK) swprintf(sub, 300, L"Built and checked: %ls. Click to show the STL file.", c->theme);
-            else swprintf(sub, 300, L"%ls, detail %d of 4 (design %hs-%d). Click to %ls.", c->theme, c->tier, c->seed, c->n, c->picked ? L"un-pick" : L"pick");
+            if (c->why[0]) swprintf(sub, 512, L"%ls", c->why);
+            else if (c->state == ST_OK) swprintf(sub, 512, L"Built and checked: %ls. Click to show the STL file.", c->theme);
+            else swprintf(sub, 512, L"%ls, detail %d of 4 (design %hs-%d). Click to %ls.", c->theme, c->tier, c->seed, c->n, c->picked ? L"un-pick" : L"pick");
         }
         redraw();
     }
@@ -1768,7 +1769,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {          /* a
     alMsg = (LONG)m; alMsgTick = t0; InterlockedIncrement(&alMsgDepth);
     if (m == WM_SYSCOMMAND && (w & 0xFFF0) == SC_CLOSE) alog("closing: the window's close (X button, Alt+F4 or the taskbar)");
     else if (m == WM_CLOSE) alog("closing: WM_CLOSE");
-    else if (m == WM_DESTROY) alog("closing: the window is destroyed (settings saved)");
+    else if (m == WM_DESTROY) { alog("closing: the window is destroyed (settings saved)"); alQuit = 1; }
     else if (m == WM_QUERYENDSESSION) alog("closing: Windows is shutting down or logging off");
     else if (m == WM_SIZE) alog("window size %dx%d%s", LOWORD(l), HIWORD(l), w == SIZE_MINIMIZED ? " (minimized)" : w == SIZE_MAXIMIZED ? " (maximized)" : "");
     else if (m == WM_ACTIVATEAPP) alog("window %s", w ? "in front" : "behind another program");
@@ -1996,8 +1997,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
 #ifdef BBB_NK
     NK = nkui_init("Segoe UI", S(13)); nkui_fonts("Segoe UI", S(13), S(12), S(13), S(19)); nk_theme(nkTheme);
 #endif
-    wcscpy(head, L"Pick a style and a size"); wcscpy(sub, L"Then press Show choices. Nothing is built until you press Build.");
-    { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) swprintf(sub, 300, L"%.290hs", kd_themes_note); }          /* review P2-3: what happened with themes.json, at start */
+    wcscpy(head, L"Pick a style and a size"); sub_set(L"Then press Show choices. Nothing is built until you press Build.");
+    { extern void kinds_init(void); extern char kd_themes_note[600]; kinds_init(); if (kd_themes_note[0]) swprintf(sub, 512, L"%.290hs", kd_themes_note); }          /* review P2-3: what happened with themes.json, at start */
     memset(&wc, 0, sizeof wc); wc.style = CS_DBLCLKS; wc.lpfnWndProc = proc; wc.hInstance = hi; wc.lpszClassName = L"bbb_kit"; wc.hCursor = LoadCursor(NULL, IDC_ARROW); wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);          /* our icon (bbb_kit.rc) */ RegisterClassW(&wc);
     SetRect(&r, 0, 0, S(cw), S(chh)); AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     if (selftest) ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
@@ -2109,6 +2110,13 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                 int k, v; for (v = 0; v < 3; v++) { DWORD g0, u0; lvView = v; capture(NULL); g0 = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS); u0 = GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
                     for (k = 0; k < 300; k++) { hovK = k % 2 ? H_VIEW : H_NONE; hovI = k % 3; capture(NULL); }
                     alog("test: view %d, 300 paints: GDI objects %lu -> %lu, USER objects %lu -> %lu", v, g0, GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), u0, GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS)); }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_HINTS", NULL, 0)) {          /* every click area's hover hint, then: is the window handle still ours? (the 335-character plate hint overwrote it) */
+                HWND keep = hMain; int k, n = nhit; RECT rs[400]; for (k = 0; k < n; k++) rs[k] = hits[k].r;
+                for (k = 0; k < n; k++) { hovK = H_NONE; hovI = -1; hover_at((rs[k].left + rs[k].right) / 2, (rs[k].top + rs[k].bottom) / 2); }
+                {   FILE *tf; WCHAR p2[MAX_PATH]; swprintf(p2, MAX_PATH, L"%ls.hints.txt", stShot); tf = _wfopen(p2, L"w");
+                    if (tf) { fprintf(tf, "%s %d hints shown; hMain %p (was %p), IsWindow %d" "\n", hMain == keep && IsWindow(hMain) ? "OK" : "FAIL", n, (void *)hMain, (void *)keep, IsWindow(hMain)); fclose(tf); } }
+                hMain = keep;
             }
             if (GetEnvironmentVariableA("BBB_TEST_HANG", NULL, 0)) { alog("test: the window thread sleeps 8 s"); Sleep(8000); alog("test: awake"); { MSG mm; DWORD te = GetTickCount() + 2500; while (GetTickCount() < te) { while (PeekMessageW(&mm, NULL, 0, 0, PM_REMOVE)) DispatchMessageW(&mm); Sleep(10); } } }          /* applog: the watchdog must see it */
             if (GetEnvironmentVariableA("BBB_TEST_CRASH", NULL, 0)) { volatile int *z = NULL; alog("test: a crash"); *z = 1; }

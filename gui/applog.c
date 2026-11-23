@@ -11,6 +11,7 @@
 #include <psapi.h>
 typedef BOOL (WINAPI *PGPMI)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD); static PGPMI pGPMI;          /* GetProcessMemoryInfo, loaded at run time */
 #include <signal.h>
+static volatile LONG alQuit;          /* set at WM_DESTROY: the watchdog ends */
 static volatile DWORD alLastLog;          /* the tick of the last line (the heartbeat writes "alive" when 10 s passed without one) */
 static CRITICAL_SECTION alLock; static FILE *alF; static WCHAR alDir[MAX_PATH], alPath[MAX_PATH]; static DWORD alT0, alUiTid, alWdTid; static HANDLE alUiThread;
 static volatile LONG alMsg, alMsgDepth; static volatile DWORD alMsgTick; static char alLastAct[160];
@@ -180,9 +181,19 @@ static DWORD WINAPI al_watch(LPVOID p) {          /* the hang watchdog */
         if (alJobPend && *alJobPend && hMain && GetTickCount() - *alJobTick > 2000) {          /* the job ended but the window has not handled it */
             static DWORD said; if (*alJobTick != said) { said = *alJobTick; alog("the window has not handled the job's end after %lu ms: posting it again (queue full or lost?)", GetTickCount() - *alJobTick);
                 if (!PostMessageW(hMain, WM_ENDED, (WPARAM)*alJobMode, (LPARAM)*alJobCode)) alog("  PostMessage(WM_ENDED) failed again: error %lu", GetLastError()); } }
-        if (!hMain) continue;
-        if (SendMessageTimeoutW(hMain, WM_NULL, 0, 0, SMTO_NORMAL, 1000, &r)) { if (stuck >= 5) alog("responding again after %lu s", stuck); stuck = 0; dumped = 0; continue; }
-        if (!IsWindow(hMain)) { alog("watchdog: the window is gone, the watchdog stops"); return 0; }
+        if (alQuit) { alog("watchdog: the window closed, the watchdog stops"); return 0; }          /* the only way out: WM_DESTROY sets alQuit */
+        {   HWND hw = *(volatile HWND *)&hMain; DWORD e1, pid = 0, tid;          /* read fresh every time */
+            if (!hw) continue;
+            SetLastError(0);
+            if (SendMessageTimeoutW(hw, WM_NULL, 0, 0, SMTO_NORMAL, 1000, &r)) { if (stuck >= 5) alog("responding again after %lu s", stuck); stuck = 0; dumped = 0; continue; }
+            e1 = GetLastError(); tid = GetWindowThreadProcessId(hw, &pid);
+            if (!IsWindow(hw)) {          /* never a reason to stop: say what Windows says, and keep watching */
+                static DWORD said; if (GetTickCount() - said > 10000) { said = GetTickCount();
+                    alog("watchdog: SendMessageTimeout failed (error %lu) and IsWindow(%p) says no window; GetWindowThreadProcessId -> thread %lu pid %lu (ours: window thread %lu, pid %lu); going on", e1, (void *)hw, tid, pid, alUiTid, GetCurrentProcessId()); }
+                continue;
+            }
+            if (e1 != ERROR_TIMEOUT && e1 != 0) { static DWORD said2; if (GetTickCount() - said2 > 10000) { said2 = GetTickCount(); alog("watchdog: SendMessageTimeout failed with error %lu (not a timeout)", e1); } }
+        }
         stuck += 2;
         if (stuck >= 5 && !dumped) {
             CONTEXT c; dumped = 1; al_dbghelp();
