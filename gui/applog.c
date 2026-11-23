@@ -8,6 +8,8 @@
      the message it is stuck in, the last click, the window thread's stack and one minidump; "responding again" when it is back.
    Nothing here changes what the kit builds. */
 #include <dbghelp.h>
+#include <psapi.h>
+typedef BOOL (WINAPI *PGPMI)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD); static PGPMI pGPMI;          /* GetProcessMemoryInfo, loaded at run time */
 static CRITICAL_SECTION alLock; static FILE *alF; static WCHAR alDir[MAX_PATH], alPath[MAX_PATH]; static DWORD alT0, alUiTid, alWdTid; static HANDLE alUiThread;
 static volatile LONG alMsg, alMsgDepth; static volatile DWORD alMsgTick; static char alLastAct[160];
 static void alog(const char *fmt, ...) {
@@ -102,10 +104,21 @@ static LONG WINAPI al_crash(EXCEPTION_POINTERS *ep) {
     al_dump("crash", ep); alog("the window closes now; this log and the dump are in %ls", L"out\\logs");
     return EXCEPTION_CONTINUE_SEARCH;
 }
+/* the paints: how many and how long, summed up every 10 s (in al_watch) */
+static volatile LONG alPaints, alPaintMs, alPaintMax;
+static void al_paint(DWORD ms) { InterlockedIncrement(&alPaints); InterlockedExchangeAdd(&alPaintMs, (LONG)ms); if ((LONG)ms > alPaintMax) alPaintMax = (LONG)ms; }
+static void al_beat(int every30) {          /* every 10 s: the paints if any; every 30 s: the process's resources */
+    LONG n = InterlockedExchange(&alPaints, 0), ms = InterlockedExchange(&alPaintMs, 0), mx = InterlockedExchange(&alPaintMax, 0);
+    if (n) alog("paints in the last 10 s: %ld, %ld ms on average, the longest %ld ms", n, ms / n, mx);
+    if (every30) { PROCESS_MEMORY_COUNTERS_EX pm; DWORD hc = 0; memset(&pm, 0, sizeof pm); pm.cb = sizeof pm; GetProcessHandleCount(GetCurrentProcess(), &hc);
+        if (pGPMI) pGPMI(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS *)&pm, sizeof pm);
+        alog("resources: GDI %lu, USER %lu, handles %lu, memory %.0f MB", GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS), hc, pm.PrivateUsage / 1048576.0); }
+}
 static DWORD WINAPI al_watch(LPVOID p) {          /* the hang watchdog */
-    DWORD stuck = 0, dumped = 0; (void)p; alWdTid = GetCurrentThreadId();
+    DWORD stuck = 0, dumped = 0, ticks = 0; (void)p; alWdTid = GetCurrentThreadId();
     for (;;) {
         DWORD_PTR r; Sleep(1000);
+        if (++ticks % 10 == 0) al_beat(ticks % 30 == 0);
         if (!hMain) continue;
         if (SendMessageTimeoutW(hMain, WM_NULL, 0, 0, SMTO_NORMAL, 1000, &r)) { if (stuck >= 5) alog("responding again after %lu s", stuck); stuck = 0; dumped = 0; continue; }
         if (!IsWindow(hMain)) return 0;
@@ -137,6 +150,7 @@ static void al_open(const WCHAR *outDir, const char *cmdline) {          /* out\
     GetLocalTime(&t); swprintf(alPath, MAX_PATH, L"%ls\\bbb_kit_%04d%02d%02d_%02d%02d%02d.log", alDir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     alF = _wfopen(alPath, L"w");
     SetUnhandledExceptionFilter(al_crash);
+    { HMODULE k = GetModuleHandleW(L"kernel32.dll"); pGPMI = k ? (PGPMI)(void *)GetProcAddress(k, "K32GetProcessMemoryInfo") : NULL; }
 #ifdef KIT_VERSION
     snprintf(ver, sizeof ver, "%s", KIT_VERSION); (void)vp; (void)vf;
 #else

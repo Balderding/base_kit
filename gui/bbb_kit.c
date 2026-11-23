@@ -1751,9 +1751,18 @@ static void ini(int save) {
 }
 static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l);
 static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {          /* applog: the message being handled, for the hang watchdog */
-    LONG pm = alMsg; DWORD pt = alMsgTick; LRESULT r;
-    alMsg = (LONG)m; alMsgTick = GetTickCount(); InterlockedIncrement(&alMsgDepth);
+    LONG pm = alMsg; DWORD pt = alMsgTick, t0 = GetTickCount(), dt; LRESULT r;
+    alMsg = (LONG)m; alMsgTick = t0; InterlockedIncrement(&alMsgDepth);
+    if (m == WM_SYSCOMMAND && (w & 0xFFF0) == SC_CLOSE) alog("closing: the window's close (X button, Alt+F4 or the taskbar)");
+    else if (m == WM_CLOSE) alog("closing: WM_CLOSE");
+    else if (m == WM_DESTROY) alog("closing: the window is destroyed (settings saved)");
+    else if (m == WM_QUERYENDSESSION) alog("closing: Windows is shutting down or logging off");
+    else if (m == WM_SIZE) alog("window size %dx%d%s", LOWORD(l), HIWORD(l), w == SIZE_MINIMIZED ? " (minimized)" : w == SIZE_MAXIMIZED ? " (maximized)" : "");
+    else if (m == WM_ACTIVATEAPP) alog("window %s", w ? "in front" : "behind another program");
     r = proc_in(h, m, w, l);
+    dt = GetTickCount() - t0;
+    if (m == WM_PAINT) al_paint(dt);
+    if (dt >= 250) alog("slow: message 0x%04x took %lu ms (last click: %s)", m, dt, alLastAct[0] ? alLastAct : "none");
     InterlockedDecrement(&alMsgDepth); alMsg = pm; alMsgTick = pt; return r;
 }
 static LRESULT CALLBACK proc_in(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -2043,6 +2052,16 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmdA, int show) {
                     if (hits[k].kind == H_QUICK) quick = in ? 1 : -1; }
                 swprintf(p2, MAX_PATH, L"%ls.foot.txt", stShot); tf = _wfopen(p2, L"w");
                 if (tf) { fprintf(tf, "%s show %d quick %d side_max %d window %ldx%ld" "\n", show == 1 && quick == 1 ? "OK" : "FAIL", show, quick, sideMax, cr.right, cr.bottom); fclose(tf); }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_PAINTMS", NULL, 0)) {          /* how long one paint takes, fold closed and open */
+                int k, f; LARGE_INTEGER q0, q1, fq; QueryPerformanceFrequency(&fq);
+                for (f = 0; f < 2; f++) { moreOpen = f; capture(NULL); QueryPerformanceCounter(&q0); for (k = 0; k < 20; k++) capture(NULL); QueryPerformanceCounter(&q1);
+                    alog("test: fold %s: %.1f ms a paint (tight %d, side_max %d)", f ? "open" : "closed", (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / fq.QuadPart / 20, sideTight, sideMax); }
+            }
+            if (GetEnvironmentVariableA("BBB_TEST_GDILEAK", NULL, 0)) {          /* the user's "locks up": drawing objects after many paints, in each view */
+                int k, v; for (v = 0; v < 3; v++) { DWORD g0, u0; lvView = v; capture(NULL); g0 = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS); u0 = GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
+                    for (k = 0; k < 300; k++) { hovK = k % 2 ? H_VIEW : H_NONE; hovI = k % 3; capture(NULL); }
+                    alog("test: view %d, 300 paints: GDI objects %lu -> %lu, USER objects %lu -> %lu", v, g0, GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), u0, GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS)); }
             }
             if (GetEnvironmentVariableA("BBB_TEST_HANG", NULL, 0)) { alog("test: the window thread sleeps 8 s"); Sleep(8000); alog("test: awake"); { MSG mm; DWORD te = GetTickCount() + 2500; while (GetTickCount() < te) { while (PeekMessageW(&mm, NULL, 0, 0, PM_REMOVE)) DispatchMessageW(&mm); Sleep(10); } } }          /* applog: the watchdog must see it */
             if (GetEnvironmentVariableA("BBB_TEST_CRASH", NULL, 0)) { volatile int *z = NULL; alog("test: a crash"); *z = 1; }          /* applog: the crash note and dump */
