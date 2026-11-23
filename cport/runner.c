@@ -704,10 +704,12 @@ static void edge_counts(const Mesh *m, int *odd, int *pinched, int *watertight) 
     *watertight = wt && wind; free(e);
 }
 /* PLAN-next step 1 (BBB_MESH_DIAG=<file>): the odd and pinched edges after a stage; at the end, where each bad edge is */
+static uint64_t diag_fnv(const void *p, size_t n, uint64_t h) { const unsigned char *c = p; for (size_t i = 0; i < n; i++) { h ^= c[i]; h *= 1099511628211ull; } return h; }          /* investigation 5 */
 static void diag_stage(const Mesh *m, const char *base, const char *stage) {
     const char *p = getenv("BBB_MESH_DIAG"); int odd, pin, wt; FILE *f; if (!p || !*p) return;
     edge_counts(m, &odd, &pin, &wt); if (!(f = fopen(p, "a"))) return;
-    fprintf(f, "%s stage %-8s odd %d pinched %d watertight %d faces %d" "\n", base, stage, odd, pin, wt, m->nt);
+    {   uint64_t h = diag_fnv(m->v, sizeof(double) * 3 * (size_t)m->nv, 1469598103934665603ull); h = diag_fnv(m->f, sizeof(int) * 3 * (size_t)m->nt, h);
+        fprintf(f, "%s stage %-8s odd %d pinched %d watertight %d faces %d hash %016llx" "\n", base, stage, odd, pin, wt, m->nt, (unsigned long long)h); }
     if ((!strcmp(stage, "final") && (odd || pin)) || (!strcmp(stage, "mesh") && odd)) {          /* 3b: where the mesher left open edges, too */
         Ed *e = mesh_edges(m); size_t ne = 3 * (size_t)m->nt; int k = 0;
         for (size_t i = 0; i < ne && k < 40;) {
@@ -1093,6 +1095,8 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     /* the height field and the mesh: bbb_kit.exe --core-build (cmesh.build_c) */
     char thr[16]; snprintf(thr, sizeof thr, "%d", nthreads);
     EnvSet es[4] = { { "KIT_MESH_THREADS", thr }, { "KIT_LIVE_FILE", lp[0] ? lp : NULL }, { "KIT_DIAG_NAME", name }, { "KIT_MEND_THIN", mend ? "1" : NULL } };          /* KIT_DIAG_NAME: step 1's log names the base; KIT_MEND_THIN: the mend */
+    {   const char *dp = getenv("BBB_MESH_DIAG"); FILE *df = dp && *dp ? fopen(dp, "a") : NULL;          /* investigation 5: the layout's blobs going into the 3D build */
+        if (df) { fprintf(df, "%s layout blobs", name); for (int q = 0; q < nb && q < 6; q++) fprintf(df, " [%d] %zu bytes %016llx", q, (size_t)ln[q], (unsigned long long)diag_fnv(bl[q], ln[q], 1469598103934665603ull)); fprintf(df, "\n"); fclose(df); } }
     Sb out = { 0 }, err = { 0 }; int rc = run_core("--core-build", bl[0], ln[0], es, 4, &out, &err);
     if (rc != 0 || out.n < 12 || memcmp(out.s, "BBR1", 4)) {          /* cmesh.build_c gave None: Python would build this one in Python (not in C) */
         snprintf(e, sizeof e, "crash: the C field builder failed (%.200s)", err.s ? err.s : ""); B->error = xstrdup(e);
@@ -1123,6 +1127,7 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
         go.amp = (resin ? cfg_num("ground_grain_mm", 0.12) : cfg_num("ground_grain_fdm_mm", 0.25)) * strength(); go.coarse = !resin;          /* review P2-2: FDM grain big enough to print */
         unsigned char *ga = NULL; go.deftex = grain_style_tex(rs->style);
         gm = have_sc && cfg_bool("grain_by_ground", 1) ? grain_mask(&sc, &m, rs->style, &go, &ga) : NULL;
+        if (getenv("BBB_TEST_JITTER")) Sleep((DWORD)(GetTickCount() * 2654435761u >> 24) % 200);          /* a test: the worker threads overlap in another order each time */
         int t0 = m.nt, mv = grain_apply(&m.v, &m.nv, &m.f, &m.nt, &go, sd); free(gm); free(ga);
         const char *gl = getenv("BBB_GRAIN_LOG");
         if (gl && *gl) { FILE *lf = fopen(gl, "a"); if (lf) { fprintf(lf, "%s: faces %d -> %d, points moved %d\n", name, t0, m.nt, mv); fclose(lf); } }
@@ -1624,6 +1629,7 @@ static int job_build(Args *a, const char *style) {
         make_dirs(rs.out);
         rs_print("seed   : %s   folder: %s", rs.salt, rs.out);
         rs.workers = cfg_bool("live", 0) ? 1 : 0;
+        { const char *wk = opt(a, "--workers", ""); if (wk[0] && atoi(wk) > 0) rs.workers = atoi(wk); }          /* --workers N: honoured (it was silently ignored, 2026-11-23) */
         if (!rs.workers) rs.workers = workers_auto();          /* step 5: half the cores, at most 4 bases at once (was a third, at most 12) */
         rs.nums = nums[g]; rs.nnums = nn[g];
         /* the layout helpers' environment: gui_job's + run_set's + build_once's */

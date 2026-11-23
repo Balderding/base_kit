@@ -8,19 +8,18 @@
 #include "mfjoin.h"
 #include "manifold/manifoldc.h"
 
-static int *uf;
-static int uf_find(int x) { while (uf[x] != x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; }
-static void uf_join(int a, int b) { a = uf_find(a); b = uf_find(b); if (a != b) uf[b] = a; }
+static int uf_find(int *uf, int x) { while (uf[x] != x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; }          /* the array passed down: no shared state (worker threads join at once) */
+static void uf_join(int *uf, int a, int b) { a = uf_find(uf, a); b = uf_find(uf, b); if (a != b) uf[b] = a; }
 
 /* the closed parts of a mesh (corners joined by triangles): part[v] = 0..n-1; returns n */
 static int parts_of(int nv, const int *f, int nt, int *part) {
-    uf = (int *)malloc(sizeof(int) * (size_t)(nv ? nv : 1));
+    int *uf = (int *)malloc(sizeof(int) * (size_t)(nv ? nv : 1));
     for (int i = 0; i < nv; i++) uf[i] = i;
-    for (int t = 0; t < nt; t++) { uf_join(f[3 * t], f[3 * t + 1]); uf_join(f[3 * t], f[3 * t + 2]); }
+    for (int t = 0; t < nt; t++) { uf_join(uf, f[3 * t], f[3 * t + 1]); uf_join(uf, f[3 * t], f[3 * t + 2]); }
     int *id = (int *)malloc(sizeof(int) * (size_t)(nv ? nv : 1)), n = 0;
     for (int i = 0; i < nv; i++) id[i] = -1;
-    for (int i = 0; i < nv; i++) { int r = uf_find(i); if (id[r] < 0) id[r] = n++; part[i] = id[r]; }
-    free(id); free(uf); uf = NULL; return n;
+    for (int i = 0; i < nv; i++) { int r = uf_find(uf, i); if (id[r] < 0) id[r] = n++; part[i] = id[r]; }
+    free(id); free(uf); return n;
 }
 /* one part as a Manifold (its corners merged by position first); NULL if Manifold does not take it as a closed solid */
 static ManifoldManifold *part_solid(const double *v, int nv, const int *f, int nt, const int *part, int p, int *ntri) {
@@ -50,22 +49,21 @@ static int he_cmp(const void *x, const void *y) {
     const MfHe *p = (const MfHe *)x, *q = (const MfHe *)y; int pa = p->a < p->b ? p->a : p->b, pb = p->a < p->b ? p->b : p->a, qa = q->a < q->b ? q->a : q->b, qb = q->a < q->b ? q->b : q->a;
     return pa != qa ? (pa < qa ? -1 : 1) : pb != qb ? (pb < qb ? -1 : 1) : 0;
 }
-static int *cf;          /* the union-find over corners (3 * t + c) */
-static int cf_find(int x) { while (cf[x] != x) { cf[x] = cf[cf[x]]; x = cf[x]; } return x; }
-static void cf_join(int a, int b) { a = cf_find(a); b = cf_find(b); if (a != b) cf[b] = a; }
+static int cf_find(int *cf, int x) { while (cf[x] != x) { cf[x] = cf[cf[x]]; x = cf[x]; } return x; }          /* the union-find over corners (3 * t + c), passed down */
+static void cf_join(int *cf, int a, int b) { a = cf_find(cf, a); b = cf_find(cf, b); if (a != b) cf[b] = a; }
 static int corner_of(const int *f, int t, int v) { for (int c = 0; c < 3; c++) if (f[3 * t + c] == v) return 3 * t + c; return -1; }
 static int mf_unpinch(double **vp, int *nvp, int *f, int nt) {
     int ne = 3 * nt, rc = 0; MfHe *h = (MfHe *)malloc(sizeof(MfHe) * (size_t)(ne ? ne : 1)); const double *v = *vp;
     for (int t = 0; t < nt; t++) for (int c = 0; c < 3; c++) { h[3 * t + c].a = f[3 * t + c]; h[3 * t + c].b = f[3 * t + (c + 1) % 3]; h[3 * t + c].t = t; }
     qsort(h, (size_t)ne, sizeof(MfHe), he_cmp);
-    cf = (int *)malloc(sizeof(int) * (size_t)(ne ? ne : 1)); for (int i = 0; i < ne; i++) cf[i] = i;
+    int *cf = (int *)malloc(sizeof(int) * (size_t)(ne ? ne : 1)); for (int i = 0; i < ne; i++) cf[i] = i;
     for (int i = 0; i < ne && !rc;) {
         int j = i; while (j < ne && he_cmp(&h[i], &h[j]) == 0) j++;
         int n = j - i;
         if (n == 2) {          /* the usual edge: its two faces' corners at both ends are one vertex */
             if (h[i].a == h[i + 1].a) { rc = -1; break; }          /* both the same way round: not a solid */
             int a = h[i].a, b = h[i].b;
-            cf_join(corner_of(f, h[i].t, a), corner_of(f, h[i + 1].t, a)); cf_join(corner_of(f, h[i].t, b), corner_of(f, h[i + 1].t, b));
+            cf_join(cf, corner_of(f, h[i].t, a), corner_of(f, h[i + 1].t, a)); cf_join(cf, corner_of(f, h[i].t, b), corner_of(f, h[i + 1].t, b));
         } else if (n % 2 == 0 && n <= 16) {          /* faces around the edge by angle; pair each with its neighbour across solid */
             int a = h[i].a < h[i].b ? h[i].a : h[i].b, b = h[i].a < h[i].b ? h[i].b : h[i].a; double e[3], ex[3], ey[3], L = 0, ang[16]; int ord[16], fw[16];
             for (int k = 0; k < 3; k++) { e[k] = v[3 * b + k] - v[3 * a + k]; L += e[k] * e[k]; }
@@ -92,7 +90,7 @@ static int mf_unpinch(double **vp, int *nvp, int *f, int nt) {
                     int p = ord[x], q = ord[(x + 1) % n];
                     if (fw[p]) continue;
                     if (!fw[q]) { rc = -1; break; }
-                    cf_join(corner_of(f, h[i + p].t, a), corner_of(f, h[i + q].t, a)); cf_join(corner_of(f, h[i + p].t, b), corner_of(f, h[i + q].t, b));
+                    cf_join(cf, corner_of(f, h[i + p].t, a), corner_of(f, h[i + q].t, a)); cf_join(cf, corner_of(f, h[i + p].t, b), corner_of(f, h[i + q].t, b));
                     used++;
                 }
                 if (!rc && used * 2 != n) rc = -1;
@@ -105,11 +103,11 @@ static int mf_unpinch(double **vp, int *nvp, int *f, int nt) {
         int *nid = (int *)malloc(sizeof(int) * (size_t)(ne ? ne : 1)), nn = 0; double *nv;
         for (int i = 0; i < ne; i++) nid[i] = -1;
         nv = (double *)malloc(sizeof(double) * 3 * (size_t)(ne ? ne : 1));
-        for (int i = 0; i < ne; i++) { int r0 = cf_find(i); if (nid[r0] < 0) { nid[r0] = nn; memcpy(nv + 3 * nn, *vp + 3 * f[i], 24); nn++; } }
-        for (int i = 0; i < ne; i++) f[i] = nid[cf_find(i)];
+        for (int i = 0; i < ne; i++) { int r0 = cf_find(cf, i); if (nid[r0] < 0) { nid[r0] = nn; memcpy(nv + 3 * nn, *vp + 3 * f[i], 24); nn++; } }
+        for (int i = 0; i < ne; i++) f[i] = nid[cf_find(cf, i)];
         free(*vp); *vp = nv; *nvp = nn; free(nid);
     }
-    free(h); free(cf); cf = NULL;
+    free(h); free(cf);
     return rc;
 }
 /* one part as a Manifold, unpinched first if Manifold does not take it as it is */
