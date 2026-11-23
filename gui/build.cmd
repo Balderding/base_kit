@@ -9,6 +9,8 @@ rem   build.cmd            -> ..\bbb_kit.exe
 rem   build.cmd <out.exe>  -> that file instead (a test build)
 setlocal
 call "%~dp0..\cport\tools.cmd"
+rem BBB_EXTRA: extra compiler flags for a test build (e.g. -g for the profiler's bbb_g.exe)
+if defined BBB_EXTRA set CLANG_FLAGS=%CLANG_FLAGS% %BBB_EXTRA%
 cd /d "%~dp0"
 set OUT=..\bbb_kit.exe
 if not "%~1"=="" set OUT=%~1

@@ -300,17 +300,22 @@ static int pl_try(const PlTry *T, Geo *g, Num *zout) {
     *zout = z; return 1;
 }
 _Thread_local PlPre pl_pre;
+#include "thrdiag.h"
+ThrDiag thr_diag;
+#include <time.h>
+double thr_ms(void) { struct timespec ts; timespec_get(&ts, TIME_UTC); return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6; }          /* no windows.h here */
 static int pl_pre_fn(void *c, const GEOSGeometry *g) {          /* pl_pre.fn: the try's test on a footprint made early */
-    Geo *gg; Num z; int r; GEOSGeometry *k = shp_clone(g);
+    Geo *gg; Num z; int r; GEOSGeometry *k = shp_clone(g); double t0 = thr_ms();
     if (!k) return SC_ERR;
     gg = geo_new(k); r = pl_try((const PlTry *)c, gg, &z); geo_unref(gg);
+    thr_diag.pre += thr_ms() - t0;
     return r;
 }
 static int pre_on(void) { static int on = -1; if (on < 0) { const char *e = getenv("BBB_NO_PRECHECK"); on = !(e && e[0] == '1'); } return on; }
 
 int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *region, int ground, const PlAllow *allow,
             PlAtFn at, void *actx, Geo **gout, Num *zout) {
-    GeoList hl = { 0 }, blk = { 0 }; PlHits hb, taken; PSet hold = { 0 }, brid = { 0 }; ShpPrep regp; int i, j, t, r = 0, found = 0, terr = pl_terr(s);
+    GeoList hl = { 0 }, blk = { 0 }; PlHits hb, taken; PSet hold = { 0 }, brid = { 0 }; ShpPrep regp; int i, j, t, r = 0, found = 0, terr = pl_terr(s); double td0 = thr_ms(), td1;
     memset(&taken, 0, sizeof taken); memset(&regp, 0, sizeof regp);
     *gout = NULL; *zout = num_none();
     if (!region) region = PL.disc;
@@ -342,7 +347,9 @@ int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *reg
         }
     }
     PlTry T = { s, region, &hb, &hl, &hold, &brid, gap, ground, terr };
+    td1 = thr_ms(); thr_diag.setup += td1 - td0; thr_diag.finds++;
     for (t = 0; r == 0 && t < tries; t++) {
+        double tm0 = thr_ms(), tp0 = thr_diag.pre; thr_diag.tries++;
         Geo *g = NULL; int err = 0, x; Num z;
         if (at) {
             double cx, cy; GEOSGeometry *pt;
@@ -357,13 +364,14 @@ int pl_find(Scene *s, PlMakeFn make, void *mctx, int tries, double gap, Geo *reg
             g = make(mctx, 1, cx, cy, &err);
             pl_pre.armed = 0;
         } else g = make(mctx, 0, 0.0, 0.0, &err);
+        thr_diag.make += thr_ms() - tm0 - (thr_diag.pre - tp0);          /* make() and at(), without the pre-test inside make */
         if (err) { geo_unref(g); r = SC_ERR; break; }
         if (!g) continue;
-        x = pl_try(&T, g, &z);
+        { double tf0 = thr_ms(); x = pl_try(&T, g, &z); thr_diag.final_ += thr_ms() - tf0; }
         if (x < 0) { geo_unref(g); r = SC_ERR; break; }
         if (!x) { geo_unref(g); continue; }
         if (pl_evict(s, g) < 0) { geo_unref(g); r = SC_ERR; break; }
-        *gout = g; *zout = z; found = 1;
+        *gout = g; *zout = z; found = 1; thr_diag.accepted++; thr_diag.acc_hist[t < 11 ? t : 11]++;
         break;
     }
     if (at) { pl_hits_free(&taken); shp_prep_free(&regp); }

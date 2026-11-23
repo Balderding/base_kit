@@ -1,5 +1,6 @@
 /* smooth3d.c: smooth details, the shells (see smooth3d.h). */
 #include <stdio.h>
+#include "thrdiag.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -235,7 +236,9 @@ void sm_shell_add_all(const FtS3dList *l, const int64_t *alive, const GEOSGeomet
         int64_t cid = l->v[i].c; int live = -1; const SoSolids *sol; const GEOSGeometry *foot; MgMesh m; char err[200], line[300];
         for (int k = 0; k < nalive && live < 0; k++) if (alive[k] == cid) live = k;
         if (live < 0 || !so_smooth3d(cid, &sol, &foot)) continue;
+        double tc0 = thr_ms();
         int rc = sm_shell_build(&l->v[i], sol, foot, region ? region[live] : NULL, xf, has_oval, A, B, rlim, &m, err, sizeof err);
+        { double dc = thr_ms() - tc0; thr_diag.chains++; if (dc > thr_diag.chain_max) thr_diag.chain_max = dc; }          /* PLAN-threads step 0 */
         if (rc == 0) {
             if (out->n == out->cap) { out->cap = out->cap ? 2 * out->cap : 8; out->v = (MgMesh *)realloc(out->v, sizeof(MgMesh) * (size_t)out->cap); }
             out->v[out->n++] = m;

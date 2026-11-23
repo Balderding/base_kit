@@ -205,6 +205,8 @@ void runner_cfg_init(void) { set_kit(); load_cfg(); }
 double runner_cfg_num(const char *k, double d) { runner_cfg_init(); return cfg_num(k, d); }
 int runner_cfg_bool(const char *k, int d) { runner_cfg_init(); return cfg_bool(k, d); }
 int runner_in_window;          /* set by the window (bbb_kit.c run()) */
+static double thr_ms_r(void) { static LARGE_INTEGER f; LARGE_INTEGER q; if (!f.QuadPart) QueryPerformanceFrequency(&f); QueryPerformanceCounter(&q); return q.QuadPart * 1000.0 / f.QuadPart; }
+static void thr_d2_note(const char *what, double ms) { const char *dp = getenv("BBB_THREADS_DIAG"); FILE *df = dp && *dp ? fopen(dp, "a") : NULL; if (df) { fprintf(df, "d2_draw %s %.0f ms\n", what, ms); fclose(df); } }          /* PLAN-threads step 0 */
 static DWORD runner_child_class;          /* BELOW_NORMAL_PRIORITY_CLASS for every helper process while a job runs below normal */
 static void runner_low_thread(HANDLE t) { if (runner_child_class && t) SetThreadPriority(t, THREAD_PRIORITY_BELOW_NORMAL); }          /* a job thread in the window's process */
 const char *runner_cfg_str(const char *k, const char *d) { runner_cfg_init(); return cfg_str(k, d); }
@@ -410,7 +412,7 @@ static DWORD WINAPI choice_worker(void *arg) {          /* one choices.py helper
             if (!drawn) {
                 D2Scene sc; double win[4];
                 if (!d2_read(blob, bl, &sc)) { good = 0; snprintf(err, sizeof err, "the scene could not be read"); }
-                else { good = d2_draw(&sc, png, w->px, 1, win, err, sizeof err); }
+                else { double td2 = thr_ms_r(); good = d2_draw(&sc, png, w->px, 1, win, err, sizeof err); thr_d2_note("choice", thr_ms_r() - td2); }
                 d2_scene_free(&sc);
             }
             if (good) {
@@ -1076,7 +1078,9 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     int drawn = 0; D2Scene sc; int have_sc = nb > 1 && d2_read(bl[1], ln[1], &sc); JV *pyd = jget(&B->head, "py_draw"); int py_drawn = pyd && pyd->d;
     if (LIVE_DIR[0]) {          /* mesher.build with the window watching: the 2D drawing first, then the field */
         double win[4] = { 0 }; char er[200];
+        double td2 = thr_ms_r();
         if (cfg_bool("drawing_2d", 1) && (py_drawn || (have_sc && d2_draw(&sc, png2d, 900, 0, win, er, sizeof er) && save_win(png2d, win)))) {
+            thr_d2_note(name, thr_ms_r() - td2);
             drawn = 1; char box[200]; snprintf(box, sizeof box, "%.3f,%.3f,%.3f,%.3f", win[0], win[1], win[2], win[3]);
             const char *kv[] = { "plan", png2d, "plan_box", box }; live_note(rs->salt, n, 2, kv);
         }

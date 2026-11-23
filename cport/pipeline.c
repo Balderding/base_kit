@@ -1,6 +1,8 @@
 /* pipeline.c: one base end to end in C (see pipeline.h). Each part names the Python it copies (mostly
    work\cscene\runner\layout_bridge.py, which held the last Python of a job). */
 #include <windows.h>
+#include "thrdiag.h"
+#include <psapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -456,6 +458,7 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
     live_start(n);
     memset(&out, 0, sizeof out); sf_s3d = bs_s3d = ns_s3d = &out.s3d;
     debug_hooks();
+    memset(&thr_diag, 0, sizeof thr_diag);          /* PLAN-threads step 0 */
     ULONGLONG tl0 = GetTickCount64();          /* speed plan step 1: the scene / the command groups / the shells, in seconds */
     s = mk_make(style, n, &out, &err);
     ULONGLONG tl1 = GetTickCount64();
@@ -478,7 +481,7 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
         if (out.s3d.n && !(fin && fabs(sc - 1) > 1e-6)) {          /* mesher.build: add_solids(s, m, skipped, R0 - H * rim_tan - 0.12) unless a scaled final base */
             int64_t *alive = (int64_t *)malloc(sizeof(int64_t) * (size_t)(s->ops.n + 1)); int na = 0;
             for (int i = 0; i < s->ops.n; i++) { const Kind *k = s->ops.v[i]->kind; if (k && k->has_ghost && k->ghost.t != NUM_NONE) alive[na++] = (int64_t)k->ghost.v; }
-            s3_add_solids(&out.s3d, alive, na, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3);
+            { double t0 = thr_ms(); s3_add_solids(&out.s3d, alive, na, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3); thr_diag.shells_s3 += thr_ms() - t0; }
             free(alive);
         }
         SmShellXf xf; memset(&xf, 0, sizeof xf);          /* smooth details / organic rocks: the scaled base's map (mesher.rescale) */
@@ -499,14 +502,21 @@ static void layout_build(const char *style, const KVal *req, MgBuf *o) {
                     if (u) { shp_free(reg[j]); reg[j] = u; }
                 }
             }
-            sm_shell_add_all(&out.s3d, alive, (const GEOSGeometry *const *)reg, na, &xf, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3);
+            { double t0 = thr_ms(); sm_shell_add_all(&out.s3d, alive, (const GEOSGeometry *const *)reg, na, &xf, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3); thr_diag.shells_smooth += thr_ms() - t0; }
             for (int j = 0; j < na; j++) shp_free(reg[j]);
             free(alive); free(reg);
         }
-        if (ork_on) { int nr = 0; ork_build(&xf, bt.H, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3, &nr); ork_clear(); }          /* organic rocks (rocks3d.c) */
+        if (ork_on) { int nr = 0; double tk0 = thr_ms(); ork_build(&xf, bt.H, ENV.has_oval, ENV.oval[0], ENV.oval[1], bt.R0 - bt.H * bt.rim_tan - 0.12, &sh, &sk3, &nr); ork_clear(); thr_diag.shells_ork += thr_ms() - tk0; }          /* organic rocks (rocks3d.c) */
         s3_blob(&sh, &bbs);
         scene_blob(&b, s->ground ? s->ground : "", bt.has_plan, &bt.plan, 0, &bbd, &bad);
         ULONGLONG tl3 = GetTickCount64();
+        {   const char *dp = getenv("BBB_THREADS_DIAG"); FILE *df = dp && *dp ? fopen(dp, "a") : NULL;          /* PLAN-threads step 0: one line a layout */
+            if (df) { PROCESS_MEMORY_COUNTERS pm; HMODULE k = GetModuleHandleW(L"kernel32.dll"); typedef BOOL (WINAPI *PG)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD); PG pg = k ? (PG)(void *)GetProcAddress(k, "K32GetProcessMemoryInfo") : NULL; memset(&pm, 0, sizeof pm);
+                if (pg) pg(GetCurrentProcess(), &pm, sizeof pm);
+                fprintf(df, "%s scene %.0f setup %.0f make %.0f pre %.0f final %.0f finds %ld tries %ld accepted %ld hist", s->name, (double)(tl1 - tl0), thr_diag.setup, thr_diag.make, thr_diag.pre, thr_diag.final_, thr_diag.finds, thr_diag.tries, thr_diag.accepted);
+                for (int q = 0; q < 12; q++) fprintf(df, " %ld", thr_diag.acc_hist[q]);
+                fprintf(df, " | groups %.0f | shells %.0f s3 %.0f smooth %.0f chains %ld chain_max %.0f ork %.0f | peak %.0f MB\n", (double)(tl2 - tl1), (double)(tl3 - tl2), thr_diag.shells_s3, thr_diag.shells_smooth, thr_diag.chains, thr_diag.chain_max, thr_diag.shells_ork, pm.PeakWorkingSetSize / 1048576.0);
+                fclose(df); } }
         h = mgj_dict();
         mgj_set(&h, "t_scene", mgj_float((tl1 - tl0) / 1000.0)); mgj_set(&h, "t_input", mgj_float((tl2 - tl1) / 1000.0)); mgj_set(&h, "t_shells", mgj_float((tl3 - tl2) / 1000.0));
         mgj_set(&h, "ok", mgj_int(1)); mgj_set(&h, "name", mgj_str(s->name)); mgj_set(&h, "sig", mgj_str(bt.sig)); mgj_set(&h, "skipped", strs_j(&bt.skipped));
