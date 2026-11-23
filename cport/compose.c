@@ -815,23 +815,10 @@ static Geo *pad_shape(Sc *sc) {
       if (f) { g_bounds(g, bb); fprintf(f, "base %.1f mm (%s, %s): pad %.1f x %.1f mm, model space %s %.1f mm\n", sc->mm, mn[0] ? mn : "default", cp_mbox ? "a tank's box" : "an oval", bb[2] - bb[0], bb[3] - bb[1], cp_mbox ? "box" : "disc", cp_mbox ? 2 * cp_mhx : 2 * cp_mrad); fclose(f); } }
     return g;
 }
-static void feet_pad(Sc *sc, Geo *space) {
-    Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL; OpList keep = { 0 };
-    for (i = 0; i < s->ops.n; i++) {
-        Op *o = s->ops.v[i]; int in = 0, key;
-        if (op_ground(s, o) && !(o->kind && in_soft(o->kind))) continue;          /* the ground stays; loose grit on it does not */
-        if (op_top(o) <= SC.H + 1.2) {          /* a low piece mostly outside the pad (a rail, a plank, a floor passing under the feet) stays */
-            double ar = 0, ai = 0; for (j = 0; j < o->polys.n; j++) { ar += area(o->polys.v[j]); if (g_intersects(o->polys.v[j], space)) ai += area(LIn(o->polys.v[j], space)); }
-            if (ar > 0 && ai < 0.4 * ar) continue;
-        }
-        for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.05) in = 1;
-        if (!in) continue;
-        key = o->feat > 0 ? o->feat : -(i + 1);
-        for (k = 0; k < nb && bad[k] != key; k++) {}
-        if (k < nb) continue;
-        if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); }
-        bad[nb++] = key;
-    }
+/* drop the details named in bad (a feature id > 0, or -(index + 1) for one loose piece), and with them every kept piece
+   standing higher on one that goes (so nothing floats); used by the feet pad (G2) and the small-base cap (G1) */
+static void drop_keys(Sc *sc, int **badp, int *nbp, int *capp) {
+    Scene *s = sc->s; int i, k, nb = *nbp, cap = *capp, *bad = *badp; OpList keep = { 0 };
     for (;;) {          /* nothing left floating: a kept piece standing higher on a piece that goes, goes too (again until none) */
         int more = 0;
         for (i = 0; i < s->ops.n; i++) {
@@ -861,6 +848,48 @@ static void feet_pad(Sc *sc, Geo *space) {
         }
         free(s->ops.v); s->ops = keep;
     }
+    *badp = bad; *nbp = nb; *capp = cap;
+}
+/* G1 part 2 (PLAN-better, 2026-11-22; the basing guides: "a rocky base with grass and snow quickly looks overloaded on
+   20-25 mm", "one point of interest"): settings "small_base_cap", OFF by default. On a base under 33 mm at most 4
+   details (under 27 mm) or 5 stand on it: the ones laid last (the fill, the clutter) go first; the layout's ground,
+   cracks and grain stay. Off: nothing here runs, the bases are as before. BBB_PAD_LOG also logs what it drops. */
+int cp_small_cap = 0;
+static void small_cap(Sc *sc) {
+    Scene *s = sc->s; int i, k, n = 0, nf = 0, *fe = NULL, cap = 0, nb = 0, cb = 0, *bad = NULL, maxd = sc->mm < 26.9 ? 4 : 5;
+    if (sc->mm >= 32.9) return;
+    for (i = 0; i < s->ops.n; i++) {          /* the details on the base, by feature, in the order they were laid */
+        Op *o = s->ops.v[i];
+        if (o->feat <= 0 || op_ground(s, o) || op_top(o) <= SC.H + 0.3) continue;
+        for (k = 0; k < nf && fe[k] != o->feat; k++) {}
+        if (k < nf) continue;
+        if (nf == cap) { cap = cap ? 2 * cap : 16; fe = (int *)realloc(fe, sizeof(int) * (size_t)cap); }
+        fe[nf++] = o->feat;
+    }
+    for (i = 1; i < nf; i++) { int x = fe[i], j = i; while (j > 0 && fe[j - 1] > x) { fe[j] = fe[j - 1]; j--; } fe[j] = x; }
+    for (i = maxd; i < nf; i++) { if (nb == cb) { cb = cb ? 2 * cb : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cb); } bad[nb++] = fe[i]; n++; }
+    { const char *lp = getenv("BBB_PAD_LOG"); FILE *f = lp && *lp ? fopen(lp, "a") : NULL; if (f) { fprintf(f, "base %.1f mm: small-base cap %d details of %d kept, %d go\n", sc->mm, nf < maxd ? nf : maxd, nf, n); fclose(f); } }
+    if (nb) drop_keys(sc, &bad, &nb, &cb);
+    free(bad); free(fe);
+}
+static void feet_pad(Sc *sc, Geo *space) {
+    Scene *s = sc->s; int i, j, k, nb = 0, cap = 0, *bad = NULL;
+    for (i = 0; i < s->ops.n; i++) {
+        Op *o = s->ops.v[i]; int in = 0, key;
+        if (op_ground(s, o) && !(o->kind && in_soft(o->kind))) continue;          /* the ground stays; loose grit on it does not */
+        if (op_top(o) <= SC.H + 1.2) {          /* a low piece mostly outside the pad (a rail, a plank, a floor passing under the feet) stays */
+            double ar = 0, ai = 0; for (j = 0; j < o->polys.n; j++) { ar += area(o->polys.v[j]); if (g_intersects(o->polys.v[j], space)) ai += area(LIn(o->polys.v[j], space)); }
+            if (ar > 0 && ai < 0.4 * ar) continue;
+        }
+        for (j = 0; j < o->polys.n && !in; j++) if (g_intersects(o->polys.v[j], space) && area(LIn(o->polys.v[j], space)) > 0.05) in = 1;
+        if (!in) continue;
+        key = o->feat > 0 ? o->feat : -(i + 1);
+        for (k = 0; k < nb && bad[k] != key; k++) {}
+        if (k < nb) continue;
+        if (nb == cap) { cap = cap ? 2 * cap : 16; bad = (int *)realloc(bad, sizeof(int) * (size_t)cap); }
+        bad[nb++] = key;
+    }
+    drop_keys(sc, &bad, &nb, &cap);
     free(bad);
     clear_cuts(sc, space);
     for (i = 0; i < s->tcuts.n; i++) {          /* the cuts on top of plates (cracks, seams): stopped at the pad's edge too */
@@ -2586,6 +2615,7 @@ static int compose_body(Scene *s, const char *style, PyRandom *mixr, PyRandom *r
         }
         if (cp_try(ce_, sc) < 0) cp_log(sc, "clear_edge");
         a.marks_only = 0; a.cracks = 1; if (cp_try(nb_, &a) < 0) cp_log(sc, "no_bare");
+        if (cp_small_cap) small_cap(sc);          /* G1 part 2: the small-base cap (off by default) */
         if (cp_feet_pad && cp_msp) feet_pad(sc, pad_shape(sc));          /* G2: the feet pad, last, after every fill (off by default) */
     }
     free(late.v);
