@@ -694,6 +694,7 @@ The old Python kit's own keys (the SolidCraft path, its merge and chamfer timing
 | `min_part_mm` | 0.5 | Object parts thinner than this are trimmed (or the object thickened first). 0 = off |
 | `min_cut_mm` | 0.3 | Cuts narrower than this are widened. 0 = off |
 | `cart_on_track` | true | A cart by a track stands on its rails |
+| `mend_thin_faces` | false | When a picked design fails the print check on a mesh fault (not a closed solid, loose pieces), build the same design once more with faces thinner than 0.02 mm given their neighbour's height (no point moves) before making a different variant; the card says MENDED. It mends some failures, not all |
 | `print_plate` | false | Also writes `plate.3mf` (and `plate_2.3mf` ...): all the picked bases on the printer's bed, one object each, 3 mm apart (FDM 256 x 256 mm, resin 200 x 125 mm). The STLs are unchanged |
 | `feet_pad` | false | A clear spot for the figure's feet where it stands: an oval about 18 x 12 mm for a 32 mm figure (1.5 times for many-legged models, a tank's box for tracked ones) keeps only the ground and its texture; low rails and floors passing under it stay |
 | `small_base_cap` | false | On a base under 33 mm at most 4 details (under 27 mm) or 5; the ones laid last go first. The ground, cracks and texture stay |

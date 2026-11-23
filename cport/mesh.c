@@ -627,6 +627,32 @@ int mesh_from_field(const MeshIn *in, MeshOut *out) {
         add_face(m, o, r);
     }
     G.GEOSSTRtree_destroy_r(gctx, tree); G.GEOSGeom_destroy_r(gctx, pg); G.GEOSGeom_destroy_r(gctx, lines);
+    {   /* the sliver mend (3b, 2026-11-22; only when the kit mends a base that failed on a mesh fault, KIT_MEND_THIN=1):
+           a face thinner than 0.02 mm on average (2 * area / perimeter) takes the rule of the neighbour it shares the longest
+           border with. No point moves, so no new gaps; the wall between it and that neighbour goes. */
+        const char *mt = getenv("KIT_MEND_THIN"), *dp = getenv("BBB_MESH_DIAG"); const char *nm = getenv("KIT_DIAG_NAME"); int nthin = 0, nmoved = 0;
+        if (mt && mt[0] == '1') for (int i = 0; i < m->nkeep; i++) {
+            const GEOSGeometry *f = m->keep[i].f; double A = area_of(f), P = 0; G.GEOSLength_r(gctx, f, &P);
+            if (!(P > 0) || 2 * A / P >= 0.02) continue;
+            nthin++;
+            GEOSGeometry *bf = G.GEOSBoundary_r(gctx, f); double best = 0; int bj = -1;
+            for (int j = 0; j < m->nkeep; j++) {
+                if (j == i || m->keep[j].rule == m->keep[i].rule || G.GEOSIntersects_r(gctx, f, m->keep[j].f) != 1) continue;
+                GEOSGeometry *bg = G.GEOSBoundary_r(gctx, m->keep[j].f), *x = bg ? G.GEOSIntersection_r(gctx, bf, bg) : NULL; double L = 0;
+                if (x) G.GEOSLength_r(gctx, x, &L);
+                if (L > best) { best = L; bj = j; }
+                if (x) G.GEOSGeom_destroy_r(gctx, x);
+                if (bg) G.GEOSGeom_destroy_r(gctx, bg);
+            }
+            G.GEOSGeom_destroy_r(gctx, bf);
+            if (bj >= 0) {
+                if (dp && *dp) { FILE *df = fopen(dp, "a"); double cx = 0, cy = 0; GEOSGeometry *c = G.GEOSGetCentroid_r(gctx, f); if (c) { G.GEOSGeomGetX_r(gctx, c, &cx); G.GEOSGeomGetY_r(gctx, c, &cy); G.GEOSGeom_destroy_r(gctx, c); }
+                    if (df) { fprintf(df, "%s mend: thin face at (%.4f %.4f), %.4f mm wide, area %.6f, rule %d -> %d (border %.4f mm)" "\n", nm ? nm : "?", cx, cy, 2 * A / P, A, m->keep[i].rule, m->keep[bj].rule, best); fclose(df); } }
+                m->keep[i].rule = m->keep[bj].rule; nmoved++;
+            }
+        }
+        if (mt && mt[0] == '1' && dp && *dp) { FILE *df = fopen(dp, "a"); if (df) { fprintf(df, "%s mend: %d thin faces, %d given their neighbour's rule" "\n", nm ? nm : "?", nthin, nmoved); fclose(df); } }
+    }
     for (int i = 0; i < m->nkeep; i++) rv_push(&m->rings, rings_of_poly(m->keep[i].f));
     /* 2. heights at every corner, then the corners where four walls would meet */
     T_("face rules"); settle(m); T_("settle");

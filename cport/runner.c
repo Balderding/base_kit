@@ -895,7 +895,7 @@ static const double OVAL_SIZES[7][2] = { { 60, 35.5 }, { 75, 42 }, { 90, 52 }, {
 typedef struct {
     char variant[16], *errors, *reason, secs[32], slowest[64], steps[16], theme[256], *plan_line, *plan, *dropped, restarts[16], note[128], diff[16], *made;
 } Try;
-typedef struct { char base[160]; int n, ok, ntries, detail; Try tries[8]; } BaseRes;
+typedef struct { char base[160]; int n, ok, ntries, detail; Try tries[9]; } BaseRes;          /* 9: up to 8 attempts and the mend */
 typedef struct RunSet RunSet;
 struct RunSet {
     const char *style, *salt; double SIZE, OVAL[2]; int oval; double SCALE, LAYOUT; char out[MAX_PATH * 3], size_tag[64], ovtag[64];          /* oval: 1 an oval, 2 a square or rectangle; ovtag: "AxB" / "AxBr" for KIT_OVAL */
@@ -1051,7 +1051,10 @@ static int printer_resin(void) {          /* review N1: "printer": "fdm" (standa
     const char *e = getenv("KIT_PRINTER"); const char *p = e && *e ? e : cfg_str("printer", "fdm");
     return !_stricmp(p, "resin");
 }
-static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built *B) {
+static int MEND_CLI = -1;          /* the sliver mend: --mend on|off; else KIT_MEND; else settings mend_thin_faces (OFF) */
+static int mend_on(void) { const char *e = getenv("KIT_MEND"); if (MEND_CLI >= 0) return MEND_CLI; if (e && (e[0] == '0' || e[0] == '1') && !e[1]) return e[0] == '1'; return cfg_bool("mend_thin_faces", 0); }
+static int mesh_fault(const char *r) { return r && (strstr(r, "not watertight") || strstr(r, "not a valid solid") || strstr(r, "loose piece")); }          /* a mend is only for these */
+static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built *B, int mend) {
     memset(B, 0, sizeof *B); ULONGLONG t = GetTickCount64(); char name[160]; nm(rs, n, name, sizeof name);
     char png2d[MAX_PATH * 3]; snprintf(B->path, sizeof B->path, "%s/%s/%s.stl", rs->out, rs->style, name); snprintf(png2d, sizeof png2d, "%.*s_2d.png", (int)strlen(B->path) - 4, B->path);
     char dir[MAX_PATH * 3]; snprintf(dir, sizeof dir, "%s\\%s", rs->out, rs->style); make_dirs(dir);
@@ -1081,8 +1084,8 @@ static void build_once(RunSet *rs, Bridge *br, int n, const char *variant, Built
     }
     /* the height field and the mesh: bbb_kit.exe --core-build (cmesh.build_c) */
     char thr[16]; snprintf(thr, sizeof thr, "%d", nthreads);
-    EnvSet es[3] = { { "KIT_MESH_THREADS", thr }, { "KIT_LIVE_FILE", lp[0] ? lp : NULL }, { "KIT_DIAG_NAME", name } };          /* KIT_DIAG_NAME: step 1's log names the base */
-    Sb out = { 0 }, err = { 0 }; int rc = run_core("--core-build", bl[0], ln[0], es, 3, &out, &err);
+    EnvSet es[4] = { { "KIT_MESH_THREADS", thr }, { "KIT_LIVE_FILE", lp[0] ? lp : NULL }, { "KIT_DIAG_NAME", name }, { "KIT_MEND_THIN", mend ? "1" : NULL } };          /* KIT_DIAG_NAME: step 1's log names the base; KIT_MEND_THIN: the mend */
+    Sb out = { 0 }, err = { 0 }; int rc = run_core("--core-build", bl[0], ln[0], es, 4, &out, &err);
     if (rc != 0 || out.n < 12 || memcmp(out.s, "BBR1", 4)) {          /* cmesh.build_c gave None: Python would build this one in Python (not in C) */
         snprintf(e, sizeof e, "crash: the C field builder failed (%.200s)", err.s ? err.s : ""); B->error = xstrdup(e);
         free(out.s); free(err.s); free_blobs(bl, ln, nb); if (have_sc) d2_scene_free(&sc); B->secs = py_rint((GetTickCount64() - t) / 1000.0); return;
@@ -1233,12 +1236,19 @@ static void rs_give_back(RunSet *rs, Bridge *b) {
 static void one_base(RunSet *rs, int n, BaseRes *R) {
     memset(R, 0, sizeof *R); nm(rs, n, R->base, sizeof R->base); R->n = n; R->detail = (n - 1) % 20 / 5 + 1;
     int attempts = (int)cfg_num("max_attempts", 4); if (attempts > 8) attempts = 8; if (attempts < 1) attempts = 1;
-    for (int k = 0; k < attempts; k++) {
+    int vi = 0, mtried = 0;          /* vi: the next variant; the mend (3b) is not one: the same design again, once, before any variant */
+    for (int k = 0; k < attempts + 1; k++) {
         if (rs->stop || runner_stop) break;
-        const char *v = VARIANTS[k];
+        int mp = mend_on() && !mtried && R->ntries == 1 && mesh_fault(R->tries[0].reason);
+        if (!mp && vi >= attempts) break;
+        if (mp) mtried = 1;
+        const char *v = mp ? "" : VARIANTS[vi];
+        if (!mp) vi++;
         EnterCriticalSection(&rs->lock);
-        if (k == 0) rs_print("  >> %s  building", R->base); else rs_print("  >> %s  retry with fresh variant %s", R->base, v);
-        if (k == 0) ev("start", "si", "seed", rs->salt, "n", n);          /* gui_job: the ">>" line */
+        if (mp) rs_print("  >> %s  mending the same design (faces thinner than 0.02 mm dissolved)", R->base);
+        else if (k == 0) rs_print("  >> %s  building", R->base); else rs_print("  >> %s  retry with fresh variant %s", R->base, v);
+        if (mp) ev("mend", "si", "seed", rs->salt, "n", n);          /* the mend: no retry event, the card is not a variant */
+        else if (k == 0) ev("start", "si", "seed", rs->salt, "n", n);          /* gui_job: the ">>" line */
         else {          /* PLAN-next step 2: why the picked design was not kept, in a few words, for its card */
             const char *r = R->ntries ? R->tries[R->ntries - 1].reason : NULL, *w;
             if (!r) w = "failed";
@@ -1251,7 +1261,7 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
             ev("retry", "sis", "seed", rs->salt, "n", n, "why", w);
         }
         LeaveCriticalSection(&rs->lock);
-        Bridge *br = rs_bridge(rs); Built B; build_once(rs, br, n, v, &B); rs_give_back(rs, br);
+        Bridge *br = rs_bridge(rs); Built B; build_once(rs, br, n, v, &B, mp); rs_give_back(rs, br);
         char stl[MAX_PATH * 3]; snprintf(stl, sizeof stl, "%s\\%s\\%s.stl", rs->out, rs->style, R->base);
         Sb reason = { 0 }; if (B.error) sb_puts(&reason, B.error);
         int seam = 0; char diff[16] = ""; ULONGLONG tck = GetTickCount64();
@@ -1292,7 +1302,7 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
         if (reason.n && GetFileAttributesW(ws) != INVALID_FILE_ATTRIBUTES) {          /* the failed attempt is kept for a look */
             char fd[MAX_PATH * 3], dst[MAX_PATH * 3], s2[MAX_PATH * 3]; snprintf(fd, sizeof fd, "%s\\%s\\failed", rs->out, rs->style); make_dirs(fd);
             WCHAR a[MAX_PATH * 3], b[MAX_PATH * 3];
-            snprintf(dst, sizeof dst, "%s\\%s_%s.stl", fd, R->base, v[0] ? v : "original"); wpath(dst, b, MAX_PATH * 3); MoveFileExW(ws, b, MOVEFILE_REPLACE_EXISTING);
+            snprintf(dst, sizeof dst, "%s\\%s_%s.stl", fd, R->base, mp ? "mended" : v[0] ? v : "original"); wpath(dst, b, MAX_PATH * 3); MoveFileExW(ws, b, MOVEFILE_REPLACE_EXISTING);
             snprintf(s2, sizeof s2, "%.*s_2d.png", (int)strlen(stl) - 4, stl); snprintf(dst, sizeof dst, "%s\\%s_%s_2d.png", fd, R->base, v[0] ? v : "original"); wpath(s2, a, MAX_PATH * 3); wpath(dst, b, MAX_PATH * 3); MoveFileExW(a, b, MOVEFILE_REPLACE_EXISTING);
         }
         JV *plan = jget(&B.head, "plan");
@@ -1303,7 +1313,7 @@ static void one_base(RunSet *rs, int n, BaseRes *R) {
             WCHAR w[MAX_PATH * 3]; wpath(pj, w, MAX_PATH * 3); FILE *f = _wfopen(w, L"wb"); if (f) { fwrite(o.s, 1, o.n, f); fclose(f); } free(o.s);
         }
         Try *T = &R->tries[R->ntries++]; memset(T, 0, sizeof *T);
-        snprintf(T->variant, sizeof T->variant, "%s", v[0] ? v : "original"); T->reason = reason.n ? reason.s : NULL;
+        snprintf(T->variant, sizeof T->variant, "%s", mp ? "mended" : v[0] ? v : "original"); T->reason = reason.n ? reason.s : NULL;
         if (B.error) snprintf(T->secs, sizeof T->secs, "%d", (int)B.secs); else runner_float_repr(B.secs, T->secs, sizeof T->secs);
         if (!B.error) { snprintf(T->steps, sizeof T->steps, "%s", jtext(jget(&B.head, "steps"), "")); snprintf(T->theme, sizeof T->theme, "%s", jtext(jget(&B.head, "theme"), "")); }
         JV *pl = jget(&B.head, "plan_line"); T->plan_line = xstrdup(!B.error && pl && pl->s ? pl->s : "");
@@ -1343,7 +1353,8 @@ static DWORD WINAPI rs_worker(void *a) {          /* ThreadPoolExecutor(workers)
             Sb l = { 0 }; sb_printf(&l, "  OK   %s  %s s", R->base, last->secs);
             if (last->dropped[0]) sb_printf(&l, "  dropped: %s", last->dropped);
             if (last->note[0]) sb_printf(&l, "  (%s)", last->note);
-            if (R->ntries > 1) sb_printf(&l, "  (fresh variant after: %s)", R->tries[0].reason);
+            if (R->ntries > 1 && !strcmp(last->variant, "mended")) sb_printf(&l, "  (mended, the same design, after: %s)", R->tries[0].reason);
+            else if (R->ntries > 1) sb_printf(&l, "  (fresh variant after: %s%s%s)", R->tries[0].reason, R->ntries > 2 && !strcmp(R->tries[1].variant, "mended") ? "; the mend: " : "", R->ntries > 2 && !strcmp(R->tries[1].variant, "mended") && R->tries[1].reason ? R->tries[1].reason : "");
             if (last->plan_line[0]) sb_printf(&l, "  %s", last->plan_line);
             rs_print("%s", l.s); free(l.s);
         } else {
@@ -1526,7 +1537,8 @@ static void picked_done(RunSet *rs, BaseRes *R, void *vctx) {
         }
         P->okc++;
         double secs = strtod(last->secs, NULL);
-        ev("built", "sibbssssfs", "seed", P->seed, "n", n, "ok", 1, "variant", R->ntries > 1, "stl", dstl, "img", img, "img2", img2, "img3c", img3c, "secs", secs, "theme", theme);
+        {   int mended = !strcmp(last->variant, "mended"), isvar = strcmp(last->variant, "original") && !mended;          /* a mended base is the picked design: not a variant */
+            ev("built", "sibbbssssfs", "seed", P->seed, "n", n, "ok", 1, "variant", isvar, "mended", mended, "stl", dstl, "img", img, "img2", img2, "img3c", img3c, "secs", secs, "theme", theme); }
     } else {
         P->bad++;
         if (!R->ok) {
@@ -1623,7 +1635,7 @@ static int job_build(Args *a, const char *style) {
         { static char thb[128]; theme_arg(opt(a, "--theme", ""), thb, sizeof thb); if (thb[0]) es[ne++] = (EnvSet){ "KIT_THEME", thb }; }          /* only this theme (the window's theme picker) */
         rs.envw = env_block(es, ne);
         SUP_CLI = !strcmp(sup, "on") ? 1 : !strcmp(sup, "off") ? 0 : -1;          /* --supports: CFG allow_supports for the checks */
-        JOIN_CLI = on_off(join); SMALL_CLI = on_off(smaller); STRICT_CLI = on_off(strict); SMOOTH_CLI = on_off(smooth); ROCKS_CLI = on_off(rocks);
+        JOIN_CLI = on_off(join); SMALL_CLI = on_off(smaller); STRICT_CLI = on_off(strict); MEND_CLI = on_off(opt(a, "--mend", "")); SMOOTH_CLI = on_off(smooth); ROCKS_CLI = on_off(rocks);
         int *seen = calloc(100000, sizeof(int)); PickCtx P = { style, size, rs.salt, dest, rs.SCALE, seen, 0, 0 };
         if (scale_s[0]) P.scale = strtod(scale_s, NULL); else P.scale = cfg_num("scenery_scale", 1.0);
         P.obj = obj_of(opt(a, "--obj", ""), rs.SCALE); P.mm = rs.SIZE; P.mini = mini; { const char *fg = opt(a, "--figure", ""); P.fig = fg[0] ? strtod(fg, NULL) : 32.0; }
