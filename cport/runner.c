@@ -205,6 +205,7 @@ static int join_shells(void) { return allow_supports() ? supports_join() : (smoo
 void runner_cfg_init(void) { set_kit(); load_cfg(); }
 double runner_cfg_num(const char *k, double d) { runner_cfg_init(); return cfg_num(k, d); }
 int runner_cfg_bool(const char *k, int d) { runner_cfg_init(); return cfg_bool(k, d); }
+int runner_cfg_num_i(const char *k, int d) { runner_cfg_init(); return (int)cfg_num(k, d); }          /* PLAN-threads C: layout_threads */
 int runner_in_window;          /* set by the window (bbb_kit.c run()) */
 static double thr_ms_r(void) { static LARGE_INTEGER f; LARGE_INTEGER q; if (!f.QuadPart) QueryPerformanceFrequency(&f); QueryPerformanceCounter(&q); return q.QuadPart * 1000.0 / f.QuadPart; }
 static void thr_d2_note(const char *what, double ms) { const char *dp = getenv("BBB_THREADS_DIAG"); FILE *df = dp && *dp ? fopen(dp, "a") : NULL; if (df) { fprintf(df, "d2_draw %s %.0f ms\n", what, ms); fclose(df); } }          /* PLAN-threads step 0 */

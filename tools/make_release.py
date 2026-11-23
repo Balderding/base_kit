@@ -10,6 +10,8 @@ import subprocess, zipfile
 def git(*a): return subprocess.run(["git", *a], cwd=KIT, capture_output=True, text=True).stdout
 def blob(f): return subprocess.run(["git", "show", "HEAD:" + f], cwd=KIT, capture_output=True).stdout
 ver = blob("VERSION").decode("utf-8").strip()
+# no shared mutable state in the code the window's worker threads run (tools/check_statics.py, 2026-11-23)
+if subprocess.run([sys.executable, os.path.join(KIT, "tools", "check_statics.py")]).returncode != 0: sys.exit("make_release: tools/check_statics.py found shared state the worker threads could race on; fix it or add it, checked, to its ALLOWED list")
 dirty = [l for l in git("status", "--porcelain").splitlines() if l and not l.startswith("??")]
 if dirty: print("NOTE: these have changes not committed; the zip has their committed version:\n" + "\n".join(dirty))
 NOTES = {".gitignore"}

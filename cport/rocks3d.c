@@ -5,6 +5,10 @@
 #include <math.h>
 #include "shp.h"
 #include "rocks3d.h"
+#include <windows.h>          /* Sleep, for the jitter test */
+#include "mt.h"          /* PLAN-threads C: the rock pool */
+void *tbb_cap_push(int n); void tbb_cap_pop(void *g); int tbb_cap_budget(void);          /* tbbcap.cpp */
+int runner_cfg_num_i(const char *k, int d);
 
 int ork_on = 0;
 double kit_strength = 1.0;          /* style strength (settings "style_strength", --strength; pipeline.c sets it): 1 = the standard look */
@@ -238,6 +242,66 @@ done:
     return rc;
 }
 
+/* PLAN-threads C: how many threads the rocks use: BBB_LAYOUT_THREADS, else settings layout_threads, else 2 (light).
+   1 = today's exact serial code. */
+static int ork_threads(void) {
+    const char *e = getenv("BBB_LAYOUT_THREADS"); int v = e && *e ? atoi(e) : runner_cfg_num_i("layout_threads", 2);
+    return v < 1 ? 1 : v > 3 ? 3 : v;
+}
+typedef struct { int i, j; double ar; } OrkPair;
+typedef struct { const int *first; const int *count; const int *members; const SmShellXf *xf; double H; const GEOSGeometry *rim; MgMesh *m; int *rc; char (*err)[200]; } OrkJob;
+static void ork_pair_fn(int k, GEOSContextHandle_t c, void *u) {          /* one pair's overlap area, into its own slot */
+    OrkPair *p = (OrkPair *)u + k; GEOSGeometry *x; (void)c;
+    if (getenv("BBB_TEST_JITTER")) { unsigned long z = (unsigned long)(k + 1) ^ GetTickCount() * 2654435761u; Sleep((z >> 20) % 7); }          /* a test: the threads in another order each time */
+    x = shp_intersection(PC[p->i].p, PC[p->j].p); p->ar = x ? shp_area(x) : 0; shp_free(x);
+}
+static void ork_one_fn(int g, GEOSContextHandle_t c, void *u) {          /* one rock, into its own slot */
+    OrkJob *J = (OrkJob *)u; (void)c;
+    if (getenv("BBB_TEST_JITTER")) { unsigned long z = (unsigned long)(g + 1) ^ GetTickCount() * 2654435761u; Sleep((z >> 20) % 40); }          /* a test: the threads in another order each time */
+    J->rc[g] = ork_one(J->members + J->first[g], J->count[g], J->xf, J->H, J->rim, &J->m[g], J->err[g], 200);
+}
+static void ork_build_mt(int T, const SmShellXf *xf, double H, const GEOSGeometry *rim, S3Shells *out, MgStrs *skipped, int *nrocks) {
+    OrkPair *pr = NULL; int np = 0, cap = 0, ng = 0, *first, *count, *members, *seen, k;
+    /* the pairs worth a test (the same skips as the serial loop), tested on the threads, unions applied in (i, j) order */
+    for (int i = 0; i < NPC; i++) for (int j = i + 1; j < NPC; j++) {
+        const OrkPiece *a = &PC[i], *b = &PC[j];
+        if (a->bb[0] > b->bb[2] || a->bb[2] < b->bb[0] || a->bb[1] > b->bb[3] || a->bb[3] < b->bb[1]) continue;
+        if (fabs(a->top - b->top) < 1e-6) continue;
+        if (np == cap) { cap = cap ? 2 * cap : 256; pr = (OrkPair *)realloc(pr, sizeof(OrkPair) * (size_t)cap); }
+        pr[np].i = i; pr[np].j = j; pr[np].ar = 0; np++;
+    }
+    if (np) mt_run(np, T, 8, ork_pair_fn, pr);
+    for (k = 0; k < np; k++) if (pr[k].ar > 0.5 * PC[pr[k].j].area) { int ra = uf_f(pr[k].i), rb = uf_f(pr[k].j); if (ra != rb) UF[rb] = ra; }
+    free(pr);
+    /* the groups, in root order (as the serial loop visits them); every piece in exactly one */
+    first = (int *)malloc(sizeof(int) * (size_t)(NPC + 1)); count = (int *)calloc((size_t)NPC + 1, sizeof(int)); members = (int *)malloc(sizeof(int) * (size_t)(NPC + 1)); seen = (int *)calloc((size_t)NPC + 1, sizeof(int));
+    for (int r = 0, at = 0; r < NPC; r++) {
+        if (uf_f(r) != r) continue;
+        first[ng] = at;
+        for (int i = 0; i < NPC; i++) if (uf_f(i) == r) { members[at++] = i; count[ng]++; seen[i]++; }
+        ng++;
+    }
+    for (int i = 0; i < NPC; i++) if (seen[i] != 1) { fprintf(stderr, "rocks3d: piece %d in %d groups (must be 1)\n", i, seen[i]); abort(); }          /* the evaluator's assert: ork_one writes PC[] of its own group only */
+    free(seen);
+    {   MgMesh *m = (MgMesh *)calloc((size_t)ng + 1, sizeof(MgMesh)); int *rc = (int *)calloc((size_t)ng + 1, sizeof(int)); char (*er)[200] = calloc((size_t)ng + 1, 200);
+        OrkJob J = { first, count, members, xf, H, rim, m, rc, er };
+        void *cap_g = tbb_cap_push(tbb_cap_budget() - T + 1);          /* Manifold's own threads and ours stay within the budget */
+        if (ng) mt_run(ng, T, 1, ork_one_fn, &J);
+        tbb_cap_pop(cap_g);
+        for (int g = 0; g < ng; g++) {          /* merged in root order, the logging here */
+            char line[300];
+            if (rc[g] == 0) {
+                if (out->n == out->cap) { out->cap = out->cap ? 2 * out->cap : 8; out->v = (MgMesh *)realloc(out->v, sizeof(MgMesh) * (size_t)out->cap); }
+                out->v[out->n++] = m[g]; (*nrocks)++;
+            } else if (rc[g] < 0) {
+                snprintf(line, sizeof line, "rock: %s", er[g]); mg_strs_push(skipped, line);
+                mg_log_caught("organic rock dropped", "RuntimeError", er[g], "cport/rocks3d.c");
+            }
+        }
+        free(m); free(rc); free(er);
+    }
+    free(first); free(count); free(members);
+}
 void ork_build(const SmShellXf *xf, double H, int has_oval, double A, double B, double rlim, S3Shells *out, MgStrs *skipped, int *nrocks) {
     GEOSGeometry *rim; int *idx;
     *nrocks = 0;
@@ -247,6 +311,9 @@ void ork_build(const SmShellXf *xf, double H, int has_oval, double A, double B, 
     qsort(PC, (size_t)NPC, sizeof(OrkPiece), cmp_area);
     /* the rocks: a piece joins the one it mostly stands in, when it is higher (a tier, a heap's band, a lump on top) */
     UF = (int *)malloc(sizeof(int) * (size_t)NPC); for (int i = 0; i < NPC; i++) UF[i] = i;
+    {   int T = ork_threads();
+        if (T > 1 && NPC > 1) { ork_build_mt(T, xf, H, rim, out, skipped, nrocks); free(UF); UF = NULL; shp_free(rim); return; }          /* PLAN-threads C */
+    }
     for (int i = 0; i < NPC; i++) for (int j = i + 1; j < NPC; j++) {
         const OrkPiece *a = &PC[i], *b = &PC[j]; GEOSGeometry *x; double ar;          /* b is the smaller */
         if (a->bb[0] > b->bb[2] || a->bb[2] < b->bb[0] || a->bb[1] > b->bb[3] || a->bb[3] < b->bb[1]) continue;
