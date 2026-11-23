@@ -44,7 +44,13 @@ version is always the one marked **Latest** on the [Releases page](https://githu
 download `bbb_kit_<version>.zip` there and unzip it anywhere. If the number in your `VERSION` file is lower than
 the one on that page, yours is an older one. (`python tools\make_release.py` makes the zip.)
 
-## New since 2.3.1 (in the repository, not in a release yet)
+## What is new in 2.4: faster, a print plate, keys for everything, a window you can arrange
+
+![Sixteen bases built by 2.4, two of every size from 30 to 160 mm](examples/sheet_2.4.0.png)
+
+*Sixteen bases freshly built by 2.4 with the default settings: two of every size from 30 to 160 mm.*
+
+**The 2.3.0 stop is fixed.** The urban style at 25 mm square no longer stops while drawing its choices.
 
 **Faster, and kinder to a game in front.** A 160 mm base builds in about 20-50 s instead of 70-115 s, and eight choice
 cards draw in a few seconds. Every base comes out byte for byte the same as before. The building runs at below-normal
@@ -89,6 +95,12 @@ goes on `plate_2.3mf` and on. Open it in the slicer: one object per base. The ST
 could become defaults:
 - `feet_pad`: a clear spot of plain textured ground for the figure's feet.
 - `small_base_cap`: at most 4-5 details on a base under 33 mm.
+
+**Mend a failed design (OFF by default).** When a picked design fails the print check on a mesh fault, the kit can first
+build the same design again with paper-thin faces cleaned up, before it makes a different variant. It saves about 1 in 5
+such bases, so it stays off; turn it on under "More settings" if you would rather keep your pick more often.
+
+With every new setting off, each base comes out byte for byte the same as in 2.3.
 
 ## What is new in 2.3 (and 2.3.1): square bases, a window that fits your screen, textured ground
 
@@ -437,20 +449,20 @@ thing apart; the print is one colour.
 
 ## What the bases look like
 
-Two bases of every size, each in a style drawn at random, exactly as the kit made them (pictures of the finished
+Two bases of every size, built by 2.4.0 with the default settings, exactly as the kit made them (pictures of the finished
 STL files; `python tools\make_examples.py` makes a fresh set).
 
 <!-- EXAMPLES -->
 | Size | | |
 |---|---|---|
-| **30 mm** | ![swamp 30 mm](examples/030mm_1_swamp.png)<br>swamp: "boat landing" | ![ashveil 30 mm](examples/030mm_2_ashveil.png)<br>ashveil: "buried transport" |
-| **40 mm** | ![graveyard 40 mm](examples/040mm_1_graveyard.png)<br>graveyard: "hanging tree" | ![beast 40 mm](examples/040mm_2_beast.png)<br>beast: "jaw line" |
-| **50 mm** | ![highland 50 mm](examples/050mm_1_highland.png)<br>highland: "ruined tower" | ![urban 50 mm](examples/050mm_2_urban.png)<br>urban: "bomb site" |
-| **60 mm** | ![cynder 60 mm](examples/060mm_1_cynder.png)<br>cynder: "ash burial" | ![sundered 60 mm](examples/060mm_2_sundered.png)<br>sundered: "fallen cathedral wall" |
-| **80 mm** | ![infestation 80 mm](examples/080mm_1_infestation.png)<br>infestation: "egg chamber" | ![corridor 80 mm](examples/080mm_2_corridor.png)<br>corridor: "airlock" |
-| **100 mm** | ![maahl 100 mm](examples/100mm_1_maahl.png)<br>maahl: "buried temple" | ![frontier 100 mm](examples/100mm_2_frontier.png)<br>frontier: "prospector s camp" |
-| **130 mm** | ![blight 130 mm](examples/130mm_1_blight.png)<br>blight: "spike garden" | ![obelis 130 mm](examples/130mm_2_obelis.png)<br>obelis: "glyph plaza" |
-| **160 mm** | ![mine 160 mm](examples/160mm_1_mine.png)<br>mine: "shaft head" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "boot hill" |
+| **30 mm** | ![swamp 30 mm](examples/030mm_1_swamp.png)<br>swamp: "serpent pool" | ![highland 30 mm](examples/030mm_2_highland.png)<br>highland: "sheepfold" |
+| **40 mm** | ![graveyard 40 mm](examples/040mm_1_graveyard.png)<br>graveyard: "crypt door" | ![forest 40 mm](examples/040mm_2_forest.png)<br>forest: "stream ford" |
+| **50 mm** | ![urban 50 mm](examples/050mm_1_urban.png)<br>urban: "bomb site" | ![coast 50 mm](examples/050mm_2_coast.png)<br>coast: "jetty" |
+| **60 mm** | ![sundered 60 mm](examples/060mm_1_sundered.png)<br>sundered: "collapsed arcade" | ![temple 60 mm](examples/060mm_2_temple.png)<br>temple: "sealed vault" |
+| **80 mm** | ![infestation 80 mm](examples/080mm_1_infestation.png)<br>infestation: "overrun cargo" | ![dungeon 80 mm](examples/080mm_2_dungeon.png)<br>dungeon: "treasure hoard" |
+| **100 mm** | ![frontier 100 mm](examples/100mm_1_frontier.png)<br>frontier: "storefront" | ![trederra 100 mm](examples/100mm_2_trederra.png)<br>trederra: "gun pit" |
+| **130 mm** | ![fortress 130 mm](examples/130mm_1_fortress.png)<br>fortress: "armoury" | ![cynder 130 mm](examples/130mm_2_cynder.png)<br>cynder: "forge altar" |
+| **160 mm** | ![mine 160 mm](examples/160mm_1_mine.png)<br>mine: "tunnel mouth" | ![badlands 160 mm](examples/160mm_2_badlands.png)<br>badlands: "old diggings" |
 <!-- /EXAMPLES -->
 
 **Every base is one place.** A base is not a pile of objects: it has a subject (a mine shaft, a wreck, a shrine), a
